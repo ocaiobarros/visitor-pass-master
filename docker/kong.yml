@@ -43,6 +43,7 @@ services:
                 - Prefer
                 - X-Client-Info
                 - apikey
+                - x-supabase-api-version
                 - x-supabase-client-platform
                 - x-supabase-client-platform-version
                 - x-supabase-client-runtime
@@ -99,6 +100,7 @@ services:
                 - Prefer
                 - X-Client-Info
                 - apikey
+                - x-supabase-api-version
                 - x-supabase-client-platform
                 - x-supabase-client-platform-version
                 - x-supabase-client-runtime

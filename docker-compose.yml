@@ -75,7 +75,7 @@ services:
     expose:
       - "3000"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ 2>&1 | grep -q 'version' || exit 0"]
+      test: ["CMD-SHELL", "netstat -an | grep -q ':3000.*LISTEN' || ss -tlnp | grep -q ':3000'"]
       interval: 30s
       timeout: 5s
       retries: 3

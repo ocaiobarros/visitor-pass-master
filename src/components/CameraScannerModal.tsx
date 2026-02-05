@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Camera, CameraOff, X, RefreshCw } from 'lucide-react';
+import { Camera, CameraOff, X, RefreshCw, ShieldAlert } from 'lucide-react';
 
 interface CameraScannerModalProps {
   open: boolean;
@@ -15,17 +15,41 @@ interface CameraScannerModalProps {
   onScan: (code: string) => void;
 }
 
+// Check if we're on a secure context (HTTPS or localhost)
+const isSecureContext = (): boolean => {
+  return window.isSecureContext || 
+         window.location.hostname === 'localhost' || 
+         window.location.hostname === '127.0.0.1' ||
+         window.location.protocol === 'https:';
+};
+
+// Detect if it's a mobile device
+export const isMobileDevice = (): boolean => {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+         ('ontouchstart' in window) ||
+         (navigator.maxTouchPoints > 0);
+};
+
 const CameraScannerModal = ({ open, onClose, onScan }: CameraScannerModalProps) => {
   const [error, setError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
+  const [isInsecure, setIsInsecure] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const startScanner = async () => {
     if (!containerRef.current) return;
 
+    // Check for secure context first
+    if (!isSecureContext()) {
+      setIsInsecure(true);
+      setError('A câmera requer conexão segura (HTTPS). Configure SSL no servidor ou acesse via localhost.');
+      return;
+    }
+
     setIsStarting(true);
     setError(null);
+    setIsInsecure(false);
 
     try {
       // Clean up existing scanner
@@ -64,6 +88,9 @@ const CameraScannerModal = ({ open, onClose, onScan }: CameraScannerModalProps) 
         setError('Nenhuma câmera encontrada no dispositivo.');
       } else if (err.name === 'NotReadableError') {
         setError('A câmera está sendo usada por outro aplicativo.');
+      } else if (err.message?.includes('secure context') || err.message?.includes('HTTPS')) {
+        setIsInsecure(true);
+        setError('A câmera requer conexão segura (HTTPS). Configure SSL no servidor.');
       } else {
         setError('Não foi possível iniciar a câmera. Verifique as permissões.');
       }
@@ -178,13 +205,24 @@ const CameraScannerModal = ({ open, onClose, onScan }: CameraScannerModalProps) 
           {/* Error State */}
           {error && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 p-6">
-              <CameraOff className="w-16 h-16 text-destructive mb-4" />
+              {isInsecure ? (
+                <ShieldAlert className="w-16 h-16 text-warning mb-4" />
+              ) : (
+                <CameraOff className="w-16 h-16 text-destructive mb-4" />
+              )}
               <p className="text-white text-center text-sm mb-4">{error}</p>
+              {isInsecure && (
+                <p className="text-white/70 text-center text-xs mb-4">
+                  💡 Dica: No Debian, configure HTTPS com Let's Encrypt ou use um certificado auto-assinado.
+                </p>
+              )}
               <div className="flex gap-2">
-                <Button variant="outline" onClick={startScanner}>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Tentar Novamente
-                </Button>
+                {!isInsecure && (
+                  <Button variant="outline" onClick={startScanner}>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Tentar Novamente
+                  </Button>
+                )}
                 <Button variant="ghost" onClick={handleClose} className="text-white">
                   Cancelar
                 </Button>

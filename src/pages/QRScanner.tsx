@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useVisitorByPassId, useUpdateVisitorStatus } from '@/hooks/useVisitors';
 import { useCredentialByQrId, useUpdateCredentialStatus } from '@/hooks/useEmployeeCredentials';
@@ -25,6 +25,7 @@ const QRScanner = () => {
   const [searchCode, setSearchCode] = useState('');
   const [scanResult, setScanResult] = useState<ScanResult>(null);
   const [scanError, setScanError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   
   const { toast } = useToast();
   const updateVisitorStatus = useUpdateVisitorStatus();
@@ -37,6 +38,47 @@ const QRScanner = () => {
   // Query for employee credential
   const { data: credential, isLoading: isLoadingCredential } = useCredentialByQrId(searchCode.startsWith('EC-') ? searchCode : '');
 
+  // Auto-focus on mount and after actions
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  // Re-focus after scan result changes
+  useEffect(() => {
+    // Short delay to allow UI to update
+    const timer = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [scanResult, scanError]);
+
+  // Process scan result when data arrives
+  useEffect(() => {
+    if (!searchCode) return;
+
+    const timer = setTimeout(() => {
+      if (searchCode.startsWith('VP-')) {
+        if (visitor) {
+          setScanResult({ type: 'visitor', data: visitor });
+          setScanError(null);
+        } else if (!isLoadingVisitor) {
+          setScanError(`Passe ${searchCode} não encontrado`);
+          setScanResult(null);
+        }
+      } else if (searchCode.startsWith('EC-')) {
+        if (credential) {
+          setScanResult({ type: 'employee', data: credential });
+          setScanError(null);
+        } else if (!isLoadingCredential) {
+          setScanError(`Credencial ${searchCode} não encontrada`);
+          setScanResult(null);
+        }
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchCode, visitor, credential, isLoadingVisitor, isLoadingCredential]);
+
   const handleScan = () => {
     if (!qrCode.trim()) {
       toast({
@@ -44,42 +86,31 @@ const QRScanner = () => {
         description: 'Digite ou escaneie o código do passe/crachá.',
         variant: 'destructive',
       });
+      inputRef.current?.focus();
       return;
     }
 
-    const code = qrCode.toUpperCase();
-    setSearchCode(code);
-    setScanError(null);
-    setScanResult(null);
+    const code = qrCode.toUpperCase().trim();
+    
+    if (!code.startsWith('VP-') && !code.startsWith('EC-')) {
+      setScanError('Código inválido. Use VP-XXXXXXXX para visitantes ou EC-XXXXXXXX para colaboradores.');
+      setScanResult(null);
+      setQrCode('');
+      inputRef.current?.focus();
+      return;
+    }
 
-    // Trigger the query by setting searchCode
-    setTimeout(() => {
-      if (code.startsWith('VP-')) {
-        if (visitor) {
-          setScanResult({ type: 'visitor', data: visitor });
-        } else if (!isLoadingVisitor) {
-          setScanError(`Passe ${code} não encontrado`);
-        }
-      } else if (code.startsWith('EC-')) {
-        if (credential) {
-          setScanResult({ type: 'employee', data: credential });
-        } else if (!isLoadingCredential) {
-          setScanError(`Credencial ${code} não encontrada`);
-        }
-      } else {
-        setScanError('Código inválido. Use VP-XXXXXXXX para visitantes ou EC-XXXXXXXX para colaboradores.');
-      }
-    }, 500);
+    setSearchCode(code);
+    setQrCode('');
+    // Focus will be restored by useEffect
   };
 
-  // Update scan result when data arrives
-  useState(() => {
-    if (searchCode.startsWith('VP-') && visitor) {
-      setScanResult({ type: 'visitor', data: visitor });
-    } else if (searchCode.startsWith('EC-') && credential) {
-      setScanResult({ type: 'employee', data: credential });
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleScan();
     }
-  });
+  };
 
   const handleCheckIn = async () => {
     if (!scanResult) return;
@@ -141,6 +172,9 @@ const QRScanner = () => {
         description: `${c.fullName} entrou na empresa.`,
       });
     }
+    
+    // Re-focus input for next scan
+    inputRef.current?.focus();
   };
 
   const handleCheckOut = async () => {
@@ -176,6 +210,9 @@ const QRScanner = () => {
         description: `${c.fullName} saiu da empresa.`,
       });
     }
+    
+    // Re-focus input for next scan
+    inputRef.current?.focus();
   };
 
   const clearScan = () => {
@@ -183,6 +220,7 @@ const QRScanner = () => {
     setSearchCode('');
     setScanResult(null);
     setScanError(null);
+    inputRef.current?.focus();
   };
 
   const isLoading = isLoadingVisitor || isLoadingCredential;
@@ -202,22 +240,29 @@ const QRScanner = () => {
         <Card>
           <CardHeader>
             <CardTitle>Escanear Código</CardTitle>
-            <CardDescription>Digite o código ou use um leitor de código de barras</CardDescription>
+            <CardDescription>
+              Posicione o leitor Bematech S-100 e escaneie o código. O sistema processa automaticamente.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex gap-4">
               <Input
+                ref={inputRef}
                 placeholder="VP-XXXXXXXX ou EC-XXXXXXXX"
                 value={qrCode}
                 onChange={(e) => setQrCode(e.target.value.toUpperCase())}
                 className="font-mono text-lg"
-                onKeyDown={(e) => e.key === 'Enter' && handleScan()}
+                onKeyDown={handleKeyDown}
                 autoFocus
+                autoComplete="off"
               />
               <Button onClick={handleScan} size="lg" disabled={isLoading}>
                 {isLoading ? 'Buscando...' : 'Verificar'}
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              💡 O leitor USB envia o código + Enter automaticamente
+            </p>
           </CardContent>
         </Card>
 

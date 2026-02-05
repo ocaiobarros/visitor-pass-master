@@ -12,6 +12,7 @@ import RegisterVisitor from "./pages/RegisterVisitor";
 import VisitorList from "./pages/VisitorList";
 import VisitorPass from "./pages/VisitorPass";
 import QRScanner from "./pages/QRScanner";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,6 +32,7 @@ const App = () => (
             <Route path="/visitors" element={<VisitorList />} />
             <Route path="/pass/:id" element={<VisitorPass />} />
             <Route path="/scan" element={<QRScanner />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

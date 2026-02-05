@@ -24,6 +24,12 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$DB_NAME" <<-EOSQL
     CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 EOSQL
 
+echo "→ Criando schema auth para GoTrue..."
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$DB_NAME" <<-EOSQL
+    -- Schema auth (GoTrue gerencia as tabelas)
+    CREATE SCHEMA IF NOT EXISTS auth;
+EOSQL
+
 echo "→ Criando roles para API..."
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$DB_NAME" <<-EOSQL
     -- Roles para API (PostgREST + GoTrue)

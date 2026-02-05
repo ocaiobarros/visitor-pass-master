@@ -5,13 +5,22 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Settings as SettingsIcon, Users, Activity, Shield, Plus, Trash2, Building2 } from 'lucide-react';
+import { Settings as SettingsIcon, Users, Activity, Shield, Plus, Trash2, Building2, UserPlus, Mail, Lock } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { AppRole } from '@/types/visitor';
@@ -23,6 +32,12 @@ const Settings = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [newDepartment, setNewDepartment] = useState('');
+  const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserRole, setNewUserRole] = useState<AppRole>('security');
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
 
   // Only admin can access
   if (!hasRole('admin')) {
@@ -73,6 +88,73 @@ const Settings = () => {
 
   // Departments
   const { data: departments } = useDepartments();
+
+  // Create new user
+  const handleCreateUser = async () => {
+    if (!newUserEmail || !newUserPassword || newUserPassword.length < 6) {
+      toast({
+        title: 'Campos inválidos',
+        description: 'Preencha email e senha (mínimo 6 caracteres).',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsCreatingUser(true);
+
+    try {
+      // Create user via Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: newUserEmail,
+        password: newUserPassword,
+        options: {
+          emailRedirectTo: window.location.origin,
+          data: { full_name: newUserName || newUserEmail }
+        }
+      });
+
+      if (authError) throw authError;
+
+      // If we need to set a different role than security, update it
+      if (authData.user && newUserRole !== 'security') {
+        // Wait a moment for the trigger to create the default role
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Update to the selected role
+        await supabase
+          .from('user_roles')
+          .delete()
+          .eq('user_id', authData.user.id);
+
+        await supabase
+          .from('user_roles')
+          .insert({ user_id: authData.user.id, role: newUserRole });
+      }
+
+      toast({
+        title: 'Usuário criado!',
+        description: `${newUserEmail} foi adicionado ao sistema.`,
+      });
+
+      // Reset form
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setNewUserName('');
+      setNewUserRole('security');
+      setIsCreateUserOpen(false);
+      
+      // Refresh users list
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao criar usuário',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCreatingUser(false);
+    }
+  };
 
   // Update user role
   const updateRole = useMutation({
@@ -176,13 +258,88 @@ const Settings = () => {
           <TabsContent value="users">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="w-5 h-5" />
-                  Gerenciar Usuários
-                </CardTitle>
-                <CardDescription>
-                  Atribua roles e gerencie permissões dos usuários do sistema
-                </CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Shield className="w-5 h-5" />
+                      Gerenciar Usuários
+                    </CardTitle>
+                    <CardDescription>
+                      Crie novos usuários e gerencie permissões
+                    </CardDescription>
+                  </div>
+                  <Dialog open={isCreateUserOpen} onOpenChange={setIsCreateUserOpen}>
+                    <DialogTrigger asChild>
+                      <Button className="gap-2">
+                        <UserPlus className="w-4 h-4" />
+                        Novo Usuário
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Criar Novo Usuário</DialogTitle>
+                        <DialogDescription>
+                          Adicione um novo usuário ao sistema GUARDA OPERACIONAL
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="new-user-name">Nome Completo</Label>
+                          <Input
+                            id="new-user-name"
+                            placeholder="Nome do usuário"
+                            value={newUserName}
+                            onChange={(e) => setNewUserName(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="new-user-email">Email</Label>
+                          <div className="relative">
+                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              id="new-user-email"
+                              type="email"
+                              placeholder="usuario@empresa.com"
+                              value={newUserEmail}
+                              onChange={(e) => setNewUserEmail(e.target.value)}
+                              className="pl-10"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="new-user-password">Senha</Label>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              id="new-user-password"
+                              type="password"
+                              placeholder="Mínimo 6 caracteres"
+                              value={newUserPassword}
+                              onChange={(e) => setNewUserPassword(e.target.value)}
+                              className="pl-10"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Permissão</Label>
+                          <Select value={newUserRole} onValueChange={(v) => setNewUserRole(v as AppRole)}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="admin">Admin (acesso total)</SelectItem>
+                              <SelectItem value="rh">RH (cadastros)</SelectItem>
+                              <SelectItem value="security">Segurança (scanner)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button onClick={handleCreateUser} className="w-full" disabled={isCreatingUser}>
+                          {isCreatingUser ? 'Criando...' : 'Criar Usuário'}
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
               </CardHeader>
               <CardContent>
                 {isLoadingUsers ? (

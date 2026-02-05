@@ -101,7 +101,8 @@ services:
       API_EXTERNAL_URL: ${SITE_URL:-http://localhost}
       
       GOTRUE_DB_DRIVER: postgres
-      GOTRUE_DB_DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-guarda_operacional}?search_path=auth
+      GOTRUE_DB_DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-guarda_operacional}?sslmode=disable&search_path=auth
+      DB_NAMESPACE: auth
       
       GOTRUE_SITE_URL: ${SITE_URL:-http://localhost}
       GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS:-}

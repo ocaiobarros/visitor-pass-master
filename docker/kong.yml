@@ -34,13 +34,19 @@ services:
               headers:
                 - Accept
                 - Accept-Version
+                - Accept-Profile
                 - Authorization
                 - Content-Length
                 - Content-Type
+                - Content-Profile
                 - Date
+                - Prefer
                 - X-Client-Info
                 - apikey
-                - Prefer
+                - x-supabase-client-platform
+                - x-supabase-client-platform-version
+                - x-supabase-client-runtime
+                - x-supabase-client-runtime-version
               exposed_headers:
                 - Content-Range
               credentials: true
@@ -86,10 +92,17 @@ services:
                 - OPTIONS
               headers:
                 - Accept
+                - Accept-Profile
                 - Authorization
                 - Content-Type
+                - Content-Profile
+                - Prefer
                 - X-Client-Info
                 - apikey
+                - x-supabase-client-platform
+                - x-supabase-client-platform-version
+                - x-supabase-client-runtime
+                - x-supabase-client-runtime-version
               credentials: true
               max_age: 3600
               preflight_continue: false

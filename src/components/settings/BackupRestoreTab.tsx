@@ -24,7 +24,8 @@ const TABLES_TO_EXPORT = [
   'user_roles',
   'visitors',
   'employee_credentials',
-  'access_logs'
+  'access_logs',
+  'audit_logs'
 ];
 
 const BackupRestoreTab = () => {
@@ -67,6 +68,8 @@ const BackupRestoreTab = () => {
         return supabase.from('employee_credentials').select('*');
       case 'access_logs':
         return supabase.from('access_logs').select('*');
+      case 'audit_logs':
+        return supabase.from('audit_logs').select('*');
       default:
         throw new Error(`Tabela desconhecida: ${tableName}`);
     }

@@ -105,7 +105,7 @@ const UsersManagementTab = () => {
     return matchesSearch && matchesStatus;
   }) || [];
 
-  // Create new user
+  // Create new user via edge function (doesn't log out current user)
   const handleCreateUser = async () => {
     if (!newUserEmail || !newUserPassword || newUserPassword.length < 6) {
       toast({
@@ -119,34 +119,29 @@ const UsersManagementTab = () => {
     setIsCreatingUser(true);
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: newUserEmail,
-        password: newUserPassword,
-        options: {
-          emailRedirectTo: window.location.origin,
-          data: { full_name: newUserName || newUserEmail }
-        }
-      });
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
 
-      if (authError) throw authError;
-
-      if (authData.user && newUserRole !== 'security') {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        await supabase
-          .from('user_roles')
-          .delete()
-          .eq('user_id', authData.user.id);
-
-        await supabase
-          .from('user_roles')
-          .insert({ user_id: authData.user.id, role: newUserRole });
+      if (!token) {
+        throw new Error('Sessão expirada. Faça login novamente.');
       }
 
-      await logAuditAction('USER_CREATE', { 
-        created_email: newUserEmail, 
-        role: newUserRole 
+      const response = await supabase.functions.invoke('admin-create-user', {
+        body: {
+          email: newUserEmail,
+          password: newUserPassword,
+          full_name: newUserName || newUserEmail,
+          role: newUserRole,
+        },
       });
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Erro ao criar usuário');
+      }
+
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
 
       toast({
         title: 'Usuário criado!',
@@ -161,6 +156,7 @@ const UsersManagementTab = () => {
       
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
     } catch (error: any) {
+      console.error('Error creating user:', error);
       toast({
         title: 'Erro ao criar usuário',
         description: error.message,

@@ -45,6 +45,17 @@ services:
                 - Content-Range
               credentials: true
               max_age: 3600
+              preflight_continue: false
+          # Key-auth per-route (permite OPTIONS sem auth)
+          - name: key-auth
+            config:
+              key_names:
+                - apikey
+              key_in_header: true
+              key_in_query: true
+              key_in_body: false
+              hide_credentials: false
+              anonymous: ~
           # Rate limit para API (60 req/min por IP)
           - name: rate-limiting
             config:
@@ -81,6 +92,17 @@ services:
                 - apikey
               credentials: true
               max_age: 3600
+              preflight_continue: false
+          # Key-auth per-route
+          - name: key-auth
+            config:
+              key_names:
+                - apikey
+              key_in_header: true
+              key_in_query: true
+              key_in_body: false
+              hide_credentials: false
+              anonymous: ~
           # Rate limit estrito para auth (10 req/min - anti brute-force)
           - name: rate-limiting
             config:
@@ -95,25 +117,12 @@ services:
 consumers:
   - username: anon
     keyauth_credentials:
-      - key: ${ANON_KEY}
-  
-  - username: service_role
-    keyauth_credentials:
-      - key: ${SERVICE_ROLE_KEY}
+      - key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjIwMDAwMDAwMDB9.dhxtb3Z4-Zg1iIZh4X375LCTuvn84wlfJeKwmZIPPG8
 
 # ==========================================
-# Plugins Globais
+# Plugins Globais (apenas request-transformer e rate-limit fallback)
 # ==========================================
 plugins:
-  - name: key-auth
-    config:
-      key_names:
-        - apikey
-      key_in_header: true
-      key_in_query: true
-      key_in_body: false
-      hide_credentials: false
-  
   - name: request-transformer
     config:
       add:

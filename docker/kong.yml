@@ -55,7 +55,7 @@ services:
               key_in_query: true
               key_in_body: false
               hide_credentials: false
-              anonymous: ~
+              run_on_preflight: false
           # Rate limit para API (60 req/min por IP)
           - name: rate-limiting
             config:
@@ -102,7 +102,7 @@ services:
               key_in_query: true
               key_in_body: false
               hide_credentials: false
-              anonymous: ~
+              run_on_preflight: false
           # Rate limit estrito para auth (10 req/min - anti brute-force)
           - name: rate-limiting
             config:

@@ -5,14 +5,20 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import ConnectionErrorBoundary from "@/components/ConnectionErrorBoundary";
+import GlobalErrorHandler from "@/components/GlobalErrorHandler";
 import { isSystemConfigured, hasEnvVars } from "@/pages/InstallWizard";
 
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import RegisterVisitor from "./pages/RegisterVisitor";
+import RegisterEmployee from "./pages/RegisterEmployee";
+import RegisterVehicle from "./pages/RegisterVehicle";
+import EmployeeList from "./pages/EmployeeList";
+import VehicleList from "./pages/VehicleList";
 import VisitorList from "./pages/VisitorList";
 import VisitorPass from "./pages/VisitorPass";
+import CredentialPass from "./pages/CredentialPass";
 import QRScanner from "./pages/QRScanner";
 import ScanKiosk from "./pages/ScanKiosk";
 import Settings from "./pages/Settings";
@@ -29,9 +35,14 @@ const queryClient = new QueryClient({
             error?.message?.includes('Network request failed')) {
           return false;
         }
-        return failureCount < 3;
+        // Don't retry on 401/403 auth errors
+        if (error?.status === 401 || error?.status === 403) {
+          return false;
+        }
+        return failureCount < 2;
       },
-      staleTime: 5 * 60 * 1000, // 5 minutes
+      staleTime: 2 * 60 * 1000, // 2 minutes
+      refetchOnWindowFocus: false,
     },
     mutations: {
       retry: false,
@@ -62,6 +73,7 @@ const WizardRoute = ({ children }: { children: React.ReactNode }) => {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
+      <GlobalErrorHandler />
       <Toaster />
       <Sonner />
       <BrowserRouter>
@@ -88,8 +100,13 @@ const App = () => (
                       <Route path="/login" element={<Login />} />
                       <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="/register" element={<RegisterVisitor />} />
+                      <Route path="/register/employee" element={<RegisterEmployee />} />
+                      <Route path="/register/vehicle" element={<RegisterVehicle />} />
+                      <Route path="/employees" element={<EmployeeList />} />
+                      <Route path="/vehicles" element={<VehicleList />} />
                       <Route path="/visitors" element={<VisitorList />} />
                       <Route path="/pass/:id" element={<VisitorPass />} />
+                      <Route path="/credential/:id" element={<CredentialPass />} />
                       <Route path="/scan" element={<QRScanner />} />
                       <Route path="/scan/kiosk" element={<ScanKiosk />} />
                       <Route path="/settings" element={<Settings />} />

@@ -5,24 +5,25 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Lock, Mail } from 'lucide-react';
+import { Lock, Mail, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import ChangePasswordModal from '@/components/ChangePasswordModal';
 import { useProfile } from '@/hooks/useProfile';
 import BrandLogo from '@/components/BrandLogo';
 import { branding, getPageTitle } from '@/config/branding';
+import { logAuditAction } from '@/hooks/useAuditLogs';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const { login, isAuthenticated, supabaseUser } = useAuth();
+  const { login, isAuthenticated, supabaseUser, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
   // Check if user needs to change password
-  const { data: profile } = useProfile(supabaseUser?.id);
+  const { data: profile, isLoading: profileLoading } = useProfile(supabaseUser?.id);
 
   // Set page title
   useEffect(() => {
@@ -30,42 +31,83 @@ const Login = () => {
   }, []);
 
   useEffect(() => {
+    // Only process redirect after auth and profile are both loaded
+    if (authLoading || profileLoading) return;
+    
     if (isAuthenticated && profile) {
       if (profile.mustChangePassword) {
         setShowPasswordModal(true);
       } else {
-        navigate('/dashboard');
+        navigate('/dashboard', { replace: true });
       }
     }
-  }, [isAuthenticated, profile, navigate]);
+  }, [isAuthenticated, profile, navigate, authLoading, profileLoading]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-
-    const result = await login(email, password);
     
-    if (result.success) {
+    if (!email || !password) {
       toast({
-        title: 'Login realizado com sucesso!',
-        description: `Bem-vindo ao ${branding.name}.`,
-      });
-      // Navigation will be handled by useEffect after profile loads
-    } else {
-      toast({
-        title: 'Erro no login',
-        description: result.error || 'Verifique suas credenciais.',
+        title: 'Campos obrigatórios',
+        description: 'Preencha email e senha.',
         variant: 'destructive',
       });
+      return;
     }
-    
-    setIsLoading(false);
+
+    setIsLoading(true);
+
+    try {
+      const result = await login(email, password);
+      
+      if (result.success) {
+        // Log successful login
+        await logAuditAction('LOGIN', { email });
+        
+        toast({
+          title: 'Login realizado com sucesso!',
+          description: `Bem-vindo ao ${branding.name}.`,
+        });
+        // Navigation will be handled by useEffect after profile loads
+      } else {
+        // Log failed login attempt
+        await logAuditAction('LOGIN_FAILED', { email, reason: result.error });
+        
+        toast({
+          title: 'Erro no login',
+          description: result.error || 'Verifique suas credenciais.',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      toast({
+        title: 'Erro no login',
+        description: 'Ocorreu um erro inesperado. Tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handlePasswordChanged = () => {
+  const handlePasswordChanged = async () => {
+    await logAuditAction('PASSWORD_CHANGE', { first_login: true });
     setShowPasswordModal(false);
-    navigate('/dashboard');
+    navigate('/dashboard', { replace: true });
   };
+
+  // Show loading while auth is initializing
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-background">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
+          <p className="mt-2 text-muted-foreground">Verificando sessão...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-background p-4">
@@ -103,6 +145,8 @@ const Login = () => {
                     onChange={(e) => setEmail(e.target.value)}
                     className="pl-10"
                     required
+                    disabled={isLoading}
+                    autoComplete="email"
                   />
                 </div>
               </div>
@@ -118,11 +162,20 @@ const Login = () => {
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-10"
                     required
+                    disabled={isLoading}
+                    autoComplete="current-password"
                   />
                 </div>
               </div>
               <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
-                {isLoading ? 'Entrando...' : 'Entrar'}
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Entrando...
+                  </>
+                ) : (
+                  'Entrar'
+                )}
               </Button>
             </form>
 

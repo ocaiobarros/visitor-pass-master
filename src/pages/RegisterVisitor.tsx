@@ -15,12 +15,15 @@ import { UserPlus, Building2, User, Phone, Calendar, FileText, Camera, IdCard } 
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { VisitToType } from '@/types/visitor';
+import { MaskedInput, isValidCPF, isValidPhone } from '@/components/ui/masked-input';
+import { useToast } from '@/hooks/use-toast';
 
 const RegisterVisitor = () => {
   const navigate = useNavigate();
   const { data: departments = [] } = useDepartments();
   const createVisitor = useCreateVisitor();
   const { isAdminOrRh } = useAuth();
+  const { toast } = useToast();
 
   const [formData, setFormData] = useState({
     fullName: '',
@@ -48,6 +51,26 @@ const RegisterVisitor = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate CPF
+    if (!isValidCPF(formData.document)) {
+      toast({
+        title: 'CPF inválido',
+        description: 'Por favor, informe um CPF válido.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate phone if provided
+    if (formData.phone && !isValidPhone(formData.phone)) {
+      toast({
+        title: 'Telefone inválido',
+        description: 'Por favor, informe um telefone válido com DDD.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
     createVisitor.mutate({
       fullName: formData.fullName,
@@ -136,14 +159,15 @@ const RegisterVisitor = () => {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="document">Documento (RG/CPF) *</Label>
+                  <Label htmlFor="document">CPF *</Label>
                   <div className="relative">
-                    <IdCard className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
+                    <IdCard className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+                    <MaskedInput
                       id="document"
+                      mask="cpf"
                       placeholder="000.000.000-00"
                       value={formData.document}
-                      onChange={(e) => setFormData({ ...formData, document: e.target.value })}
+                      onChange={(value) => setFormData({ ...formData, document: value })}
                       className="pl-10"
                       required
                     />
@@ -169,12 +193,13 @@ const RegisterVisitor = () => {
                 <div className="space-y-2">
                   <Label htmlFor="phone">Telefone</Label>
                   <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+                    <MaskedInput
                       id="phone"
+                      mask="phone"
                       placeholder="(11) 99999-9999"
                       value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      onChange={(value) => setFormData({ ...formData, phone: value })}
                       className="pl-10"
                     />
                   </div>

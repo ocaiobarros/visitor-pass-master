@@ -75,7 +75,9 @@ services:
     expose:
       - "3000"
     healthcheck:
-      test: ["CMD-SHELL", "netstat -an | grep -q ':3000.*LISTEN' || ss -tlnp | grep -q ':3000'"]
+      # A imagem postgrest/postgrest é minimalista e pode não ter /bin/sh.
+      # Use CMD direto (sem shell) para evitar: "stat /bin/sh: no such file or directory".
+      test: ["CMD", "/bin/postgrest", "--version"]
       interval: 30s
       timeout: 5s
       retries: 3

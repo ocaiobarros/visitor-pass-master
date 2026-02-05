@@ -1,22 +1,21 @@
 import { useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { useVisitors } from '@/context/VisitorContext';
+import { useVisitor } from '@/hooks/useVisitors';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { QRCodeSVG } from 'qrcode.react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Printer, ArrowLeft, Shield, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Printer, ArrowLeft, Shield, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 
 const VisitorPass = () => {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { getVisitor } = useVisitors();
   const printRef = useRef<HTMLDivElement>(null);
 
-  const visitor = id ? getVisitor(id) : undefined;
+  const { data: visitor, isLoading } = useVisitor(id || '');
   const shouldPrint = searchParams.get('print') === 'true';
 
   useEffect(() => {
@@ -24,6 +23,16 @@ const VisitorPass = () => {
       setTimeout(() => window.print(), 500);
     }
   }, [shouldPrint, visitor]);
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   if (!visitor) {
     return (
@@ -74,8 +83,8 @@ const VisitorPass = () => {
                 <Shield className="w-8 h-8 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-foreground">WRL VisitorPass</h1>
-                <p className="text-muted-foreground">Sistema de Gestão de Visitantes</p>
+                <h1 className="text-2xl font-bold text-foreground">GUARDA OPERACIONAL</h1>
+                <p className="text-muted-foreground">Sistema de Controle de Acesso</p>
               </div>
             </div>
             <div className="text-right">
@@ -89,10 +98,10 @@ const VisitorPass = () => {
             {/* Photo & QR */}
             <div className="space-y-4">
               <div className="w-full aspect-square rounded-xl bg-muted border border-border flex items-center justify-center overflow-hidden">
-                {visitor.photo ? (
-                  <img src={visitor.photo} alt={visitor.name} className="w-full h-full object-cover" />
+                {visitor.photoUrl ? (
+                  <img src={visitor.photoUrl} alt={visitor.fullName} className="w-full h-full object-cover" />
                 ) : (
-                  <div className="text-6xl font-bold text-muted-foreground">{visitor.name.charAt(0)}</div>
+                  <div className="text-6xl font-bold text-muted-foreground">{visitor.fullName.charAt(0)}</div>
                 )}
               </div>
               <div className="bg-white p-4 rounded-xl border border-border flex items-center justify-center">
@@ -104,32 +113,36 @@ const VisitorPass = () => {
             <div className="col-span-2 space-y-4">
               <div>
                 <p className="text-sm text-muted-foreground">Nome do Visitante</p>
-                <p className="text-xl font-bold text-foreground">{visitor.name}</p>
+                <p className="text-xl font-bold text-foreground">{visitor.fullName}</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Documento</p>
+                  <p className="font-medium text-foreground">{visitor.document}</p>
+                </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Empresa</p>
-                  <p className="font-medium text-foreground">{visitor.company}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Telefone</p>
-                  <p className="font-medium text-foreground">{visitor.phone}</p>
+                  <p className="font-medium text-foreground">{visitor.company || '-'}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-muted-foreground">Departamento</p>
-                  <p className="font-medium text-foreground">{visitor.department}</p>
+                  <p className="text-sm text-muted-foreground">Telefone</p>
+                  <p className="font-medium text-foreground">{visitor.phone || '-'}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Responsável</p>
-                  <p className="font-medium text-foreground">{visitor.hostEmployee}</p>
+                  <p className="text-sm text-muted-foreground">Destino</p>
+                  <p className="font-medium text-foreground">
+                    {visitor.visitToType === 'setor' ? '📍 ' : '👤 '}{visitor.visitToName}
+                  </p>
                 </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Motivo da Visita</p>
-                <p className="font-medium text-foreground">{visitor.purpose}</p>
-              </div>
+              {visitor.gateObs && (
+                <div className="p-3 rounded-lg bg-warning/10 border border-warning/20">
+                  <p className="text-xs text-warning font-medium">OBSERVAÇÃO</p>
+                  <p className="font-medium text-foreground">{visitor.gateObs}</p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4 pt-2">
                 <div className="p-3 rounded-lg bg-success/10 border border-success/20">
                   <p className="text-xs text-success font-medium">ENTRADA PERMITIDA</p>
@@ -140,7 +153,7 @@ const VisitorPass = () => {
                 <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                   <p className="text-xs text-destructive font-medium">SAÍDA ATÉ</p>
                   <p className="font-bold text-destructive">
-                    {format(new Date(visitor.validTill), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                    {format(new Date(visitor.validUntil), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                   </p>
                 </div>
               </div>
@@ -155,7 +168,7 @@ const VisitorPass = () => {
             </h3>
             <ul className="text-sm text-muted-foreground space-y-1">
               <li>• Este passe deve ser portado de forma visível durante toda a permanência</li>
-              <li>• Acesso restrito às áreas autorizadas conforme departamento indicado</li>
+              <li>• Acesso restrito às áreas autorizadas conforme destino indicado</li>
               <li>• Em caso de emergência, siga as instruções da equipe de segurança</li>
               <li>• Devolva este passe na saída</li>
             </ul>
@@ -176,7 +189,7 @@ const VisitorPass = () => {
             <p className="text-xs text-muted-foreground">
               Documento gerado em {format(new Date(visitor.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
             </p>
-            <p className="text-xs text-muted-foreground">WRL VisitorPass - Sistema de Gestão de Visitantes</p>
+            <p className="text-xs text-muted-foreground">GUARDA OPERACIONAL - Sistema de Controle de Acesso</p>
           </div>
         </Card>
       </div>

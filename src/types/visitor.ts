@@ -1,27 +1,16 @@
-export interface Visitor {
-  id: string;
-  name: string;
-  company: string;
-  phone: string;
-  email?: string;
-  photo?: string;
-  department: string;
-  hostEmployee: string;
-  purpose: string;
-  validFrom: Date;
-  validTill: Date;
-  status: 'pending' | 'inside' | 'outside' | 'expired';
-  checkInTime?: Date;
-  checkOutTime?: Date;
-  createdAt: Date;
-  passId: string;
-}
+export type AppRole = 'admin' | 'rh' | 'security';
+export type VisitorStatus = 'pending' | 'inside' | 'outside' | 'closed';
+export type CredentialType = 'personal' | 'vehicle';
+export type CredentialStatus = 'allowed' | 'blocked';
+export type AccessDirection = 'in' | 'out';
+export type SubjectType = 'visitor' | 'employee';
+export type VisitToType = 'setor' | 'pessoa';
 
 export interface User {
   id: string;
-  name: string;
   email: string;
-  role: 'admin' | 'security' | 'employee';
+  fullName: string;
+  roles: AppRole[];
 }
 
 export interface Department {
@@ -29,13 +18,62 @@ export interface Department {
   name: string;
 }
 
-export const DEPARTMENTS: Department[] = [
-  { id: '1', name: 'Produção' },
-  { id: '2', name: 'Recursos Humanos' },
-  { id: '3', name: 'TI' },
-  { id: '4', name: 'Financeiro' },
-  { id: '5', name: 'Comercial' },
-  { id: '6', name: 'Logística' },
-  { id: '7', name: 'Qualidade' },
-  { id: '8', name: 'Manutenção' },
-];
+export interface Visitor {
+  id: string;
+  passId: string;
+  fullName: string;
+  document: string;
+  company?: string;
+  phone?: string;
+  photoUrl?: string;
+  visitToType: VisitToType;
+  visitToName: string;
+  gateObs?: string;
+  validFrom: Date;
+  validUntil: Date;
+  status: VisitorStatus;
+  createdBy?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface EmployeeCredential {
+  id: string;
+  credentialId: string;
+  type: CredentialType;
+  fullName: string;
+  document: string;
+  departmentId?: string;
+  department?: Department;
+  jobTitle?: string;
+  photoUrl?: string;
+  vehicleMakeModel?: string;
+  vehiclePlate?: string;
+  status: CredentialStatus;
+  createdBy?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface AccessLog {
+  id: string;
+  subjectType: SubjectType;
+  subjectId: string;
+  direction: AccessDirection;
+  gateId: string;
+  operatorId?: string;
+  createdAt: Date;
+}
+
+// Helper para verificar permissões
+export const canManageVisitors = (roles: AppRole[]): boolean => {
+  return roles.includes('admin') || roles.includes('rh');
+};
+
+export const canManageCredentials = (roles: AppRole[]): boolean => {
+  return roles.includes('admin') || roles.includes('rh');
+};
+
+export const canScan = (roles: AppRole[]): boolean => {
+  return roles.includes('admin') || roles.includes('rh') || roles.includes('security');
+};

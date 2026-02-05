@@ -14,16 +14,234 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      access_logs: {
+        Row: {
+          created_at: string
+          direction: Database["public"]["Enums"]["access_direction"]
+          gate_id: string
+          id: string
+          operator_id: string | null
+          subject_id: string
+          subject_type: Database["public"]["Enums"]["subject_type"]
+        }
+        Insert: {
+          created_at?: string
+          direction: Database["public"]["Enums"]["access_direction"]
+          gate_id?: string
+          id?: string
+          operator_id?: string | null
+          subject_id: string
+          subject_type: Database["public"]["Enums"]["subject_type"]
+        }
+        Update: {
+          created_at?: string
+          direction?: Database["public"]["Enums"]["access_direction"]
+          gate_id?: string
+          id?: string
+          operator_id?: string | null
+          subject_id?: string
+          subject_type?: Database["public"]["Enums"]["subject_type"]
+        }
+        Relationships: []
+      }
+      departments: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      employee_credentials: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          credential_id: string
+          department_id: string | null
+          document: string
+          full_name: string
+          id: string
+          job_title: string | null
+          photo_url: string | null
+          status: Database["public"]["Enums"]["credential_status"]
+          type: Database["public"]["Enums"]["credential_type"]
+          updated_at: string
+          vehicle_make_model: string | null
+          vehicle_plate: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          credential_id: string
+          department_id?: string | null
+          document: string
+          full_name: string
+          id?: string
+          job_title?: string | null
+          photo_url?: string | null
+          status?: Database["public"]["Enums"]["credential_status"]
+          type: Database["public"]["Enums"]["credential_type"]
+          updated_at?: string
+          vehicle_make_model?: string | null
+          vehicle_plate?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          credential_id?: string
+          department_id?: string | null
+          document?: string
+          full_name?: string
+          id?: string
+          job_title?: string | null
+          photo_url?: string | null
+          status?: Database["public"]["Enums"]["credential_status"]
+          type?: Database["public"]["Enums"]["credential_type"]
+          updated_at?: string
+          vehicle_make_model?: string | null
+          vehicle_plate?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_credentials_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          full_name: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          full_name: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          full_name?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      visitors: {
+        Row: {
+          company: string | null
+          created_at: string
+          created_by: string | null
+          document: string
+          full_name: string
+          gate_obs: string | null
+          id: string
+          pass_id: string
+          phone: string | null
+          photo_url: string | null
+          status: Database["public"]["Enums"]["visitor_status"]
+          updated_at: string
+          valid_from: string
+          valid_until: string
+          visit_to_name: string
+          visit_to_type: Database["public"]["Enums"]["visit_to_type"]
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string
+          created_by?: string | null
+          document: string
+          full_name: string
+          gate_obs?: string | null
+          id?: string
+          pass_id: string
+          phone?: string | null
+          photo_url?: string | null
+          status?: Database["public"]["Enums"]["visitor_status"]
+          updated_at?: string
+          valid_from: string
+          valid_until: string
+          visit_to_name: string
+          visit_to_type?: Database["public"]["Enums"]["visit_to_type"]
+        }
+        Update: {
+          company?: string | null
+          created_at?: string
+          created_by?: string | null
+          document?: string
+          full_name?: string
+          gate_obs?: string | null
+          id?: string
+          pass_id?: string
+          phone?: string | null
+          photo_url?: string | null
+          status?: Database["public"]["Enums"]["visitor_status"]
+          updated_at?: string
+          valid_from?: string
+          valid_until?: string
+          visit_to_name?: string
+          visit_to_type?: Database["public"]["Enums"]["visit_to_type"]
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: { check_role: Database["public"]["Enums"]["app_role"] }
+        Returns: boolean
+      }
+      is_admin_or_rh: { Args: never; Returns: boolean }
     }
     Enums: {
-      [_ in never]: never
+      access_direction: "in" | "out"
+      app_role: "admin" | "rh" | "security"
+      credential_status: "allowed" | "blocked"
+      credential_type: "personal" | "vehicle"
+      subject_type: "visitor" | "employee"
+      visit_to_type: "setor" | "pessoa"
+      visitor_status: "pending" | "inside" | "outside" | "closed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +368,14 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      access_direction: ["in", "out"],
+      app_role: ["admin", "rh", "security"],
+      credential_status: ["allowed", "blocked"],
+      credential_type: ["personal", "vehicle"],
+      subject_type: ["visitor", "employee"],
+      visit_to_type: ["setor", "pessoa"],
+      visitor_status: ["pending", "inside", "outside", "closed"],
+    },
   },
 } as const

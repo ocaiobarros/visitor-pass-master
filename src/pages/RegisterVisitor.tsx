@@ -1,44 +1,46 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '@/components/DashboardLayout';
-import { useVisitors } from '@/context/VisitorContext';
-import { DEPARTMENTS } from '@/types/visitor';
+import { useDepartments } from '@/hooks/useDepartments';
+import { useCreateVisitor } from '@/hooks/useVisitors';
+import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
-import { UserPlus, Building2, User, Phone, Mail, Calendar, FileText, Camera } from 'lucide-react';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { UserPlus, Building2, User, Phone, Calendar, FileText, Camera, IdCard } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import { VisitToType } from '@/types/visitor';
 
 const RegisterVisitor = () => {
   const navigate = useNavigate();
-  const { addVisitor } = useVisitors();
-  const { toast } = useToast();
+  const { data: departments = [] } = useDepartments();
+  const createVisitor = useCreateVisitor();
+  const { isAdminOrRh } = useAuth();
 
   const [formData, setFormData] = useState({
-    name: '',
+    fullName: '',
+    document: '',
     company: '',
     phone: '',
-    email: '',
-    department: '',
-    hostEmployee: '',
-    purpose: '',
+    visitToType: 'setor' as VisitToType,
+    visitToName: '',
+    gateObs: '',
   });
   const [validFrom, setValidFrom] = useState<Date>(new Date());
-  const [validTill, setValidTill] = useState<Date>(new Date(Date.now() + 4 * 60 * 60 * 1000));
-  const [photo, setPhoto] = useState<string | undefined>();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validUntil, setValidUntil] = useState<Date>(new Date(Date.now() + 4 * 60 * 60 * 1000));
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>();
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setPhoto(reader.result as string);
+        setPhotoUrl(reader.result as string);
       };
       reader.readAsDataURL(file);
     }
@@ -46,32 +48,38 @@ const RegisterVisitor = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
 
-    try {
-      const newVisitor = addVisitor({
-        ...formData,
-        photo,
-        validFrom,
-        validTill,
-      });
-
-      toast({
-        title: 'Visitante registrado com sucesso!',
-        description: `Passe gerado: ${newVisitor.passId}`,
-      });
-
-      navigate(`/pass/${newVisitor.id}`);
-    } catch (error) {
-      toast({
-        title: 'Erro ao registrar visitante',
-        description: 'Tente novamente.',
-        variant: 'destructive',
-      });
-    }
-
-    setIsSubmitting(false);
+    createVisitor.mutate({
+      fullName: formData.fullName,
+      document: formData.document,
+      company: formData.company || undefined,
+      phone: formData.phone || undefined,
+      photoUrl,
+      visitToType: formData.visitToType,
+      visitToName: formData.visitToName,
+      gateObs: formData.gateObs || undefined,
+      validFrom,
+      validUntil,
+    }, {
+      onSuccess: (visitor) => {
+        navigate(`/pass/${visitor.id}`);
+      }
+    });
   };
+
+  if (!isAdminOrRh) {
+    return (
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center py-20">
+          <h2 className="text-2xl font-bold text-foreground">Acesso Restrito</h2>
+          <p className="text-muted-foreground mt-2">Apenas RH e Administradores podem registrar visitantes.</p>
+          <Button onClick={() => navigate('/dashboard')} className="mt-6">
+            Voltar ao Dashboard
+          </Button>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -95,8 +103,8 @@ const RegisterVisitor = () => {
               <div className="flex justify-center">
                 <div className="relative">
                   <div className="w-32 h-32 rounded-xl bg-muted border-2 border-dashed border-border flex items-center justify-center overflow-hidden">
-                    {photo ? (
-                      <img src={photo} alt="Foto do visitante" className="w-full h-full object-cover" />
+                    {photoUrl ? (
+                      <img src={photoUrl} alt="Foto do visitante" className="w-full h-full object-cover" />
                     ) : (
                       <Camera className="w-8 h-8 text-muted-foreground" />
                     )}
@@ -111,24 +119,42 @@ const RegisterVisitor = () => {
                 </div>
               </div>
 
-              {/* Name & Company */}
+              {/* Name & Document */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Nome Completo *</Label>
+                  <Label htmlFor="fullName">Nome Completo *</Label>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                      id="name"
+                      id="fullName"
                       placeholder="Nome do visitante"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      value={formData.fullName}
+                      onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                       className="pl-10"
                       required
                     />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="company">Empresa *</Label>
+                  <Label htmlFor="document">Documento (RG/CPF) *</Label>
+                  <div className="relative">
+                    <IdCard className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="document"
+                      placeholder="000.000.000-00"
+                      value={formData.document}
+                      onChange={(e) => setFormData({ ...formData, document: e.target.value })}
+                      className="pl-10"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Company & Phone */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="company">Empresa</Label>
                   <div className="relative">
                     <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -137,16 +163,11 @@ const RegisterVisitor = () => {
                       value={formData.company}
                       onChange={(e) => setFormData({ ...formData, company: e.target.value })}
                       className="pl-10"
-                      required
                     />
                   </div>
                 </div>
-              </div>
-
-              {/* Phone & Email */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Telefone *</Label>
+                  <Label htmlFor="phone">Telefone</Label>
                   <div className="relative">
                     <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -155,55 +176,74 @@ const RegisterVisitor = () => {
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                       className="pl-10"
-                      required
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="email@empresa.com"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="pl-10"
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Department & Host */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="department">Departamento a Visitar *</Label>
+              {/* Visit To Type */}
+              <div className="space-y-3">
+                <Label>Veio para *</Label>
+                <RadioGroup
+                  value={formData.visitToType}
+                  onValueChange={(value) => setFormData({ ...formData, visitToType: value as VisitToType, visitToName: '' })}
+                  className="flex gap-4"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="setor" id="setor" />
+                    <Label htmlFor="setor">Setor/Departamento</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="pessoa" id="pessoa" />
+                    <Label htmlFor="pessoa">Pessoa específica</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              {/* Visit To Name */}
+              <div className="space-y-2">
+                <Label htmlFor="visitToName">
+                  {formData.visitToType === 'setor' ? 'Departamento *' : 'Nome da pessoa *'}
+                </Label>
+                {formData.visitToType === 'setor' ? (
                   <Select
-                    value={formData.department}
-                    onValueChange={(value) => setFormData({ ...formData, department: value })}
+                    value={formData.visitToName}
+                    onValueChange={(value) => setFormData({ ...formData, visitToName: value })}
                     required
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione o departamento" />
                     </SelectTrigger>
                     <SelectContent>
-                      {DEPARTMENTS.map((dept) => (
+                      {departments.map((dept) => (
                         <SelectItem key={dept.id} value={dept.name}>
                           {dept.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="hostEmployee">Funcionário Responsável *</Label>
+                ) : (
                   <Input
-                    id="hostEmployee"
+                    id="visitToName"
                     placeholder="Nome do funcionário"
-                    value={formData.hostEmployee}
-                    onChange={(e) => setFormData({ ...formData, hostEmployee: e.target.value })}
+                    value={formData.visitToName}
+                    onChange={(e) => setFormData({ ...formData, visitToName: e.target.value })}
                     required
+                  />
+                )}
+              </div>
+
+              {/* Gate Observation */}
+              <div className="space-y-2">
+                <Label htmlFor="gateObs">Observações para Guarita</Label>
+                <div className="relative">
+                  <FileText className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Textarea
+                    id="gateObs"
+                    placeholder="Observações que a guarita deve ver ao escanear..."
+                    value={formData.gateObs}
+                    onChange={(e) => setFormData({ ...formData, gateObs: e.target.value })}
+                    className="pl-10 min-h-[80px]"
                   />
                 </div>
               </div>
@@ -230,8 +270,8 @@ const RegisterVisitor = () => {
                   <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
                     <DatePicker
-                      selected={validTill}
-                      onChange={(date) => date && setValidTill(date)}
+                      selected={validUntil}
+                      onChange={(date) => date && setValidUntil(date)}
                       showTimeSelect
                       timeFormat="HH:mm"
                       timeIntervals={15}
@@ -243,29 +283,13 @@ const RegisterVisitor = () => {
                 </div>
               </div>
 
-              {/* Purpose */}
-              <div className="space-y-2">
-                <Label htmlFor="purpose">Motivo da Visita *</Label>
-                <div className="relative">
-                  <FileText className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Textarea
-                    id="purpose"
-                    placeholder="Descreva o motivo da visita..."
-                    value={formData.purpose}
-                    onChange={(e) => setFormData({ ...formData, purpose: e.target.value })}
-                    className="pl-10 min-h-[100px]"
-                    required
-                  />
-                </div>
-              </div>
-
               {/* Submit */}
               <div className="flex gap-4 pt-4">
                 <Button type="button" variant="outline" onClick={() => navigate('/dashboard')} className="flex-1">
                   Cancelar
                 </Button>
-                <Button type="submit" className="flex-1" disabled={isSubmitting}>
-                  {isSubmitting ? 'Registrando...' : 'Registrar e Gerar Passe'}
+                <Button type="submit" className="flex-1" disabled={createVisitor.isPending}>
+                  {createVisitor.isPending ? 'Registrando...' : 'Registrar e Gerar Passe'}
                 </Button>
               </div>
             </form>

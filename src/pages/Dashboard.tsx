@@ -1,17 +1,19 @@
-import { useVisitors } from '@/context/VisitorContext';
+import { useVisitors } from '@/hooks/useVisitors';
+import { useAccessLogs } from '@/hooks/useAccessLogs';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, UserCheck, UserX, Clock, TrendingUp, CalendarDays } from 'lucide-react';
+import { Users, UserCheck, UserX, Clock, TrendingUp, CalendarDays, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 const Dashboard = () => {
-  const { visitors } = useVisitors();
+  const { data: visitors = [], isLoading } = useVisitors();
+  const { data: logs = [] } = useAccessLogs(10);
 
   const stats = {
     total: visitors.length,
     inside: visitors.filter((v) => v.status === 'inside').length,
-    outside: visitors.filter((v) => v.status === 'outside').length,
+    outside: visitors.filter((v) => v.status === 'outside' || v.status === 'closed').length,
     pending: visitors.filter((v) => v.status === 'pending').length,
   };
 
@@ -20,6 +22,16 @@ const Dashboard = () => {
     .slice(0, 5);
 
   const insideVisitors = visitors.filter((v) => v.status === 'inside');
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -66,7 +78,7 @@ const Dashboard = () => {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Saídas Hoje</p>
+                  <p className="text-sm font-medium text-muted-foreground">Saídas/Encerrados</p>
                   <p className="text-3xl font-bold text-foreground">{stats.outside}</p>
                 </div>
                 <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
@@ -110,20 +122,17 @@ const Dashboard = () => {
                     <div key={visitor.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <span className="text-sm font-medium text-primary">{visitor.name.charAt(0)}</span>
+                          <span className="text-sm font-medium text-primary">{visitor.fullName.charAt(0)}</span>
                         </div>
                         <div>
-                          <p className="font-medium text-sm">{visitor.name}</p>
-                          <p className="text-xs text-muted-foreground">{visitor.department}</p>
+                          <p className="font-medium text-sm">{visitor.fullName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {visitor.visitToType === 'setor' ? '📍' : '👤'} {visitor.visitToName}
+                          </p>
                         </div>
                       </div>
                       <div className="text-right">
                         <span className="status-badge-inside">Dentro</span>
-                        {visitor.checkInTime && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Entrada: {format(new Date(visitor.checkInTime), 'HH:mm')}
-                          </p>
-                        )}
                       </div>
                     </div>
                   ))}
@@ -149,11 +158,11 @@ const Dashboard = () => {
                     <div key={visitor.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
-                          <span className="text-sm font-medium">{visitor.name.charAt(0)}</span>
+                          <span className="text-sm font-medium">{visitor.fullName.charAt(0)}</span>
                         </div>
                         <div>
-                          <p className="font-medium text-sm">{visitor.name}</p>
-                          <p className="text-xs text-muted-foreground">{visitor.company}</p>
+                          <p className="font-medium text-sm">{visitor.fullName}</p>
+                          <p className="text-xs text-muted-foreground">{visitor.company || 'Sem empresa'}</p>
                         </div>
                       </div>
                       <div className="text-right">
@@ -163,7 +172,7 @@ const Dashboard = () => {
                               ? 'status-badge-inside'
                               : visitor.status === 'outside'
                               ? 'status-badge-outside'
-                              : visitor.status === 'expired'
+                              : visitor.status === 'closed'
                               ? 'status-badge-expired'
                               : 'status-badge-outside'
                           }
@@ -174,7 +183,7 @@ const Dashboard = () => {
                             ? 'Fora'
                             : visitor.status === 'pending'
                             ? 'Pendente'
-                            : 'Expirado'}
+                            : 'Encerrado'}
                         </span>
                         <p className="text-xs text-muted-foreground mt-1">
                           {format(new Date(visitor.createdAt), 'dd/MM HH:mm')}

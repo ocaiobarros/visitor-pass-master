@@ -44,6 +44,39 @@ export type Database = {
         }
         Relationships: []
       }
+      audit_logs: {
+        Row: {
+          action_type: Database["public"]["Enums"]["audit_action_type"]
+          created_at: string
+          details: Json | null
+          id: string
+          ip_address: string | null
+          user_agent: string | null
+          user_email: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action_type: Database["public"]["Enums"]["audit_action_type"]
+          created_at?: string
+          details?: Json | null
+          id?: string
+          ip_address?: string | null
+          user_agent?: string | null
+          user_email?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action_type?: Database["public"]["Enums"]["audit_action_type"]
+          created_at?: string
+          details?: Json | null
+          id?: string
+          ip_address?: string | null
+          user_agent?: string | null
+          user_email?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       departments: {
         Row: {
           created_at: string
@@ -126,6 +159,7 @@ export type Database = {
           created_at: string
           full_name: string
           id: string
+          is_active: boolean
           must_change_password: boolean
           updated_at: string
           user_id: string
@@ -134,6 +168,7 @@ export type Database = {
           created_at?: string
           full_name: string
           id?: string
+          is_active?: boolean
           must_change_password?: boolean
           updated_at?: string
           user_id: string
@@ -142,6 +177,7 @@ export type Database = {
           created_at?: string
           full_name?: string
           id?: string
+          is_active?: boolean
           must_change_password?: boolean
           updated_at?: string
           user_id?: string
@@ -240,6 +276,29 @@ export type Database = {
     Enums: {
       access_direction: "in" | "out"
       app_role: "admin" | "rh" | "security"
+      audit_action_type:
+        | "LOGIN"
+        | "LOGOUT"
+        | "LOGIN_FAILED"
+        | "USER_CREATE"
+        | "USER_UPDATE"
+        | "USER_DELETE"
+        | "USER_DEACTIVATE"
+        | "USER_ACTIVATE"
+        | "PASSWORD_RESET"
+        | "PASSWORD_CHANGE"
+        | "ROLE_UPDATE"
+        | "CONFIG_UPDATE"
+        | "VISITOR_CREATE"
+        | "VISITOR_UPDATE"
+        | "VISITOR_DELETE"
+        | "EMPLOYEE_CREATE"
+        | "EMPLOYEE_UPDATE"
+        | "EMPLOYEE_DELETE"
+        | "DEPARTMENT_CREATE"
+        | "DEPARTMENT_DELETE"
+        | "BACKUP_EXPORT"
+        | "ACCESS_SCAN"
       credential_status: "allowed" | "blocked"
       credential_type: "personal" | "vehicle"
       subject_type: "visitor" | "employee"
@@ -374,6 +433,30 @@ export const Constants = {
     Enums: {
       access_direction: ["in", "out"],
       app_role: ["admin", "rh", "security"],
+      audit_action_type: [
+        "LOGIN",
+        "LOGOUT",
+        "LOGIN_FAILED",
+        "USER_CREATE",
+        "USER_UPDATE",
+        "USER_DELETE",
+        "USER_DEACTIVATE",
+        "USER_ACTIVATE",
+        "PASSWORD_RESET",
+        "PASSWORD_CHANGE",
+        "ROLE_UPDATE",
+        "CONFIG_UPDATE",
+        "VISITOR_CREATE",
+        "VISITOR_UPDATE",
+        "VISITOR_DELETE",
+        "EMPLOYEE_CREATE",
+        "EMPLOYEE_UPDATE",
+        "EMPLOYEE_DELETE",
+        "DEPARTMENT_CREATE",
+        "DEPARTMENT_DELETE",
+        "BACKUP_EXPORT",
+        "ACCESS_SCAN",
+      ],
       credential_status: ["allowed", "blocked"],
       credential_type: ["personal", "vehicle"],
       subject_type: ["visitor", "employee"],

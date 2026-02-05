@@ -98,7 +98,10 @@ echo "→ Aplicando schema principal..."
 # O schema.sql é montado via volume e executado automaticamente pelo PostgreSQL
 
 echo "→ Criando usuário administrador inicial..."
-psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$DB_NAME" <<-EOSQL
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$DB_NAME" \
+    -v admin_email="$ADMIN_EMAIL" \
+    -v admin_password="$ADMIN_PASSWORD" \
+    -v admin_name="$ADMIN_NAME" <<-'EOSQL'
     -- Inserir usuário admin no auth.users
     INSERT INTO auth.users (
         id,
@@ -111,26 +114,28 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$DB_NAME" <<-EOSQL
         updated_at
     ) VALUES (
         uuid_generate_v4(),
-        '${ADMIN_EMAIL}',
-        crypt('${ADMIN_PASSWORD}', gen_salt('bf')),
+        :'admin_email',
+        crypt(:'admin_password', gen_salt('bf')),
         now(),
-        jsonb_build_object('full_name', '${ADMIN_NAME}'),
+        jsonb_build_object('full_name', :'admin_name'),
         'authenticated',
         now(),
         now()
     ) ON CONFLICT (email) DO NOTHING;
     
-    -- Buscar o ID do admin criado
-    DO \$\$
+    -- Buscar o ID do admin criado e criar perfil/role
+    DO $$
     DECLARE
         admin_id UUID;
+        v_admin_email TEXT := current_setting('psql.admin_email', true);
+        v_admin_name TEXT := current_setting('psql.admin_name', true);
     BEGIN
-        SELECT id INTO admin_id FROM auth.users WHERE email = '${ADMIN_EMAIL}';
+        SELECT id INTO admin_id FROM auth.users WHERE email = v_admin_email;
         
         IF admin_id IS NOT NULL THEN
             -- Criar perfil
             INSERT INTO public.profiles (user_id, full_name, must_change_password)
-            VALUES (admin_id, '${ADMIN_NAME}', true)
+            VALUES (admin_id, v_admin_name, true)
             ON CONFLICT (user_id) DO NOTHING;
             
             -- Atribuir role admin
@@ -141,7 +146,7 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$DB_NAME" <<-EOSQL
             RAISE NOTICE 'Usuário administrador criado com sucesso!';
         END IF;
     END
-    \$\$;
+    $$;
 EOSQL
 
 echo "============================================"

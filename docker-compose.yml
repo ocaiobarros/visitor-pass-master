@@ -1,0 +1,168 @@
+# ============================================
+# Guarda Operacional - Docker Compose
+# Deploy self-hosted completo
+# ============================================
+# 
+# USO:
+#   1. Copie .env.example para .env
+#   2. Configure as variáveis no .env
+#   3. Execute: docker-compose up -d --build
+#
+# ARQUITETURA:
+#   - PostgreSQL: Banco de dados
+#   - PostgREST: API REST automática
+#   - GoTrue: Autenticação (Supabase Auth)
+#   - App: Frontend React/Vite
+#
+# ============================================
+
+services:
+  # ==========================================
+  # Banco de Dados PostgreSQL
+  # ==========================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: guarda-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD no .env}
+      POSTGRES_DB: ${DB_NAME:-guarda_operacional}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+      - ./docs/schema-postgresql-local.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-guarda_operacional}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - guarda-network
+
+  # ==========================================
+  # PostgREST - API REST automática
+  # ==========================================
+  postgrest:
+    image: postgrest/postgrest:v12.0.2
+    container_name: guarda-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://${DB_USER:-postgres}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-guarda_operacional}
+      PGRST_DB_SCHEMA: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET no .env}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+    ports:
+      - "${API_PORT:-3000}:3000"
+    networks:
+      - guarda-network
+
+  # ==========================================
+  # GoTrue - Autenticação (Supabase Auth)
+  # ==========================================
+  auth:
+    image: supabase/gotrue:v2.132.3
+    container_name: guarda-auth
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: ${SITE_URL:-http://localhost}
+      
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-guarda_operacional}?search_path=auth
+      
+      GOTRUE_SITE_URL: ${SITE_URL:-http://localhost}
+      GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS:-}
+      GOTRUE_DISABLE_SIGNUP: ${DISABLE_SIGNUP:-false}
+      
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: ${JWT_EXPIRY:-3600}
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: ${ENABLE_EMAIL_SIGNUP:-true}
+      GOTRUE_MAILER_AUTOCONFIRM: ${ENABLE_EMAIL_AUTOCONFIRM:-true}
+      
+      GOTRUE_SMTP_HOST: ${SMTP_HOST:-}
+      GOTRUE_SMTP_PORT: ${SMTP_PORT:-587}
+      GOTRUE_SMTP_USER: ${SMTP_USER:-}
+      GOTRUE_SMTP_PASS: ${SMTP_PASS:-}
+      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL:-admin@localhost}
+      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
+    ports:
+      - "${AUTH_PORT:-9999}:9999"
+    networks:
+      - guarda-network
+
+  # ==========================================
+  # Kong - API Gateway (opcional)
+  # ==========================================
+  kong:
+    image: kong:3.4
+    container_name: guarda-gateway
+    restart: unless-stopped
+    depends_on:
+      - postgrest
+      - auth
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
+    volumes:
+      - ./docker/kong.yml:/kong/kong.yml:ro
+    ports:
+      - "${KONG_HTTP_PORT:-8000}:8000"
+      - "${KONG_HTTPS_PORT:-8443}:8443"
+    networks:
+      - guarda-network
+
+  # ==========================================
+  # Frontend - Aplicação Web
+  # ==========================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_SUPABASE_URL: http://${HOST_IP:-localhost}:${KONG_HTTP_PORT:-8000}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${ANON_KEY}
+        VITE_SYSTEM_NAME: ${SYSTEM_NAME:-GUARDA OPERACIONAL}
+    container_name: guarda-app
+    restart: unless-stopped
+    depends_on:
+      - kong
+    ports:
+      - "${APP_PORT:-80}:80"
+    networks:
+      - guarda-network
+
+# ==========================================
+# Volumes persistentes
+# ==========================================
+volumes:
+  postgres_data:
+    driver: local
+
+# ==========================================
+# Rede interna
+# ==========================================
+networks:
+  guarda-network:
+    driver: bridge

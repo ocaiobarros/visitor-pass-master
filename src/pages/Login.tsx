@@ -5,10 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Shield, Lock, Mail } from 'lucide-react';
+import { Lock, Mail } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import ChangePasswordModal from '@/components/ChangePasswordModal';
 import { useProfile } from '@/hooks/useProfile';
+import BrandLogo from '@/components/BrandLogo';
+import { branding, getPageTitle } from '@/config/branding';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -21,6 +23,11 @@ const Login = () => {
 
   // Check if user needs to change password
   const { data: profile } = useProfile(supabaseUser?.id);
+
+  // Set page title
+  useEffect(() => {
+    document.title = getPageTitle('Login');
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated && profile) {
@@ -41,7 +48,7 @@ const Login = () => {
     if (result.success) {
       toast({
         title: 'Login realizado com sucesso!',
-        description: 'Bem-vindo ao GUARDA OPERACIONAL.',
+        description: `Bem-vindo ao ${branding.name}.`,
       });
       // Navigation will be handled by useEffect after profile loads
     } else {
@@ -64,12 +71,14 @@ const Login = () => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-background p-4">
       <div className="w-full max-w-md space-y-8">
         {/* Logo & Header */}
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-primary mb-6">
-            <Shield className="w-10 h-10 text-primary-foreground" />
-          </div>
-          <h1 className="text-3xl font-bold text-foreground">GUARDA OPERACIONAL</h1>
-          <p className="text-muted-foreground mt-2">Sistema de Controle de Acesso</p>
+        <div className="text-center flex flex-col items-center">
+          <BrandLogo 
+            size="lg" 
+            showName={false}
+            iconClassName="rounded-2xl mb-6"
+          />
+          <h1 className="text-3xl font-bold text-foreground">{branding.name}</h1>
+          <p className="text-muted-foreground mt-2">{branding.tagline}</p>
         </div>
 
         {/* Login Card */}

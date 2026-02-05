@@ -2,6 +2,7 @@
 -- GUARDA OPERACIONAL - Schema SQL para PostgreSQL 15/16 Local
 -- Gerado em: 2026-02-05
 -- Compatível com: PostgreSQL 15/16 padrão (sem extensões Supabase)
+-- NOTA: Não depende de auth.* - usa funções locais para JWT claims
 -- ============================================================
 
 -- ============================================================
@@ -145,7 +146,7 @@ CREATE INDEX idx_audit_logs_user_id ON public.audit_logs(user_id);
 CREATE INDEX idx_audit_logs_action_type ON public.audit_logs(action_type);
 
 -- ============================================================
--- PARTE 3: FUNÇÕES (PLpgSQL padrão)
+-- PARTE 3: FUNÇÕES UTILITÁRIAS
 -- ============================================================
 
 -- Função para atualizar updated_at automaticamente
@@ -185,8 +186,29 @@ END;
 $$;
 
 -- ============================================================
--- FUNÇÕES DE AUTORIZAÇÃO (para PostgREST + GoTrue)
+-- PARTE 4: FUNÇÕES DE AUTORIZAÇÃO (independentes de auth.*)
 -- ============================================================
+-- Essas funções leem JWT claims do PostgREST/GoTrue sem depender
+-- do schema auth existir no momento do init do Postgres.
+-- ============================================================
+
+-- Obtém o user_id do JWT (equivalente a auth.uid())
+CREATE OR REPLACE FUNCTION public.current_user_id()
+RETURNS uuid
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid;
+$$;
+
+-- Obtém a role do JWT (equivalente a auth.role())
+CREATE OR REPLACE FUNCTION public.current_user_role()
+RETURNS text
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT NULLIF(current_setting('request.jwt.claim.role', true), '');
+$$;
 
 -- Função para verificar se usuário tem role
 CREATE OR REPLACE FUNCTION public.has_role(check_role app_role)
@@ -198,7 +220,7 @@ AS $$
 BEGIN
   RETURN EXISTS (
     SELECT 1 FROM public.user_roles
-    WHERE user_id = auth.uid()
+    WHERE user_id = public.current_user_id()
       AND role = check_role
   );
 END;
@@ -214,41 +236,14 @@ AS $$
 BEGIN
   RETURN EXISTS (
     SELECT 1 FROM public.user_roles
-    WHERE user_id = auth.uid()
+    WHERE user_id = public.current_user_id()
       AND role IN ('admin', 'rh')
   );
 END;
 $$;
 
--- Função para lidar com novo usuário (GoTrue)
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-BEGIN
-  -- Criar perfil
-  INSERT INTO public.profiles (user_id, full_name, must_change_password)
-  VALUES (
-    NEW.id,
-    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
-    CASE WHEN NEW.email = 'admin@sistema.local' THEN true ELSE false END
-  );
-
-  -- Atribuir role baseado no email
-  IF NEW.email = 'admin@sistema.local' THEN
-    INSERT INTO public.user_roles (user_id, role) VALUES (NEW.id, 'admin');
-  ELSE
-    INSERT INTO public.user_roles (user_id, role) VALUES (NEW.id, 'security');
-  END IF;
-
-  RETURN NEW;
-END;
-$$;
-
 -- ============================================================
--- PARTE 4: TRIGGERS
+-- PARTE 5: TRIGGERS
 -- ============================================================
 
 -- Trigger para updated_at em visitors
@@ -284,7 +279,7 @@ CREATE TRIGGER generate_credential_id_trigger
   EXECUTE FUNCTION public.generate_credential_id();
 
 -- ============================================================
--- PARTE 5: DADOS INICIAIS
+-- PARTE 6: DADOS INICIAIS
 -- ============================================================
 
 -- Departamentos padrão
@@ -301,12 +296,10 @@ INSERT INTO public.departments (name) VALUES
   ('Segurança');
 
 -- ============================================================
--- PARTE 6: ROW LEVEL SECURITY (RLS)
+-- PARTE 7: ROW LEVEL SECURITY (RLS)
 -- ============================================================
--- NOTA: RLS no PostgreSQL local funciona da mesma forma,
--- mas você precisará configurar roles de usuário do banco.
--- As políticas abaixo usam as funções has_role() e is_admin_or_rh()
--- que você precisará adaptar conforme sua autenticação.
+-- Usa public.current_user_id() ao invés de auth.uid()
+-- para não depender do schema auth existir no init.
 -- ============================================================
 
 -- Habilitar RLS em todas as tabelas
@@ -333,7 +326,7 @@ CREATE POLICY "Profiles visíveis para autenticados"
 
 CREATE POLICY "Usuários editam próprio perfil"
   ON public.profiles FOR UPDATE
-  USING (user_id = auth.uid());
+  USING (user_id = public.current_user_id());
 
 -- Políticas para user_roles
 CREATE POLICY "Roles visíveis para autenticados"
@@ -385,7 +378,7 @@ CREATE POLICY "Logs visíveis para autenticados"
 
 CREATE POLICY "Autenticados criam logs"
   ON public.access_logs FOR INSERT
-  WITH CHECK (auth.uid() IS NOT NULL);
+  WITH CHECK (public.current_user_id() IS NOT NULL);
 
 -- ============================================================
 -- FIM DO SCRIPT

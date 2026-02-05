@@ -1,0 +1,107 @@
+# ============================================
+# Guarda Operacional - Kong API Gateway Config
+# ============================================
+# Roteamento de requisições para os serviços internos
+# ============================================
+
+_format_version: "3.0"
+_transform: true
+
+# ==========================================
+# Serviços
+# ==========================================
+services:
+  # API REST (PostgREST)
+  - name: rest
+    url: http://postgrest:3000
+    routes:
+      - name: rest-all
+        strip_path: true
+        paths:
+          - /rest/v1/
+        plugins:
+          - name: cors
+            config:
+              origins:
+                - "*"
+              methods:
+                - GET
+                - POST
+                - PUT
+                - PATCH
+                - DELETE
+                - OPTIONS
+              headers:
+                - Accept
+                - Accept-Version
+                - Authorization
+                - Content-Length
+                - Content-Type
+                - Date
+                - X-Client-Info
+                - apikey
+                - Prefer
+              exposed_headers:
+                - Content-Range
+              credentials: true
+              max_age: 3600
+
+  # Autenticação (GoTrue)
+  - name: auth
+    url: http://auth:9999
+    routes:
+      - name: auth-all
+        strip_path: true
+        paths:
+          - /auth/v1/
+        plugins:
+          - name: cors
+            config:
+              origins:
+                - "*"
+              methods:
+                - GET
+                - POST
+                - PUT
+                - PATCH
+                - DELETE
+                - OPTIONS
+              headers:
+                - Accept
+                - Authorization
+                - Content-Type
+                - X-Client-Info
+                - apikey
+              credentials: true
+              max_age: 3600
+
+# ==========================================
+# Consumidores e Autenticação
+# ==========================================
+consumers:
+  - username: anon
+    keyauth_credentials:
+      - key: ${ANON_KEY}
+  
+  - username: service_role
+    keyauth_credentials:
+      - key: ${SERVICE_ROLE_KEY}
+
+# ==========================================
+# Plugins Globais
+# ==========================================
+plugins:
+  - name: key-auth
+    config:
+      key_names:
+        - apikey
+      key_in_header: true
+      key_in_query: true
+      key_in_body: false
+      hide_credentials: false
+  
+  - name: request-transformer
+    config:
+      add:
+        headers:
+          - "X-Request-Id:$(uuid)"

@@ -311,3 +311,117 @@ docker compose up -d --build
 ```
 
 **Superfície de ataque mínima:** apenas nginx responde à internet.
+
+---
+
+## 🔍 VALIDAÇÃO: Provando que está Fechado
+
+> Hardening sem evidência é marketing. Execute o script e cole a saída.
+
+### Script de Validação Automática
+
+```bash
+chmod +x validate-security.sh
+./validate-security.sh
+./validate-security.sh --full  # inclui teste de restore
+```
+
+### Comandos Manuais de Evidência
+
+```bash
+# 1. Superfície de rede (deve mostrar APENAS 22, 80, 443)
+ss -tulpn | grep LISTEN
+
+# 2. Containers sem portas expostas
+docker ps --format 'table {{.Names}}\t{{.Ports}}'
+docker inspect $(docker ps -q) --format '{{.Name}} -> {{json .HostConfig.PortBindings}}'
+
+# 3. Headers de segurança
+curl -I http://localhost
+
+# 4. Rate limiting (deve retornar 429 após ~10 requests)
+for i in {1..15}; do curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/auth/v1/token; done
+
+# 5. Firewall
+ufw status verbose
+
+# 6. Permissões .env
+ls -la .env
+
+# 7. Backups existentes
+ls -lh /var/backups/guarda-operacional/
+
+# 8. Teste de restore
+gunzip -c /var/backups/guarda-operacional/ULTIMO_BACKUP.sql.gz | \
+  docker run --rm -i -e POSTGRES_PASSWORD=test postgres:15-alpine psql -U postgres
+```
+
+### Saída Esperada (Exemplo de Conformidade)
+
+```
+============================================
+ GUARDA OPERACIONAL - VALIDAÇÃO DE SEGURANÇA
+============================================
+
+[PASS] Porta 5432 não exposta
+[PASS] Porta 3000 não exposta
+[PASS] Porta 9999 não exposta
+[PASS] Porta 8000 não exposta
+[PASS] Porta 80 está ativa (esperado)
+[PASS] guarda-db: sem portas publicadas
+[PASS] guarda-api: sem portas publicadas
+[PASS] guarda-auth: sem portas publicadas
+[PASS] Header X-Frame-Options presente
+[PASS] Header X-Content-Type-Options presente
+[PASS] Header X-XSS-Protection presente
+[PASS] Header Referrer-Policy presente
+[PASS] Rate limiting funcionando (recebeu 429)
+[PASS] .env tem permissão 600
+[PASS] Nenhum :latest no docker-compose.yml
+[PASS] Backup recente (< 2 dias)
+[PASS] Restore executado com sucesso!
+
+RELATÓRIO FINAL
+PASS: 17
+FAIL: 0
+WARN: 2
+
+✅ Hardening validado - nenhuma falha crítica
+```
+
+### Documentar Evidência
+
+Após validação, salve a saída:
+
+```bash
+./validate-security.sh > /var/log/guarda-security-validation-$(date +%Y%m%d).log
+```
+
+---
+
+## 📁 Arquivos de Configuração
+
+| Arquivo | Descrição |
+|---------|-----------|
+| `docker-compose.yml` | Orquestração com hardening |
+| `docker/nginx.conf` | Headers + rate limit + CSP |
+| `docker/kong.yml` | Rate limiting por rota |
+| `docker/daemon.json.example` | Limite de logs Docker |
+| `validate-security.sh` | Script de validação |
+| `backup.sh` | Backup automático |
+
+---
+
+## ✅ Linha de Chegada
+
+Você pode dizer "hardening aplicado" quando:
+
+1. ✅ `ss -tulpn` mostra **apenas** 22/80/443
+2. ✅ `docker ps` mostra containers **sem portas públicas** (exceto app:80)
+3. ✅ `curl -I` retorna **todos os headers de segurança**
+4. ✅ Rate limit retorna **429** após limite
+5. ✅ `.env` tem permissão **600**
+6. ✅ Backup de **< 48h** existe
+7. ✅ Restore **testado e documentado**
+
+Sem essas 7 evidências, é **teatro de segurança**.

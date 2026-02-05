@@ -20,12 +20,13 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Settings as SettingsIcon, Users, Activity, Shield, Plus, Trash2, Building2, UserPlus, Mail, Lock } from 'lucide-react';
+import { Settings as SettingsIcon, Users, Activity, Shield, Plus, Trash2, Building2, UserPlus, Mail, Lock, HardDrive } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { AppRole } from '@/types/visitor';
 import { Navigate } from 'react-router-dom';
 import { useDepartments } from '@/hooks/useDepartments';
+import BackupRestoreTab from '@/components/settings/BackupRestoreTab';
 
 const Settings = () => {
   const { user, hasRole } = useAuth();
@@ -251,6 +252,10 @@ const Settings = () => {
             <TabsTrigger value="logs" className="gap-2">
               <Activity className="w-4 h-4" />
               Logs de Acesso
+            </TabsTrigger>
+            <TabsTrigger value="backup" className="gap-2">
+              <HardDrive className="w-4 h-4" />
+              Backup
             </TabsTrigger>
           </TabsList>
 
@@ -497,6 +502,11 @@ const Settings = () => {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Backup Tab */}
+          <TabsContent value="backup">
+            <BackupRestoreTab />
           </TabsContent>
         </Tabs>
       </div>

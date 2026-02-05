@@ -249,7 +249,8 @@ Pressione `Ctrl + C` para sair dos logs.
 
 ```bash
 sudo ufw allow 80/tcp
-sudo ufw allow 8000/tcp
+sudo ufw allow 22/tcp  # SSH
+# NÃO exponha 8000 - Kong é interno ao Docker
 ```
 
 ### 6.2 Acessar pelo Navegador
@@ -425,14 +426,15 @@ docker compose logs -f guarda-app
 docker compose logs -f guarda-db
 ```
 
-### Fazer Backup do Banco de Dados
+### Fazer Backup do Banco de Dados (Manual)
 ```bash
-docker compose exec guarda-db pg_dump -U postgres guarda_operacional > backup_$(date +%Y%m%d).sql
+mkdir -p ~/backups
+docker compose exec guarda-db pg_dump -U postgres guarda_operacional > ~/backups/backup_$(date +%Y%m%d_%H%M%S).sql
 ```
 
 ### Restaurar Backup
 ```bash
-docker compose exec -T guarda-db psql -U postgres guarda_operacional < backup_20240115.sql
+docker compose exec -T guarda-db psql -U postgres guarda_operacional < ~/backups/backup_20240115.sql
 ```
 
 ### Atualizar para Nova Versão
@@ -441,6 +443,164 @@ cd ~/visitor-pass-master
 git pull
 docker compose up -d --build
 ```
+
+---
+
+## 🔄 PARTE 9: Backup Automático (Recomendado)
+
+Configure backup automático diário para não perder dados.
+
+### 9.1 Criar Diretório de Backups
+
+```bash
+sudo mkdir -p /var/backups/guarda-operacional
+sudo chown $USER:$USER /var/backups/guarda-operacional
+```
+
+### 9.2 Criar Script de Backup
+
+```bash
+nano ~/visitor-pass-master/backup.sh
+```
+
+Cole o seguinte conteúdo:
+
+```bash
+#!/bin/bash
+# ============================================
+# Guarda Operacional - Backup Automático
+# ============================================
+
+BACKUP_DIR="/var/backups/guarda-operacional"
+PROJECT_DIR="$HOME/visitor-pass-master"
+DATE=$(date +%Y%m%d_%H%M%S)
+RETENTION_DAYS=30
+
+# Criar backup
+cd $PROJECT_DIR
+docker compose exec -T guarda-db pg_dump -U postgres guarda_operacional > "$BACKUP_DIR/backup_$DATE.sql"
+
+# Comprimir
+gzip "$BACKUP_DIR/backup_$DATE.sql"
+
+# Remover backups antigos (manter últimos 30 dias)
+find $BACKUP_DIR -name "backup_*.sql.gz" -mtime +$RETENTION_DAYS -delete
+
+echo "Backup concluído: backup_$DATE.sql.gz"
+```
+
+### 9.3 Tornar Executável
+
+```bash
+chmod +x ~/visitor-pass-master/backup.sh
+```
+
+### 9.4 Agendar Backup Diário (2h da manhã)
+
+```bash
+crontab -e
+```
+
+Adicione a linha no final:
+
+```
+0 2 * * * /home/SEU_USUARIO/visitor-pass-master/backup.sh >> /var/log/guarda-backup.log 2>&1
+```
+
+> ⚠️ Substitua `SEU_USUARIO` pelo seu nome de usuário real.
+
+### 9.5 Testar Backup
+
+```bash
+~/visitor-pass-master/backup.sh
+ls -la /var/backups/guarda-operacional/
+```
+
+---
+
+## 🔒 PARTE 10: Hardening de Segurança (Produção)
+
+### 10.1 Firewall Correto
+
+**IMPORTANTE:** Não exponha portas internas desnecessariamente.
+
+```bash
+# Permitir apenas HTTP/HTTPS
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw allow 22/tcp  # SSH
+
+# BLOQUEAR portas internas (Kong, PostgREST, Auth, DB)
+sudo ufw deny 8000/tcp
+sudo ufw deny 3000/tcp
+sudo ufw deny 9999/tcp
+sudo ufw deny 5432/tcp
+
+# Ativar firewall
+sudo ufw enable
+sudo ufw status
+```
+
+### 10.2 Senha do Banco Ultra-Forte
+
+Gere uma senha aleatória de 32 caracteres:
+
+```bash
+DB_PASSWORD=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 32)
+echo "Sua senha do banco: $DB_PASSWORD"
+```
+
+Atualize no `.env`:
+
+```bash
+nano .env
+# Cole a senha gerada em DB_PASSWORD=
+```
+
+### 10.3 Limitar Acesso ao Docker
+
+```bash
+# Garantir que apenas root e grupo docker acessem
+sudo chmod 660 /var/run/docker.sock
+```
+
+### 10.4 Logs de Auditoria
+
+O sistema já possui tabela `audit_logs` que registra:
+- ✅ Logins/Logouts
+- ✅ Criação de visitantes
+- ✅ Alterações de usuários
+- ✅ Scans de acesso
+
+Acesse em: **Configurações → Logs de Auditoria**
+
+---
+
+## 🌐 PARTE 11: HTTPS com Let's Encrypt (Domínio Público)
+
+Se você tem um domínio público apontando para o servidor:
+
+### 11.1 Instalar Certbot
+
+```bash
+sudo apt install certbot python3-certbot-nginx -y
+```
+
+### 11.2 Gerar Certificado
+
+```bash
+sudo certbot --nginx -d seu-dominio.com.br
+```
+
+### 11.3 Renovação Automática
+
+O Certbot já configura renovação automática. Teste com:
+
+```bash
+sudo certbot renew --dry-run
+```
+
+> 💡 Para rede interna sem domínio, use mkcert conforme PARTE 8.
 
 ---
 

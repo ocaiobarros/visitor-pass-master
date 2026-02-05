@@ -1,7 +1,7 @@
 # ============================================
 # Guarda Operacional - Kong API Gateway Config
 # ============================================
-# Roteamento de requisições para os serviços internos
+# Roteamento + Rate Limiting + CORS
 # ============================================
 
 _format_version: "3.0"
@@ -45,6 +45,13 @@ services:
                 - Content-Range
               credentials: true
               max_age: 3600
+          # Rate limit para API (60 req/min por IP)
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+              fault_tolerant: true
+              hide_client_headers: false
 
   # Autenticação (GoTrue)
   - name: auth
@@ -74,6 +81,13 @@ services:
                 - apikey
               credentials: true
               max_age: 3600
+          # Rate limit estrito para auth (10 req/min - anti brute-force)
+          - name: rate-limiting
+            config:
+              minute: 10
+              policy: local
+              fault_tolerant: true
+              hide_client_headers: false
 
 # ==========================================
 # Consumidores e Autenticação
@@ -105,3 +119,11 @@ plugins:
       add:
         headers:
           - "X-Request-Id:$(uuid)"
+  
+  # Rate limit global (100 req/min como fallback)
+  - name: rate-limiting
+    config:
+      minute: 100
+      policy: local
+      fault_tolerant: true
+      hide_client_headers: false

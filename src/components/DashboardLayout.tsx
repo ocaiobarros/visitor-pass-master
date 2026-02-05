@@ -78,11 +78,13 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         <div className="p-4 border-t border-sidebar-border">
           <div className="flex items-center gap-3 px-4 py-3">
             <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center">
-              <span className="text-sm font-medium">{user?.name?.charAt(0) || 'U'}</span>
+              <span className="text-sm font-medium">{user?.fullName?.charAt(0) || 'U'}</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{user?.name || 'Usuário'}</p>
-              <p className="text-xs text-sidebar-foreground/70 truncate">{user?.role || 'Segurança'}</p>
+              <p className="text-sm font-medium truncate">{user?.fullName || 'Usuário'}</p>
+              <p className="text-xs text-sidebar-foreground/70 truncate capitalize">
+                {user?.roles?.[0] || 'Segurança'}
+              </p>
             </div>
             <Button variant="ghost" size="icon" onClick={handleLogout} className="text-sidebar-foreground/70 hover:text-sidebar-foreground">
               <LogOut className="w-4 h-4" />

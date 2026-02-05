@@ -1,24 +1,24 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import DashboardLayout from '@/components/DashboardLayout';
-import { useVisitors } from '@/context/VisitorContext';
+import { useVisitors } from '@/hooks/useVisitors';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Users, Search, Eye, Printer, Filter } from 'lucide-react';
+import { Users, Search, Eye, Printer, Filter, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 
 const VisitorList = () => {
-  const { visitors } = useVisitors();
+  const { data: visitors = [], isLoading } = useVisitors();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const filteredVisitors = visitors.filter((visitor) => {
     const matchesSearch =
-      visitor.name.toLowerCase().includes(search.toLowerCase()) ||
-      visitor.company.toLowerCase().includes(search.toLowerCase()) ||
+      visitor.fullName.toLowerCase().includes(search.toLowerCase()) ||
+      (visitor.company?.toLowerCase().includes(search.toLowerCase()) || false) ||
       visitor.passId.toLowerCase().includes(search.toLowerCase());
 
     const matchesStatus = statusFilter === 'all' || visitor.status === statusFilter;
@@ -34,8 +34,8 @@ const VisitorList = () => {
         return <span className="status-badge-outside">Fora</span>;
       case 'pending':
         return <span className="px-3 py-1 rounded-full text-sm font-medium bg-warning/10 text-warning">Pendente</span>;
-      case 'expired':
-        return <span className="status-badge-expired">Expirado</span>;
+      case 'closed':
+        return <span className="status-badge-expired">Encerrado</span>;
       default:
         return null;
     }
@@ -82,7 +82,7 @@ const VisitorList = () => {
                     <SelectItem value="inside">Dentro</SelectItem>
                     <SelectItem value="outside">Fora</SelectItem>
                     <SelectItem value="pending">Pendente</SelectItem>
-                    <SelectItem value="expired">Expirado</SelectItem>
+                    <SelectItem value="closed">Encerrado</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -96,7 +96,11 @@ const VisitorList = () => {
             <CardTitle>Visitantes</CardTitle>
           </CardHeader>
           <CardContent>
-            {filteredVisitors.length === 0 ? (
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            ) : filteredVisitors.length === 0 ? (
               <p className="text-center text-muted-foreground py-12">Nenhum visitante encontrado</p>
             ) : (
               <div className="overflow-x-auto">
@@ -106,7 +110,7 @@ const VisitorList = () => {
                       <TableHead>ID Passe</TableHead>
                       <TableHead>Nome</TableHead>
                       <TableHead>Empresa</TableHead>
-                      <TableHead>Departamento</TableHead>
+                      <TableHead>Destino</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Validade</TableHead>
                       <TableHead className="text-right">Ações</TableHead>
@@ -116,14 +120,18 @@ const VisitorList = () => {
                     {filteredVisitors.map((visitor) => (
                       <TableRow key={visitor.id}>
                         <TableCell className="font-mono text-sm">{visitor.passId}</TableCell>
-                        <TableCell className="font-medium">{visitor.name}</TableCell>
-                        <TableCell>{visitor.company}</TableCell>
-                        <TableCell>{visitor.department}</TableCell>
+                        <TableCell className="font-medium">{visitor.fullName}</TableCell>
+                        <TableCell>{visitor.company || '-'}</TableCell>
+                        <TableCell>
+                          <span className="text-xs">
+                            {visitor.visitToType === 'setor' ? '📍' : '👤'} {visitor.visitToName}
+                          </span>
+                        </TableCell>
                         <TableCell>{getStatusBadge(visitor.status)}</TableCell>
                         <TableCell>
                           <div className="text-sm">
                             <p>{format(new Date(visitor.validFrom), 'dd/MM HH:mm')}</p>
-                            <p className="text-muted-foreground">até {format(new Date(visitor.validTill), 'dd/MM HH:mm')}</p>
+                            <p className="text-muted-foreground">até {format(new Date(visitor.validUntil), 'dd/MM HH:mm')}</p>
                           </div>
                         </TableCell>
                         <TableCell className="text-right">

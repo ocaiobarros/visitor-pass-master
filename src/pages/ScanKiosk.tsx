@@ -1,17 +1,22 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useVisitorByPassId, useUpdateVisitorStatus } from '@/hooks/useVisitors';
 import { useCredentialByQrId, useUpdateCredentialStatus } from '@/hooks/useEmployeeCredentials';
 import { useCreateAccessLog, useSubjectAccessLogs } from '@/hooks/useAccessLogs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { QrCode, UserCheck, UserX, AlertTriangle, CheckCircle, Ban, Car, User, Building2, Info, Camera, Clock, ArrowDownLeft, ArrowUpRight, Maximize, Minimize, LogOut } from 'lucide-react';
+import { useScanFeedback } from '@/hooks/useScanFeedback';
+import ScanFeedbackOverlay from '@/components/ScanFeedbackOverlay';
+import { 
+  QrCode, UserCheck, UserX, AlertTriangle, CheckCircle, Ban, 
+  Car, User, Building2, Info, Camera, Clock, ArrowDownLeft, 
+  ArrowUpRight, Maximize, Minimize, LogOut 
+} from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Visitor, EmployeeCredential, AccessLog } from '@/types/visitor';
 import CameraScannerModal from '@/components/CameraScannerModal';
 import { useNavigate } from 'react-router-dom';
-
 import BrandLogo from '@/components/BrandLogo';
 
 type ScanResult = {
@@ -21,6 +26,8 @@ type ScanResult = {
   type: 'employee';
   data: EmployeeCredential;
 } | null;
+
+type FeedbackStatus = 'success' | 'error' | 'blocked' | 'warning' | null;
 
 const AccessLogItem = ({ log }: { log: AccessLog }) => (
   <div className="flex items-center gap-3 py-2 px-3 bg-muted/50 rounded-lg text-sm">
@@ -45,26 +52,78 @@ const ScanKiosk = () => {
   const [scanError, setScanError] = useState<string | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [feedbackStatus, setFeedbackStatus] = useState<FeedbackStatus>(null);
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const focusIntervalRef = useRef<ReturnType<typeof setInterval>>();
   
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { playSuccess, playError, playBlocked, playWarning } = useScanFeedback();
   const updateVisitorStatus = useUpdateVisitorStatus();
   const updateCredentialStatus = useUpdateCredentialStatus();
   const createAccessLog = useCreateAccessLog();
 
   // Query for visitor
-  const { data: visitor, isLoading: isLoadingVisitor } = useVisitorByPassId(searchCode.startsWith('VP-') ? searchCode : '');
+  const { data: visitor, isLoading: isLoadingVisitor } = useVisitorByPassId(
+    searchCode.startsWith('VP-') ? searchCode : ''
+  );
   
   // Query for employee credential
-  const { data: credential, isLoading: isLoadingCredential } = useCredentialByQrId(searchCode.startsWith('EC-') ? searchCode : '');
+  const { data: credential, isLoading: isLoadingCredential } = useCredentialByQrId(
+    searchCode.startsWith('EC-') ? searchCode : ''
+  );
 
   // Query for access logs of current subject
   const { data: accessLogs = [] } = useSubjectAccessLogs(
     scanResult?.type === 'visitor' ? 'visitor' : 'employee',
     scanResult?.data.id || ''
   );
+
+  // Aggressive auto-focus for kiosk mode
+  const forceFocus = useCallback(() => {
+    if (!cameraOpen && !feedbackStatus && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [cameraOpen, feedbackStatus]);
+
+  // Initial focus + continuous focus guard
+  useEffect(() => {
+    forceFocus();
+    
+    // Check focus every 2 seconds (kiosk resilience)
+    focusIntervalRef.current = setInterval(forceFocus, 2000);
+    
+    return () => {
+      if (focusIntervalRef.current) {
+        clearInterval(focusIntervalRef.current);
+      }
+    };
+  }, [forceFocus]);
+
+  // Re-focus after feedback overlay closes
+  useEffect(() => {
+    if (!feedbackStatus) {
+      const timer = setTimeout(forceFocus, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [feedbackStatus, forceFocus]);
+
+  // Re-focus after scan result changes
+  useEffect(() => {
+    const timer = setTimeout(forceFocus, 100);
+    return () => clearTimeout(timer);
+  }, [scanResult, scanError, forceFocus]);
+
+  // Prevent blur on input (kiosk mode)
+  const handleBlur = useCallback((e: React.FocusEvent) => {
+    // Immediately refocus unless camera is open
+    if (!cameraOpen && !feedbackStatus) {
+      setTimeout(forceFocus, 50);
+    }
+  }, [cameraOpen, feedbackStatus, forceFocus]);
 
   // Toggle fullscreen
   const toggleFullscreen = async () => {
@@ -86,18 +145,32 @@ const ScanKiosk = () => {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  // Auto-focus on mount and after actions
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+  // Show feedback overlay
+  const showFeedback = useCallback((status: FeedbackStatus, message: string = '') => {
+    setFeedbackStatus(status);
+    setFeedbackMessage(message);
+    
+    // Trigger sound/vibration
+    switch (status) {
+      case 'success':
+        playSuccess();
+        break;
+      case 'error':
+        playError();
+        break;
+      case 'blocked':
+        playBlocked();
+        break;
+      case 'warning':
+        playWarning();
+        break;
+    }
+  }, [playSuccess, playError, playBlocked, playWarning]);
 
-  // Re-focus after scan result changes
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      inputRef.current?.focus();
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [scanResult, scanError]);
+  const clearFeedback = useCallback(() => {
+    setFeedbackStatus(null);
+    setFeedbackMessage('');
+  }, []);
 
   // Process scan result when data arrives
   useEffect(() => {
@@ -108,23 +181,41 @@ const ScanKiosk = () => {
         if (visitor) {
           setScanResult({ type: 'visitor', data: visitor });
           setScanError(null);
+          
+          // Check visitor status and show appropriate feedback
+          if (visitor.status === 'closed') {
+            showFeedback('blocked', 'Passe já encerrado');
+          } else if (new Date() > new Date(visitor.validUntil)) {
+            showFeedback('warning', 'Passe expirado');
+          } else {
+            showFeedback('success', visitor.fullName);
+          }
         } else if (!isLoadingVisitor) {
           setScanError(`Passe ${searchCode} não encontrado`);
           setScanResult(null);
+          showFeedback('error', searchCode);
         }
       } else if (searchCode.startsWith('EC-')) {
         if (credential) {
           setScanResult({ type: 'employee', data: credential });
           setScanError(null);
+          
+          // Check credential status
+          if (credential.status === 'blocked') {
+            showFeedback('blocked', credential.fullName);
+          } else {
+            showFeedback('success', credential.fullName);
+          }
         } else if (!isLoadingCredential) {
           setScanError(`Credencial ${searchCode} não encontrada`);
           setScanResult(null);
+          showFeedback('error', searchCode);
         }
       }
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchCode, visitor, credential, isLoadingVisitor, isLoadingCredential]);
+  }, [searchCode, visitor, credential, isLoadingVisitor, isLoadingCredential, showFeedback]);
 
   const handleScan = () => {
     if (!qrCode.trim()) {
@@ -133,7 +224,7 @@ const ScanKiosk = () => {
         description: 'Digite ou escaneie o código do passe/crachá.',
         variant: 'destructive',
       });
-      inputRef.current?.focus();
+      forceFocus();
       return;
     }
 
@@ -142,11 +233,14 @@ const ScanKiosk = () => {
     if (!code.startsWith('VP-') && !code.startsWith('EC-')) {
       setScanError('Código inválido. Use VP-XXXXXXXX para visitantes ou EC-XXXXXXXX para colaboradores.');
       setScanResult(null);
+      showFeedback('error', 'Código inválido');
       setQrCode('');
-      inputRef.current?.focus();
       return;
     }
 
+    // Clear previous state
+    setScanResult(null);
+    setScanError(null);
     setSearchCode(code);
     setQrCode('');
   };
@@ -161,6 +255,7 @@ const ScanKiosk = () => {
       setSearchCode(normalizedCode);
     } else {
       setScanError('Código inválido. Use VP-XXXXXXXX para visitantes ou EC-XXXXXXXX para colaboradores.');
+      showFeedback('error', 'Código inválido');
     }
   };
 
@@ -178,20 +273,12 @@ const ScanKiosk = () => {
       const v = scanResult.data;
       
       if (v.status === 'closed') {
-        toast({
-          title: 'Acesso negado',
-          description: 'Este passe já foi utilizado e encerrado.',
-          variant: 'destructive',
-        });
+        showFeedback('blocked', 'Passe já encerrado');
         return;
       }
 
       if (new Date() > new Date(v.validUntil)) {
-        toast({
-          title: 'Passe expirado',
-          description: 'A validade deste passe já expirou.',
-          variant: 'destructive',
-        });
+        showFeedback('warning', 'Passe expirado');
         return;
       }
 
@@ -203,15 +290,12 @@ const ScanKiosk = () => {
       });
       
       setScanResult({ type: 'visitor', data: { ...v, status: 'inside' } });
+      showFeedback('success', `${v.fullName} - ENTRADA`);
     } else {
       const c = scanResult.data;
       
       if (c.status === 'blocked') {
-        toast({
-          title: 'Acesso bloqueado',
-          description: 'Este colaborador está com acesso bloqueado.',
-          variant: 'destructive',
-        });
+        showFeedback('blocked', 'Acesso bloqueado');
         return;
       }
 
@@ -220,9 +304,9 @@ const ScanKiosk = () => {
         subjectId: c.id,
         direction: 'in',
       });
+      
+      showFeedback('success', `${c.fullName} - ENTRADA`);
     }
-    
-    inputRef.current?.focus();
   };
 
   const handleCheckOut = async () => {
@@ -239,6 +323,7 @@ const ScanKiosk = () => {
       });
       
       setScanResult({ type: 'visitor', data: { ...v, status: 'closed' } });
+      showFeedback('success', `${v.fullName} - SAÍDA`);
     } else {
       const c = scanResult.data;
       
@@ -247,9 +332,9 @@ const ScanKiosk = () => {
         subjectId: c.id,
         direction: 'out',
       });
+      
+      showFeedback('success', `${c.fullName} - SAÍDA`);
     }
-    
-    inputRef.current?.focus();
   };
 
   const clearScan = () => {
@@ -257,7 +342,7 @@ const ScanKiosk = () => {
     setSearchCode('');
     setScanResult(null);
     setScanError(null);
-    inputRef.current?.focus();
+    forceFocus();
   };
 
   const handleExit = async () => {
@@ -273,58 +358,77 @@ const ScanKiosk = () => {
   return (
     <div 
       ref={containerRef}
-      className="min-h-screen bg-background flex flex-col"
+      className="min-h-screen bg-background flex flex-col select-none"
     >
-      {/* Header */}
-      <header className="bg-card border-b border-border px-4 py-3 flex items-center justify-between shrink-0">
+      {/* Feedback Overlay */}
+      <ScanFeedbackOverlay
+        status={feedbackStatus}
+        message={feedbackMessage}
+        onComplete={clearFeedback}
+        duration={1200}
+      />
+
+      {/* Minimal Header */}
+      <header className="bg-card border-b border-border px-4 py-2 flex items-center justify-between shrink-0">
         <BrandLogo size="sm" />
         
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <Button
             variant="ghost"
             size="icon"
             onClick={toggleFullscreen}
             title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
+            className="h-8 w-8"
           >
-            {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+            {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
           </Button>
           <Button
             variant="ghost"
             size="icon"
             onClick={handleExit}
             title="Sair do modo kiosk"
+            className="h-8 w-8"
           >
-            <LogOut className="w-5 h-5" />
+            <LogOut className="w-4 h-4" />
           </Button>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="flex-1 p-4 md:p-6 overflow-auto">
-        <div className="max-w-3xl mx-auto space-y-6">
+        <div className="max-w-3xl mx-auto space-y-4">
           
-          {/* Scanner Input - Always visible */}
-          <div className="bg-card rounded-xl border border-border p-4 md:p-6">
+          {/* Scanner Input - Large and prominent */}
+          <div className="bg-card rounded-xl border-2 border-primary/30 p-4 md:p-6 shadow-lg">
             <div className="flex items-center gap-3 mb-4">
-              <QrCode className="w-6 h-6 text-primary" />
-              <h1 className="text-xl font-bold">Scanner de Acesso</h1>
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <QrCode className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold">Scanner de Acesso</h1>
+                <p className="text-sm text-muted-foreground">Posicione o QR Code no leitor</p>
+              </div>
             </div>
             
-            <div className="flex gap-2 sm:gap-4">
+            <div className="flex gap-2 sm:gap-3">
               <Input
                 ref={inputRef}
-                placeholder="VP-XXXXXXXX ou EC-XXXXXXXX"
+                placeholder="Aguardando leitura..."
                 value={qrCode}
                 onChange={(e) => setQrCode(e.target.value.toUpperCase())}
-                className="font-mono text-lg h-12"
+                onBlur={handleBlur}
+                className="font-mono text-xl h-14 text-center tracking-wider border-2 focus:border-primary"
                 onKeyDown={handleKeyDown}
                 autoFocus
                 autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
               />
               <Button 
                 variant="outline" 
                 size="lg"
-                className="h-12 px-4"
+                className="h-14 px-4 shrink-0"
                 onClick={() => setCameraOpen(true)}
               >
                 <Camera className="w-5 h-5" />
@@ -333,9 +437,9 @@ const ScanKiosk = () => {
                 onClick={handleScan} 
                 size="lg" 
                 disabled={isLoading}
-                className="h-12 px-6"
+                className="h-14 px-6 shrink-0"
               >
-                {isLoading ? 'Buscando...' : 'Verificar'}
+                {isLoading ? 'Buscando...' : 'OK'}
               </Button>
             </div>
           </div>
@@ -349,17 +453,17 @@ const ScanKiosk = () => {
 
           {/* Scan Error */}
           {scanError && (
-            <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-6">
+            <div className="bg-destructive/10 border-2 border-destructive/30 rounded-xl p-6">
               <div className="flex items-center gap-4">
-                <div className="w-20 h-20 rounded-xl bg-destructive/20 flex items-center justify-center shrink-0">
-                  <AlertTriangle className="w-10 h-10 text-destructive" />
+                <div className="w-16 h-16 rounded-xl bg-destructive/20 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-8 h-8 text-destructive" />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-bold text-destructive">NÃO CADASTRADO</h3>
+                  <h3 className="text-2xl font-bold text-destructive">NÃO ENCONTRADO</h3>
                   <p className="text-muted-foreground mt-1">{scanError}</p>
                 </div>
               </div>
-              <Button variant="outline" onClick={clearScan} className="mt-6 w-full">
+              <Button variant="outline" onClick={clearScan} className="mt-4 w-full h-12">
                 Escanear Outro Código
               </Button>
             </div>
@@ -367,72 +471,72 @@ const ScanKiosk = () => {
 
           {/* Visitor Result */}
           {scanResult?.type === 'visitor' && (
-            <div className={`rounded-xl border-2 p-6 ${
+            <div className={`rounded-xl border-2 p-4 md:p-6 ${
               scanResult.data.status === 'closed' 
                 ? 'bg-muted/50 border-muted' 
                 : 'bg-success/5 border-success'
             }`}>
-              <div className="flex flex-col md:flex-row gap-6">
+              <div className="flex flex-col md:flex-row gap-4 md:gap-6">
                 {/* Photo */}
-                <div className="w-32 h-32 rounded-xl bg-muted border-2 border-border flex items-center justify-center overflow-hidden shrink-0 mx-auto md:mx-0">
+                <div className="w-24 h-24 md:w-28 md:h-28 rounded-xl bg-muted border-2 border-border flex items-center justify-center overflow-hidden shrink-0 mx-auto md:mx-0">
                   {scanResult.data.photoUrl ? (
                     <img src={scanResult.data.photoUrl} alt={scanResult.data.fullName} className="w-full h-full object-cover" />
                   ) : (
-                    <User className="w-16 h-16 text-muted-foreground" />
+                    <User className="w-12 h-12 text-muted-foreground" />
                   )}
                 </div>
                 
                 {/* Info */}
                 <div className="flex-1 text-center md:text-left">
-                  <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
+                  <div className="flex items-center justify-center md:justify-start gap-2 mb-1">
                     {scanResult.data.status === 'closed' ? (
                       <>
-                        <Ban className="w-6 h-6 text-muted-foreground" />
-                        <span className="text-lg font-bold text-muted-foreground">PASSE ENCERRADO</span>
+                        <Ban className="w-5 h-5 text-muted-foreground" />
+                        <span className="text-sm font-bold text-muted-foreground">PASSE ENCERRADO</span>
                       </>
                     ) : (
                       <>
-                        <CheckCircle className="w-6 h-6 text-success" />
-                        <span className="text-lg font-bold text-success">LIBERADO</span>
+                        <CheckCircle className="w-5 h-5 text-success" />
+                        <span className="text-sm font-bold text-success">LIBERADO</span>
                       </>
                     )}
                   </div>
                   
-                  <h2 className="text-3xl font-bold text-foreground">{scanResult.data.fullName}</h2>
-                  <p className="text-lg text-muted-foreground">{scanResult.data.company || 'Sem empresa'}</p>
+                  <h2 className="text-2xl md:text-3xl font-bold text-foreground">{scanResult.data.fullName}</h2>
+                  <p className="text-muted-foreground">{scanResult.data.company || 'Sem empresa'}</p>
                   
                   {/* Gate Info - Big and visible */}
-                  <div className="mt-4 p-4 rounded-lg bg-primary/10 border border-primary/20 text-left">
+                  <div className="mt-3 p-3 rounded-lg bg-primary/10 border border-primary/20 text-left">
                     <div className="flex items-center gap-2 mb-2">
-                      <Info className="w-5 h-5 text-primary" />
-                      <span className="font-bold text-primary">INFORMAÇÕES PARA GUARITA</span>
+                      <Info className="w-4 h-4 text-primary" />
+                      <span className="font-bold text-primary text-sm">INFORMAÇÕES</span>
                     </div>
-                    <div className="space-y-2">
-                      <p className="text-lg">
+                    <div className="space-y-1">
+                      <p className="text-base">
                         <span className="font-medium">VEIO PARA:</span>{' '}
-                        <span className="font-bold text-xl">
+                        <span className="font-bold text-lg">
                           {scanResult.data.visitToType === 'setor' ? '📍 ' : '👤 '}
                           {scanResult.data.visitToName}
                         </span>
                       </p>
                       {scanResult.data.gateObs && (
-                        <p className="text-lg">
+                        <p className="text-base">
                           <span className="font-medium">OBS:</span>{' '}
-                          <span className="font-bold text-warning text-xl">{scanResult.data.gateObs}</span>
+                          <span className="font-bold text-warning">{scanResult.data.gateObs}</span>
                         </p>
                       )}
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-4 mt-4 text-sm">
+                  <div className="grid grid-cols-2 gap-3 mt-3 text-sm">
                     <div>
-                      <p className="text-muted-foreground">Válido até</p>
+                      <p className="text-muted-foreground text-xs">Válido até</p>
                       <p className="font-medium">
-                        {format(new Date(scanResult.data.validUntil), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                        {format(new Date(scanResult.data.validUntil), "dd/MM/yy HH:mm", { locale: ptBR })}
                       </p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Status Atual</p>
+                      <p className="text-muted-foreground text-xs">Status</p>
                       <p className="font-medium">
                         {scanResult.data.status === 'inside'
                           ? '🟢 Dentro'
@@ -449,12 +553,119 @@ const ScanKiosk = () => {
 
               {/* Recent Access Logs */}
               {recentLogs.length > 0 && (
-                <div className="mt-6 pt-6 border-t border-border">
-                  <div className="flex items-center gap-2 mb-3">
+                <div className="mt-4 pt-4 border-t border-border">
+                  <div className="flex items-center gap-2 mb-2">
                     <Clock className="w-4 h-4 text-muted-foreground" />
-                    <span className="font-medium text-sm text-muted-foreground">HISTÓRICO DE ACESSOS</span>
+                    <span className="font-medium text-xs text-muted-foreground">HISTÓRICO</span>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
+                    {recentLogs.map((log) => (
+                      <AccessLogItem key={log.id} log={log} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons - Large for touch */}
+              {scanResult.data.status !== 'closed' && (
+                <div className="grid grid-cols-2 gap-3 mt-4">
+                  <Button
+                    onClick={handleCheckIn}
+                    className="bg-success hover:bg-success/90 text-success-foreground gap-2 h-16 text-xl font-bold"
+                    disabled={scanResult.data.status === 'inside' || updateVisitorStatus.isPending}
+                  >
+                    <UserCheck className="w-7 h-7" />
+                    ENTRADA
+                  </Button>
+                  <Button
+                    onClick={handleCheckOut}
+                    variant="outline"
+                    className="gap-2 h-16 text-xl font-bold border-2"
+                    disabled={scanResult.data.status !== 'inside' || updateVisitorStatus.isPending}
+                  >
+                    <UserX className="w-7 h-7" />
+                    SAÍDA
+                  </Button>
+                </div>
+              )}
+
+              <Button variant="ghost" onClick={clearScan} className="mt-3 w-full h-10">
+                Escanear Outro
+              </Button>
+            </div>
+          )}
+
+          {/* Employee Credential Result */}
+          {scanResult?.type === 'employee' && (
+            <div className={`rounded-xl border-2 p-4 md:p-6 ${
+              scanResult.data.status === 'blocked' 
+                ? 'bg-destructive/5 border-destructive' 
+                : 'bg-success/5 border-success'
+            }`}>
+              <div className="flex flex-col md:flex-row gap-4 md:gap-6">
+                {/* Photo/Icon */}
+                <div className="w-24 h-24 md:w-28 md:h-28 rounded-xl bg-muted border-2 border-border flex items-center justify-center overflow-hidden shrink-0 mx-auto md:mx-0">
+                  {scanResult.data.photoUrl ? (
+                    <img src={scanResult.data.photoUrl} alt={scanResult.data.fullName} className="w-full h-full object-cover" />
+                  ) : scanResult.data.type === 'vehicle' ? (
+                    <Car className="w-12 h-12 text-muted-foreground" />
+                  ) : (
+                    <User className="w-12 h-12 text-muted-foreground" />
+                  )}
+                </div>
+                
+                {/* Info */}
+                <div className="flex-1 text-center md:text-left">
+                  <div className="flex items-center justify-center md:justify-start gap-2 mb-1">
+                    {scanResult.data.status === 'blocked' ? (
+                      <>
+                        <Ban className="w-5 h-5 text-destructive" />
+                        <span className="text-sm font-bold text-destructive">BLOQUEADO</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-5 h-5 text-success" />
+                        <span className="text-sm font-bold text-success">
+                          {scanResult.data.type === 'vehicle' ? 'VEÍCULO LIBERADO' : 'COLABORADOR'}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                  
+                  <h2 className="text-2xl md:text-3xl font-bold text-foreground">{scanResult.data.fullName}</h2>
+                  
+                  {scanResult.data.type === 'vehicle' ? (
+                    <div className="flex items-center justify-center md:justify-start gap-2 mt-2">
+                      <Car className="w-5 h-5 text-primary" />
+                      <span className="text-xl font-mono font-bold">{scanResult.data.vehiclePlate}</span>
+                      {scanResult.data.vehicleMakeModel && (
+                        <span className="text-muted-foreground">({scanResult.data.vehicleMakeModel})</span>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      {scanResult.data.jobTitle && (
+                        <p className="text-muted-foreground">{scanResult.data.jobTitle}</p>
+                      )}
+                      {scanResult.data.departmentId && (
+                        <div className="flex items-center justify-center md:justify-start gap-1 mt-1 text-sm text-muted-foreground">
+                          <Building2 className="w-4 h-4" />
+                          <span>Setor vinculado</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Recent Access Logs */}
+              {recentLogs.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-border">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Clock className="w-4 h-4 text-muted-foreground" />
+                    <span className="font-medium text-xs text-muted-foreground">HISTÓRICO</span>
+                  </div>
+                  <div className="space-y-1.5">
                     {recentLogs.map((log) => (
                       <AccessLogItem key={log.id} log={log} />
                     ))}
@@ -463,139 +674,30 @@ const ScanKiosk = () => {
               )}
 
               {/* Action Buttons */}
-              {scanResult.data.status !== 'closed' && (
-                <div className="grid grid-cols-2 gap-4 mt-6">
+              {scanResult.data.status !== 'blocked' && (
+                <div className="grid grid-cols-2 gap-3 mt-4">
                   <Button
                     onClick={handleCheckIn}
-                    className="bg-success hover:bg-success/90 text-success-foreground gap-2 h-14 text-lg"
-                    disabled={scanResult.data.status === 'inside' || updateVisitorStatus.isPending}
+                    className="bg-success hover:bg-success/90 text-success-foreground gap-2 h-16 text-xl font-bold"
+                    disabled={createAccessLog.isPending}
                   >
-                    <UserCheck className="w-6 h-6" />
-                    Entrada
+                    <UserCheck className="w-7 h-7" />
+                    ENTRADA
                   </Button>
                   <Button
                     onClick={handleCheckOut}
                     variant="outline"
-                    className="gap-2 h-14 text-lg"
-                    disabled={scanResult.data.status !== 'inside' || updateVisitorStatus.isPending}
-                  >
-                    <UserX className="w-6 h-6" />
-                    Saída
-                  </Button>
-                </div>
-              )}
-
-              <Button variant="ghost" onClick={clearScan} className="mt-4 w-full">
-                Escanear Outro Código
-              </Button>
-            </div>
-          )}
-
-          {/* Employee Credential Result */}
-          {scanResult?.type === 'employee' && (
-            <div className={`rounded-xl border-2 p-6 ${
-              scanResult.data.status === 'blocked' 
-                ? 'bg-destructive/5 border-destructive' 
-                : 'bg-success/5 border-success'
-            }`}>
-              <div className="flex flex-col md:flex-row gap-6">
-                {/* Photo/Vehicle */}
-                {scanResult.data.type === 'personal' ? (
-                  <div className="w-32 h-32 rounded-xl bg-muted border-2 border-border flex items-center justify-center overflow-hidden shrink-0 mx-auto md:mx-0">
-                    {scanResult.data.photoUrl ? (
-                      <img src={scanResult.data.photoUrl} alt={scanResult.data.fullName} className="w-full h-full object-cover" />
-                    ) : (
-                      <User className="w-16 h-16 text-muted-foreground" />
-                    )}
-                  </div>
-                ) : (
-                  <div className="w-32 h-32 rounded-xl bg-muted border-2 border-border flex flex-col items-center justify-center shrink-0 mx-auto md:mx-0">
-                    <Car className="w-12 h-12 text-muted-foreground mb-1" />
-                    <p className="text-sm font-mono font-bold">{scanResult.data.vehiclePlate}</p>
-                  </div>
-                )}
-                
-                {/* Info */}
-                <div className="flex-1 text-center md:text-left">
-                  <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
-                    {scanResult.data.status === 'blocked' ? (
-                      <>
-                        <Ban className="w-6 h-6 text-destructive" />
-                        <span className="text-lg font-bold text-destructive">BLOQUEADO</span>
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle className="w-6 h-6 text-success" />
-                        <span className="text-lg font-bold text-success">LIBERADO</span>
-                      </>
-                    )}
-                  </div>
-                  
-                  <h2 className="text-3xl font-bold text-foreground">{scanResult.data.fullName}</h2>
-                  
-                  {scanResult.data.type === 'vehicle' && (
-                    <div className="mt-3 p-3 rounded-lg bg-muted inline-block">
-                      <p className="text-2xl font-mono font-bold">{scanResult.data.vehiclePlate}</p>
-                      <p className="text-sm text-muted-foreground">{scanResult.data.vehicleMakeModel}</p>
-                    </div>
-                  )}
-                  
-                  <div className="grid grid-cols-2 gap-4 mt-4 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">Departamento</p>
-                      <p className="font-medium flex items-center gap-1 justify-center md:justify-start">
-                        <Building2 className="w-4 h-4" />
-                        {scanResult.data.department?.name || 'N/A'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Cargo</p>
-                      <p className="font-medium">{scanResult.data.jobTitle || 'N/A'}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Recent Access Logs */}
-              {recentLogs.length > 0 && (
-                <div className="mt-6 pt-6 border-t border-border">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Clock className="w-4 h-4 text-muted-foreground" />
-                    <span className="font-medium text-sm text-muted-foreground">HISTÓRICO DE ACESSOS</span>
-                  </div>
-                  <div className="space-y-2">
-                    {recentLogs.map((log) => (
-                      <AccessLogItem key={log.id} log={log} />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Action Buttons for Employee */}
-              {scanResult.data.status === 'allowed' && (
-                <div className="grid grid-cols-2 gap-4 mt-6">
-                  <Button
-                    onClick={handleCheckIn}
-                    className="bg-success hover:bg-success/90 text-success-foreground gap-2 h-14 text-lg"
+                    className="gap-2 h-16 text-xl font-bold border-2"
                     disabled={createAccessLog.isPending}
                   >
-                    <UserCheck className="w-6 h-6" />
-                    Entrada
-                  </Button>
-                  <Button
-                    onClick={handleCheckOut}
-                    variant="outline"
-                    className="gap-2 h-14 text-lg"
-                    disabled={createAccessLog.isPending}
-                  >
-                    <UserX className="w-6 h-6" />
-                    Saída
+                    <UserX className="w-7 h-7" />
+                    SAÍDA
                   </Button>
                 </div>
               )}
 
-              <Button variant="ghost" onClick={clearScan} className="mt-4 w-full">
-                Escanear Outro Código
+              <Button variant="ghost" onClick={clearScan} className="mt-3 w-full h-10">
+                Escanear Outro
               </Button>
             </div>
           )}

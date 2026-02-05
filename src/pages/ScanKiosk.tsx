@@ -1,18 +1,18 @@
 import { useState, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import DashboardLayout from '@/components/DashboardLayout';
 import { useVisitorByPassId, useUpdateVisitorStatus } from '@/hooks/useVisitors';
 import { useCredentialByQrId, useUpdateCredentialStatus } from '@/hooks/useEmployeeCredentials';
 import { useCreateAccessLog, useSubjectAccessLogs } from '@/hooks/useAccessLogs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { QrCode, UserCheck, UserX, AlertTriangle, CheckCircle, Ban, Car, User, Building2, Info, Camera, Maximize, Clock, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { QrCode, UserCheck, UserX, AlertTriangle, CheckCircle, Ban, Car, User, Building2, Info, Camera, Clock, ArrowDownLeft, ArrowUpRight, Maximize, Minimize, LogOut } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Visitor, EmployeeCredential, AccessLog } from '@/types/visitor';
 import CameraScannerModal from '@/components/CameraScannerModal';
+import { useNavigate } from 'react-router-dom';
+
+import BrandLogo from '@/components/BrandLogo';
 
 type ScanResult = {
   type: 'visitor';
@@ -38,14 +38,17 @@ const AccessLogItem = ({ log }: { log: AccessLog }) => (
   </div>
 );
 
-const QRScanner = () => {
+const ScanKiosk = () => {
   const [qrCode, setQrCode] = useState('');
   const [searchCode, setSearchCode] = useState('');
   const [scanResult, setScanResult] = useState<ScanResult>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   
+  const navigate = useNavigate();
   const { toast } = useToast();
   const updateVisitorStatus = useUpdateVisitorStatus();
   const updateCredentialStatus = useUpdateCredentialStatus();
@@ -63,6 +66,26 @@ const QRScanner = () => {
     scanResult?.data.id || ''
   );
 
+  // Toggle fullscreen
+  const toggleFullscreen = async () => {
+    if (!document.fullscreenElement) {
+      await containerRef.current?.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      await document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
+  // Listen for fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
   // Auto-focus on mount and after actions
   useEffect(() => {
     inputRef.current?.focus();
@@ -70,7 +93,6 @@ const QRScanner = () => {
 
   // Re-focus after scan result changes
   useEffect(() => {
-    // Short delay to allow UI to update
     const timer = setTimeout(() => {
       inputRef.current?.focus();
     }, 100);
@@ -127,7 +149,6 @@ const QRScanner = () => {
 
     setSearchCode(code);
     setQrCode('');
-    // Focus will be restored by useEffect
   };
 
   const handleCameraScan = (code: string) => {
@@ -156,7 +177,6 @@ const QRScanner = () => {
     if (scanResult.type === 'visitor') {
       const v = scanResult.data;
       
-      // Check if visitor can enter
       if (v.status === 'closed') {
         toast({
           title: 'Acesso negado',
@@ -183,10 +203,6 @@ const QRScanner = () => {
       });
       
       setScanResult({ type: 'visitor', data: { ...v, status: 'inside' } });
-      toast({
-        title: 'Entrada registrada!',
-        description: `${v.fullName} entrou na empresa.`,
-      });
     } else {
       const c = scanResult.data;
       
@@ -204,14 +220,8 @@ const QRScanner = () => {
         subjectId: c.id,
         direction: 'in',
       });
-      
-      toast({
-        title: 'Entrada registrada!',
-        description: `${c.fullName} entrou na empresa.`,
-      });
     }
     
-    // Re-focus input for next scan
     inputRef.current?.focus();
   };
 
@@ -221,7 +231,6 @@ const QRScanner = () => {
     if (scanResult.type === 'visitor') {
       const v = scanResult.data;
       
-      // On checkout, close the visitor pass
       await updateVisitorStatus.mutateAsync({ id: v.id, status: 'closed' });
       await createAccessLog.mutateAsync({
         subjectType: 'visitor',
@@ -230,10 +239,6 @@ const QRScanner = () => {
       });
       
       setScanResult({ type: 'visitor', data: { ...v, status: 'closed' } });
-      toast({
-        title: 'Saída registrada!',
-        description: `${v.fullName} saiu da empresa. Passe encerrado.`,
-      });
     } else {
       const c = scanResult.data;
       
@@ -242,14 +247,8 @@ const QRScanner = () => {
         subjectId: c.id,
         direction: 'out',
       });
-      
-      toast({
-        title: 'Saída registrada!',
-        description: `${c.fullName} saiu da empresa.`,
-      });
     }
     
-    // Re-focus input for next scan
     inputRef.current?.focus();
   };
 
@@ -261,125 +260,149 @@ const QRScanner = () => {
     inputRef.current?.focus();
   };
 
+  const handleExit = async () => {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+    }
+    navigate('/dashboard');
+  };
+
   const isLoading = isLoadingVisitor || isLoadingCredential;
   const recentLogs = accessLogs.slice(0, 5);
 
   return (
-    <DashboardLayout>
-      <div className="max-w-2xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-              <QrCode className="w-8 h-8 text-primary" />
-              Scanner de Acesso
-            </h1>
-            <p className="text-muted-foreground mt-1">Escaneie ou digite o código para registrar entrada/saída</p>
-          </div>
-          <Link to="/scan/kiosk">
-            <Button variant="outline" className="gap-2">
-              <Maximize className="w-4 h-4" />
-              <span className="hidden sm:inline">Modo Kiosk</span>
-            </Button>
-          </Link>
+    <div 
+      ref={containerRef}
+      className="min-h-screen bg-background flex flex-col"
+    >
+      {/* Header */}
+      <header className="bg-card border-b border-border px-4 py-3 flex items-center justify-between shrink-0">
+        <BrandLogo size="sm" />
+        
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleFullscreen}
+            title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
+          >
+            {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleExit}
+            title="Sair do modo kiosk"
+          >
+            <LogOut className="w-5 h-5" />
+          </Button>
         </div>
+      </header>
 
-        {/* Scanner Input */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Escanear Código</CardTitle>
-            <CardDescription>
-              Posicione o leitor Bematech S-100 e escaneie o código. O sistema processa automaticamente.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+      {/* Main Content */}
+      <main className="flex-1 p-4 md:p-6 overflow-auto">
+        <div className="max-w-3xl mx-auto space-y-6">
+          
+          {/* Scanner Input - Always visible */}
+          <div className="bg-card rounded-xl border border-border p-4 md:p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <QrCode className="w-6 h-6 text-primary" />
+              <h1 className="text-xl font-bold">Scanner de Acesso</h1>
+            </div>
+            
             <div className="flex gap-2 sm:gap-4">
               <Input
                 ref={inputRef}
                 placeholder="VP-XXXXXXXX ou EC-XXXXXXXX"
                 value={qrCode}
                 onChange={(e) => setQrCode(e.target.value.toUpperCase())}
-                className="font-mono text-lg"
+                className="font-mono text-lg h-12"
                 onKeyDown={handleKeyDown}
                 autoFocus
                 autoComplete="off"
               />
               <Button 
                 variant="outline" 
-                size="lg" 
+                size="lg"
+                className="h-12 px-4"
                 onClick={() => setCameraOpen(true)}
-                className="shrink-0 gap-2"
               >
                 <Camera className="w-5 h-5" />
-                <span className="hidden sm:inline">Câmera</span>
               </Button>
-              <Button onClick={handleScan} size="lg" disabled={isLoading} className="shrink-0">
+              <Button 
+                onClick={handleScan} 
+                size="lg" 
+                disabled={isLoading}
+                className="h-12 px-6"
+              >
                 {isLoading ? 'Buscando...' : 'Verificar'}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              💡 Use o leitor USB ou toque em "Câmera" para escanear pelo celular
-            </p>
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* Camera Scanner Modal */}
-        <CameraScannerModal
-          open={cameraOpen}
-          onClose={() => setCameraOpen(false)}
-          onScan={handleCameraScan}
-        />
+          {/* Camera Scanner Modal */}
+          <CameraScannerModal
+            open={cameraOpen}
+            onClose={() => setCameraOpen(false)}
+            onScan={handleCameraScan}
+          />
 
-        {/* Scan Error */}
-        {scanError && (
-          <Card className="border-destructive/50 bg-destructive/5">
-            <CardContent className="pt-6">
+          {/* Scan Error */}
+          {scanError && (
+            <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-6">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-xl bg-destructive/10 flex items-center justify-center">
-                  <AlertTriangle className="w-8 h-8 text-destructive" />
+                <div className="w-20 h-20 rounded-xl bg-destructive/20 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-10 h-10 text-destructive" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-destructive">Não Encontrado</h3>
-                  <p className="text-muted-foreground">{scanError}</p>
+                  <h3 className="text-2xl font-bold text-destructive">NÃO CADASTRADO</h3>
+                  <p className="text-muted-foreground mt-1">{scanError}</p>
                 </div>
               </div>
-              <Button variant="outline" onClick={clearScan} className="mt-4 w-full">
-                Tentar Novamente
+              <Button variant="outline" onClick={clearScan} className="mt-6 w-full">
+                Escanear Outro Código
               </Button>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          )}
 
-        {/* Visitor Result */}
-        {scanResult?.type === 'visitor' && (
-          <Card className={scanResult.data.status === 'closed' ? 'border-muted' : 'border-success/50 bg-success/5'}>
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-4">
-                <div className="w-20 h-20 rounded-xl bg-muted border border-border flex items-center justify-center overflow-hidden shrink-0">
+          {/* Visitor Result */}
+          {scanResult?.type === 'visitor' && (
+            <div className={`rounded-xl border-2 p-6 ${
+              scanResult.data.status === 'closed' 
+                ? 'bg-muted/50 border-muted' 
+                : 'bg-success/5 border-success'
+            }`}>
+              <div className="flex flex-col md:flex-row gap-6">
+                {/* Photo */}
+                <div className="w-32 h-32 rounded-xl bg-muted border-2 border-border flex items-center justify-center overflow-hidden shrink-0 mx-auto md:mx-0">
                   {scanResult.data.photoUrl ? (
                     <img src={scanResult.data.photoUrl} alt={scanResult.data.fullName} className="w-full h-full object-cover" />
                   ) : (
-                    <span className="text-3xl font-bold text-muted-foreground">{scanResult.data.fullName.charAt(0)}</span>
+                    <User className="w-16 h-16 text-muted-foreground" />
                   )}
                 </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
+                
+                {/* Info */}
+                <div className="flex-1 text-center md:text-left">
+                  <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
                     {scanResult.data.status === 'closed' ? (
                       <>
-                        <Ban className="w-5 h-5 text-muted-foreground" />
-                        <span className="text-sm font-medium text-muted-foreground">Passe Encerrado</span>
+                        <Ban className="w-6 h-6 text-muted-foreground" />
+                        <span className="text-lg font-bold text-muted-foreground">PASSE ENCERRADO</span>
                       </>
                     ) : (
                       <>
-                        <CheckCircle className="w-5 h-5 text-success" />
-                        <span className="text-sm font-medium text-success">Visitante Válido</span>
+                        <CheckCircle className="w-6 h-6 text-success" />
+                        <span className="text-lg font-bold text-success">LIBERADO</span>
                       </>
                     )}
                   </div>
-                  <h3 className="text-xl font-bold text-foreground mt-1">{scanResult.data.fullName}</h3>
-                  <p className="text-muted-foreground">{scanResult.data.company || 'Sem empresa'}</p>
+                  
+                  <h2 className="text-3xl font-bold text-foreground">{scanResult.data.fullName}</h2>
+                  <p className="text-lg text-muted-foreground">{scanResult.data.company || 'Sem empresa'}</p>
                   
                   {/* Gate Info - Big and visible */}
-                  <div className="mt-4 p-4 rounded-lg bg-primary/10 border border-primary/20">
+                  <div className="mt-4 p-4 rounded-lg bg-primary/10 border border-primary/20 text-left">
                     <div className="flex items-center gap-2 mb-2">
                       <Info className="w-5 h-5 text-primary" />
                       <span className="font-bold text-primary">INFORMAÇÕES PARA GUARITA</span>
@@ -387,12 +410,15 @@ const QRScanner = () => {
                     <div className="space-y-2">
                       <p className="text-lg">
                         <span className="font-medium">VEIO PARA:</span>{' '}
-                        <span className="font-bold">{scanResult.data.visitToType === 'setor' ? '📍 ' : '👤 '}{scanResult.data.visitToName}</span>
+                        <span className="font-bold text-xl">
+                          {scanResult.data.visitToType === 'setor' ? '📍 ' : '👤 '}
+                          {scanResult.data.visitToName}
+                        </span>
                       </p>
                       {scanResult.data.gateObs && (
                         <p className="text-lg">
                           <span className="font-medium">OBS:</span>{' '}
-                          <span className="font-bold text-warning">{scanResult.data.gateObs}</span>
+                          <span className="font-bold text-warning text-xl">{scanResult.data.gateObs}</span>
                         </p>
                       )}
                     </div>
@@ -407,7 +433,7 @@ const QRScanner = () => {
                     </div>
                     <div>
                       <p className="text-muted-foreground">Status Atual</p>
-                      <p className="font-medium capitalize">
+                      <p className="font-medium">
                         {scanResult.data.status === 'inside'
                           ? '🟢 Dentro'
                           : scanResult.data.status === 'outside'
@@ -423,7 +449,7 @@ const QRScanner = () => {
 
               {/* Recent Access Logs */}
               {recentLogs.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-border">
+                <div className="mt-6 pt-6 border-t border-border">
                   <div className="flex items-center gap-2 mb-3">
                     <Clock className="w-4 h-4 text-muted-foreground" />
                     <span className="font-medium text-sm text-muted-foreground">HISTÓRICO DE ACESSOS</span>
@@ -441,22 +467,20 @@ const QRScanner = () => {
                 <div className="grid grid-cols-2 gap-4 mt-6">
                   <Button
                     onClick={handleCheckIn}
-                    className="bg-success hover:bg-success/90 text-success-foreground gap-2"
+                    className="bg-success hover:bg-success/90 text-success-foreground gap-2 h-14 text-lg"
                     disabled={scanResult.data.status === 'inside' || updateVisitorStatus.isPending}
-                    size="lg"
                   >
-                    <UserCheck className="w-5 h-5" />
-                    Registrar Entrada
+                    <UserCheck className="w-6 h-6" />
+                    Entrada
                   </Button>
                   <Button
                     onClick={handleCheckOut}
                     variant="outline"
-                    className="gap-2"
+                    className="gap-2 h-14 text-lg"
                     disabled={scanResult.data.status !== 'inside' || updateVisitorStatus.isPending}
-                    size="lg"
                   >
-                    <UserX className="w-5 h-5" />
-                    Registrar Saída
+                    <UserX className="w-6 h-6" />
+                    Saída
                   </Button>
                 </div>
               )}
@@ -464,50 +488,54 @@ const QRScanner = () => {
               <Button variant="ghost" onClick={clearScan} className="mt-4 w-full">
                 Escanear Outro Código
               </Button>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          )}
 
-        {/* Employee Credential Result */}
-        {scanResult?.type === 'employee' && (
-          <Card className={scanResult.data.status === 'blocked' ? 'border-destructive/50 bg-destructive/5' : 'border-success/50 bg-success/5'}>
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-4">
+          {/* Employee Credential Result */}
+          {scanResult?.type === 'employee' && (
+            <div className={`rounded-xl border-2 p-6 ${
+              scanResult.data.status === 'blocked' 
+                ? 'bg-destructive/5 border-destructive' 
+                : 'bg-success/5 border-success'
+            }`}>
+              <div className="flex flex-col md:flex-row gap-6">
+                {/* Photo/Vehicle */}
                 {scanResult.data.type === 'personal' ? (
-                  <div className="w-24 h-24 rounded-xl bg-muted border border-border flex items-center justify-center overflow-hidden shrink-0">
+                  <div className="w-32 h-32 rounded-xl bg-muted border-2 border-border flex items-center justify-center overflow-hidden shrink-0 mx-auto md:mx-0">
                     {scanResult.data.photoUrl ? (
                       <img src={scanResult.data.photoUrl} alt={scanResult.data.fullName} className="w-full h-full object-cover" />
                     ) : (
-                      <User className="w-12 h-12 text-muted-foreground" />
+                      <User className="w-16 h-16 text-muted-foreground" />
                     )}
                   </div>
                 ) : (
-                  <div className="w-24 h-24 rounded-xl bg-muted border border-border flex flex-col items-center justify-center shrink-0">
-                    <Car className="w-10 h-10 text-muted-foreground mb-1" />
-                    <p className="text-xs font-mono font-bold">{scanResult.data.vehiclePlate}</p>
+                  <div className="w-32 h-32 rounded-xl bg-muted border-2 border-border flex flex-col items-center justify-center shrink-0 mx-auto md:mx-0">
+                    <Car className="w-12 h-12 text-muted-foreground mb-1" />
+                    <p className="text-sm font-mono font-bold">{scanResult.data.vehiclePlate}</p>
                   </div>
                 )}
                 
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
+                {/* Info */}
+                <div className="flex-1 text-center md:text-left">
+                  <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
                     {scanResult.data.status === 'blocked' ? (
                       <>
-                        <Ban className="w-5 h-5 text-destructive" />
-                        <span className="text-sm font-medium text-destructive">BLOQUEADO</span>
+                        <Ban className="w-6 h-6 text-destructive" />
+                        <span className="text-lg font-bold text-destructive">BLOQUEADO</span>
                       </>
                     ) : (
                       <>
-                        <CheckCircle className="w-5 h-5 text-success" />
-                        <span className="text-sm font-medium text-success">LIBERADO</span>
+                        <CheckCircle className="w-6 h-6 text-success" />
+                        <span className="text-lg font-bold text-success">LIBERADO</span>
                       </>
                     )}
                   </div>
                   
-                  <h3 className="text-2xl font-bold text-foreground mt-1">{scanResult.data.fullName}</h3>
+                  <h2 className="text-3xl font-bold text-foreground">{scanResult.data.fullName}</h2>
                   
                   {scanResult.data.type === 'vehicle' && (
-                    <div className="mt-2 p-3 rounded-lg bg-muted">
-                      <p className="text-lg font-mono font-bold">{scanResult.data.vehiclePlate}</p>
+                    <div className="mt-3 p-3 rounded-lg bg-muted inline-block">
+                      <p className="text-2xl font-mono font-bold">{scanResult.data.vehiclePlate}</p>
                       <p className="text-sm text-muted-foreground">{scanResult.data.vehicleMakeModel}</p>
                     </div>
                   )}
@@ -515,7 +543,7 @@ const QRScanner = () => {
                   <div className="grid grid-cols-2 gap-4 mt-4 text-sm">
                     <div>
                       <p className="text-muted-foreground">Departamento</p>
-                      <p className="font-medium flex items-center gap-1">
+                      <p className="font-medium flex items-center gap-1 justify-center md:justify-start">
                         <Building2 className="w-4 h-4" />
                         {scanResult.data.department?.name || 'N/A'}
                       </p>
@@ -530,7 +558,7 @@ const QRScanner = () => {
 
               {/* Recent Access Logs */}
               {recentLogs.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-border">
+                <div className="mt-6 pt-6 border-t border-border">
                   <div className="flex items-center gap-2 mb-3">
                     <Clock className="w-4 h-4 text-muted-foreground" />
                     <span className="font-medium text-sm text-muted-foreground">HISTÓRICO DE ACESSOS</span>
@@ -548,22 +576,20 @@ const QRScanner = () => {
                 <div className="grid grid-cols-2 gap-4 mt-6">
                   <Button
                     onClick={handleCheckIn}
-                    className="bg-success hover:bg-success/90 text-success-foreground gap-2"
+                    className="bg-success hover:bg-success/90 text-success-foreground gap-2 h-14 text-lg"
                     disabled={createAccessLog.isPending}
-                    size="lg"
                   >
-                    <UserCheck className="w-5 h-5" />
-                    Registrar Entrada
+                    <UserCheck className="w-6 h-6" />
+                    Entrada
                   </Button>
                   <Button
                     onClick={handleCheckOut}
                     variant="outline"
-                    className="gap-2"
+                    className="gap-2 h-14 text-lg"
                     disabled={createAccessLog.isPending}
-                    size="lg"
                   >
-                    <UserX className="w-5 h-5" />
-                    Registrar Saída
+                    <UserX className="w-6 h-6" />
+                    Saída
                   </Button>
                 </div>
               )}
@@ -571,12 +597,12 @@ const QRScanner = () => {
               <Button variant="ghost" onClick={clearScan} className="mt-4 w-full">
                 Escanear Outro Código
               </Button>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-    </DashboardLayout>
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
   );
 };
 
-export default QRScanner;
+export default ScanKiosk;

@@ -14,6 +14,7 @@ import RegisterVisitor from "./pages/RegisterVisitor";
 import VisitorList from "./pages/VisitorList";
 import VisitorPass from "./pages/VisitorPass";
 import QRScanner from "./pages/QRScanner";
+import ScanKiosk from "./pages/ScanKiosk";
 import Settings from "./pages/Settings";
 import InstallWizard from "./pages/InstallWizard";
 import NotFound from "./pages/NotFound";
@@ -90,6 +91,7 @@ const App = () => (
                       <Route path="/visitors" element={<VisitorList />} />
                       <Route path="/pass/:id" element={<VisitorPass />} />
                       <Route path="/scan" element={<QRScanner />} />
+                      <Route path="/scan/kiosk" element={<ScanKiosk />} />
                       <Route path="/settings" element={<Settings />} />
                       <Route path="*" element={<NotFound />} />
                     </Routes>

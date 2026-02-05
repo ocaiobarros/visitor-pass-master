@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
@@ -8,16 +8,18 @@ import {
   Users,
   QrCode,
   LogOut,
-  Shield,
   Menu,
   X,
   Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
+import BrandLogo from '@/components/BrandLogo';
+import { getPageTitle } from '@/config/branding';
 
 interface DashboardLayoutProps {
   children: ReactNode;
+  pageTitle?: string;
 }
 
 const navItems = [
@@ -28,11 +30,16 @@ const navItems = [
   { href: '/settings', label: 'Configurações', icon: Settings, roles: ['admin'] },
 ];
 
-const DashboardLayout = ({ children }: DashboardLayoutProps) => {
+const DashboardLayout = ({ children, pageTitle }: DashboardLayoutProps) => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Set page title dynamically
+  useEffect(() => {
+    document.title = getPageTitle(pageTitle);
+  }, [pageTitle]);
 
   const handleLogout = () => {
     logout();
@@ -44,15 +51,11 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       {/* Sidebar - Desktop */}
       <aside className="hidden lg:flex lg:flex-col lg:w-64 sidebar-gradient text-sidebar-foreground">
         <div className="p-6 border-b border-sidebar-border">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-sidebar-primary flex items-center justify-center">
-              <Shield className="w-5 h-5 text-sidebar-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="font-bold text-lg">GUARDA OPERACIONAL</h1>
-              <p className="text-xs text-sidebar-foreground/70">Controle de Acesso</p>
-            </div>
-          </div>
+          <BrandLogo 
+            size="md" 
+            showName={true}
+            nameClassName="text-sidebar-foreground"
+          />
         </div>
 
         <nav className="flex-1 p-4 space-y-1">
@@ -100,12 +103,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-card border-b border-border">
         <div className="flex items-center justify-between p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Shield className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <span className="font-bold">GUARDA OPERACIONAL</span>
-          </div>
+          <BrandLogo size="sm" showName={true} />
           <Button variant="ghost" size="icon" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </Button>

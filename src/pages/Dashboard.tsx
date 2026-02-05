@@ -1,14 +1,35 @@
 import { useVisitors } from '@/hooks/useVisitors';
 import { useAccessLogs } from '@/hooks/useAccessLogs';
+import { useAuditLogs } from '@/hooks/useAuditLogs';
+import { useEmployeeCredentials } from '@/hooks/useEmployeeCredentials';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, UserCheck, UserX, Clock, TrendingUp, CalendarDays, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import ActivityChart from '@/components/dashboard/ActivityChart';
+import StatusWidgets from '@/components/dashboard/StatusWidgets';
+import CriticalEventsList from '@/components/dashboard/CriticalEventsList';
 
 const Dashboard = () => {
   const { data: visitors = [], isLoading } = useVisitors();
-  const { data: logs = [] } = useAccessLogs(10);
+  const { data: accessLogs = [] } = useAccessLogs(500); // Get more logs for chart
+  const { data: auditData, isLoading: isLoadingAudit } = useAuditLogs({}, 50, 0);
+  const { data: employees = [] } = useEmployeeCredentials();
+  
+  // Get total users count
+  const { data: usersData } = useQuery({
+    queryKey: ['users-count'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id', { count: 'exact' });
+      if (error) throw error;
+      return data?.length || 0;
+    },
+  });
 
   const stats = {
     total: visitors.length,
@@ -35,13 +56,40 @@ const Dashboard = () => {
 
   return (
     <DashboardLayout>
-      <div className="space-y-8">
+      <div className="space-y-6">
         {/* Header */}
         <div>
           <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
           <p className="text-muted-foreground mt-1">
             {format(new Date(), "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
           </p>
+        </div>
+
+        {/* Status Widgets */}
+        <StatusWidgets
+          totalUsers={usersData || 0}
+          activeGates={1}
+          totalGates={1}
+          visitorsInside={stats.inside}
+          employeesActive={employees.filter(e => e.status === 'allowed').length}
+        />
+
+        {/* Activity Chart */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <ActivityChart 
+            accessLogs={accessLogs.map(log => ({
+              id: log.id,
+              created_at: log.createdAt.toISOString(),
+              direction: log.direction,
+              subject_type: log.subjectType,
+            }))} 
+          />
+          
+          {/* Critical Events */}
+          <CriticalEventsList 
+            auditLogs={auditData?.data || []} 
+            isLoading={isLoadingAudit} 
+          />
         </div>
 
         {/* Stats Cards */}
@@ -118,7 +166,7 @@ const Dashboard = () => {
                 <p className="text-muted-foreground text-center py-8">Nenhum visitante dentro da empresa</p>
               ) : (
                 <div className="space-y-3">
-                  {insideVisitors.map((visitor) => (
+                  {insideVisitors.slice(0, 5).map((visitor) => (
                     <div key={visitor.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">

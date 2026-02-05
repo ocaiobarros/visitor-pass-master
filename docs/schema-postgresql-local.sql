@@ -15,6 +15,30 @@ CREATE TYPE public.credential_type AS ENUM ('personal', 'vehicle');
 CREATE TYPE public.subject_type AS ENUM ('visitor', 'employee');
 CREATE TYPE public.visit_to_type AS ENUM ('setor', 'pessoa');
 CREATE TYPE public.visitor_status AS ENUM ('pending', 'inside', 'outside', 'closed');
+CREATE TYPE public.audit_action_type AS ENUM (
+  'LOGIN',
+  'LOGOUT',
+  'LOGIN_FAILED',
+  'USER_CREATE',
+  'USER_UPDATE',
+  'USER_DELETE',
+  'USER_DEACTIVATE',
+  'USER_ACTIVATE',
+  'PASSWORD_RESET',
+  'PASSWORD_CHANGE',
+  'ROLE_UPDATE',
+  'CONFIG_UPDATE',
+  'VISITOR_CREATE',
+  'VISITOR_UPDATE',
+  'VISITOR_DELETE',
+  'EMPLOYEE_CREATE',
+  'EMPLOYEE_UPDATE',
+  'EMPLOYEE_DELETE',
+  'DEPARTMENT_CREATE',
+  'DEPARTMENT_DELETE',
+  'BACKUP_EXPORT',
+  'ACCESS_SCAN'
+);
 
 -- ============================================================
 -- PARTE 2: TABELAS
@@ -33,6 +57,7 @@ CREATE TABLE public.profiles (
   user_id UUID NOT NULL UNIQUE,
   full_name TEXT NOT NULL,
   must_change_password BOOLEAN NOT NULL DEFAULT false,
+  is_active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
@@ -95,6 +120,18 @@ CREATE TABLE public.access_logs (
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
 
+-- Tabela de logs de auditoria
+CREATE TABLE public.audit_logs (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  user_id UUID,
+  user_email TEXT,
+  action_type public.audit_action_type NOT NULL,
+  details JSONB DEFAULT '{}'::jsonb,
+  ip_address TEXT,
+  user_agent TEXT
+);
+
 -- Índices
 CREATE INDEX idx_visitors_pass_id ON public.visitors(pass_id);
 CREATE INDEX idx_visitors_status ON public.visitors(status);
@@ -103,6 +140,9 @@ CREATE INDEX idx_employee_credentials_credential_id ON public.employee_credentia
 CREATE INDEX idx_employee_credentials_status ON public.employee_credentials(status);
 CREATE INDEX idx_access_logs_created_at ON public.access_logs(created_at DESC);
 CREATE INDEX idx_access_logs_subject ON public.access_logs(subject_type, subject_id);
+CREATE INDEX idx_audit_logs_created_at ON public.audit_logs(created_at DESC);
+CREATE INDEX idx_audit_logs_user_id ON public.audit_logs(user_id);
+CREATE INDEX idx_audit_logs_action_type ON public.audit_logs(action_type);
 
 -- ============================================================
 -- PARTE 3: FUNÇÕES (PLpgSQL padrão)

@@ -5,72 +5,31 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Settings as SettingsIcon, Users, Activity, Shield, Plus, Trash2, Building2, UserPlus, Mail, Lock, HardDrive } from 'lucide-react';
+import { Settings as SettingsIcon, Users, Activity, Plus, Trash2, Building2, HardDrive, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { AppRole } from '@/types/visitor';
 import { Navigate } from 'react-router-dom';
 import { useDepartments } from '@/hooks/useDepartments';
+import { logAuditAction } from '@/hooks/useAuditLogs';
 import BackupRestoreTab from '@/components/settings/BackupRestoreTab';
+import AuditLogsTab from '@/components/settings/AuditLogsTab';
+import UsersManagementTab from '@/components/settings/UsersManagementTab';
 
 const Settings = () => {
-  const { user, hasRole } = useAuth();
+  const { hasRole } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [newDepartment, setNewDepartment] = useState('');
-  const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
-  const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserPassword, setNewUserPassword] = useState('');
-  const [newUserName, setNewUserName] = useState('');
-  const [newUserRole, setNewUserRole] = useState<AppRole>('security');
-  const [isCreatingUser, setIsCreatingUser] = useState(false);
 
   // Only admin can access
   if (!hasRole('admin')) {
     return <Navigate to="/dashboard" replace />;
   }
-
-  // Fetch all users with their profiles and roles
-  const { data: usersData, isLoading: isLoadingUsers } = useQuery({
-    queryKey: ['admin-users'],
-    queryFn: async () => {
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (profilesError) throw profilesError;
-
-      const { data: roles, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('*');
-
-      if (rolesError) throw rolesError;
-
-      // Combine profiles with roles
-      return (profiles || []).map(profile => ({
-        ...profile,
-        roles: (roles || [])
-          .filter(r => r.user_id === profile.user_id)
-          .map(r => r.role as AppRole),
-      }));
-    },
-  });
 
   // Fetch recent access logs
   const { data: accessLogs, isLoading: isLoadingLogs } = useQuery({
@@ -90,98 +49,6 @@ const Settings = () => {
   // Departments
   const { data: departments } = useDepartments();
 
-  // Create new user
-  const handleCreateUser = async () => {
-    if (!newUserEmail || !newUserPassword || newUserPassword.length < 6) {
-      toast({
-        title: 'Campos inválidos',
-        description: 'Preencha email e senha (mínimo 6 caracteres).',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setIsCreatingUser(true);
-
-    try {
-      // Create user via Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: newUserEmail,
-        password: newUserPassword,
-        options: {
-          emailRedirectTo: window.location.origin,
-          data: { full_name: newUserName || newUserEmail }
-        }
-      });
-
-      if (authError) throw authError;
-
-      // If we need to set a different role than security, update it
-      if (authData.user && newUserRole !== 'security') {
-        // Wait a moment for the trigger to create the default role
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Update to the selected role
-        await supabase
-          .from('user_roles')
-          .delete()
-          .eq('user_id', authData.user.id);
-
-        await supabase
-          .from('user_roles')
-          .insert({ user_id: authData.user.id, role: newUserRole });
-      }
-
-      toast({
-        title: 'Usuário criado!',
-        description: `${newUserEmail} foi adicionado ao sistema.`,
-      });
-
-      // Reset form
-      setNewUserEmail('');
-      setNewUserPassword('');
-      setNewUserName('');
-      setNewUserRole('security');
-      setIsCreateUserOpen(false);
-      
-      // Refresh users list
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
-    } catch (error: any) {
-      toast({
-        title: 'Erro ao criar usuário',
-        description: error.message,
-        variant: 'destructive',
-      });
-    } finally {
-      setIsCreatingUser(false);
-    }
-  };
-
-  // Update user role
-  const updateRole = useMutation({
-    mutationFn: async ({ userId, role }: { userId: string; role: AppRole }) => {
-      // First delete existing role
-      await supabase
-        .from('user_roles')
-        .delete()
-        .eq('user_id', userId);
-
-      // Then insert new role
-      const { error } = await supabase
-        .from('user_roles')
-        .insert({ user_id: userId, role });
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
-      toast({ title: 'Role atualizada!' });
-    },
-    onError: (error: any) => {
-      toast({ title: 'Erro', description: error.message, variant: 'destructive' });
-    },
-  });
-
   // Add department
   const addDepartment = useMutation({
     mutationFn: async (name: string) => {
@@ -190,6 +57,8 @@ const Settings = () => {
         .insert({ name });
 
       if (error) throw error;
+      
+      await logAuditAction('DEPARTMENT_CREATE', { name });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['departments'] });
@@ -203,13 +72,15 @@ const Settings = () => {
 
   // Delete department
   const deleteDepartment = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
       const { error } = await supabase
         .from('departments')
         .delete()
         .eq('id', id);
 
       if (error) throw error;
+      
+      await logAuditAction('DEPARTMENT_DELETE', { name });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['departments'] });
@@ -219,12 +90,6 @@ const Settings = () => {
       toast({ title: 'Erro', description: error.message, variant: 'destructive' });
     },
   });
-
-  const roleColors: Record<AppRole, string> = {
-    admin: 'bg-destructive text-destructive-foreground',
-    rh: 'bg-primary text-primary-foreground',
-    security: 'bg-muted text-muted-foreground',
-  };
 
   return (
     <DashboardLayout>
@@ -240,7 +105,7 @@ const Settings = () => {
         </div>
 
         <Tabs defaultValue="users" className="space-y-4">
-          <TabsList>
+          <TabsList className="flex-wrap h-auto gap-1">
             <TabsTrigger value="users" className="gap-2">
               <Users className="w-4 h-4" />
               Usuários
@@ -253,6 +118,10 @@ const Settings = () => {
               <Activity className="w-4 h-4" />
               Logs de Acesso
             </TabsTrigger>
+            <TabsTrigger value="audit" className="gap-2">
+              <FileText className="w-4 h-4" />
+              Auditoria
+            </TabsTrigger>
             <TabsTrigger value="backup" className="gap-2">
               <HardDrive className="w-4 h-4" />
               Backup
@@ -261,145 +130,7 @@ const Settings = () => {
 
           {/* Users Tab */}
           <TabsContent value="users">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <Shield className="w-5 h-5" />
-                      Gerenciar Usuários
-                    </CardTitle>
-                    <CardDescription>
-                      Crie novos usuários e gerencie permissões
-                    </CardDescription>
-                  </div>
-                  <Dialog open={isCreateUserOpen} onOpenChange={setIsCreateUserOpen}>
-                    <DialogTrigger asChild>
-                      <Button className="gap-2">
-                        <UserPlus className="w-4 h-4" />
-                        Novo Usuário
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Criar Novo Usuário</DialogTitle>
-                        <DialogDescription>
-                          Adicione um novo usuário ao sistema GUARDA OPERACIONAL
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="new-user-name">Nome Completo</Label>
-                          <Input
-                            id="new-user-name"
-                            placeholder="Nome do usuário"
-                            value={newUserName}
-                            onChange={(e) => setNewUserName(e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="new-user-email">Email</Label>
-                          <div className="relative">
-                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                              id="new-user-email"
-                              type="email"
-                              placeholder="usuario@empresa.com"
-                              value={newUserEmail}
-                              onChange={(e) => setNewUserEmail(e.target.value)}
-                              className="pl-10"
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="new-user-password">Senha</Label>
-                          <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                              id="new-user-password"
-                              type="password"
-                              placeholder="Mínimo 6 caracteres"
-                              value={newUserPassword}
-                              onChange={(e) => setNewUserPassword(e.target.value)}
-                              className="pl-10"
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Permissão</Label>
-                          <Select value={newUserRole} onValueChange={(v) => setNewUserRole(v as AppRole)}>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="admin">Admin (acesso total)</SelectItem>
-                              <SelectItem value="rh">RH (cadastros)</SelectItem>
-                              <SelectItem value="security">Segurança (scanner)</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <Button onClick={handleCreateUser} className="w-full" disabled={isCreatingUser}>
-                          {isCreatingUser ? 'Criando...' : 'Criar Usuário'}
-                        </Button>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {isLoadingUsers ? (
-                  <p className="text-muted-foreground">Carregando...</p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Role Atual</TableHead>
-                        <TableHead>Alterar Role</TableHead>
-                        <TableHead>Cadastro</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {usersData?.map((u) => (
-                        <TableRow key={u.id}>
-                          <TableCell className="font-medium">{u.full_name}</TableCell>
-                          <TableCell>
-                            <div className="flex gap-1">
-                              {u.roles.map((role: AppRole) => (
-                                <Badge key={role} className={roleColors[role]}>
-                                  {role.toUpperCase()}
-                                </Badge>
-                              ))}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Select
-                              value={u.roles[0] || 'security'}
-                              onValueChange={(value) =>
-                                updateRole.mutate({ userId: u.user_id, role: value as AppRole })
-                              }
-                              disabled={u.user_id === user?.id}
-                            >
-                              <SelectTrigger className="w-32">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="admin">Admin</SelectItem>
-                                <SelectItem value="rh">RH</SelectItem>
-                                <SelectItem value="security">Segurança</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-sm">
-                            {format(new Date(u.created_at), 'dd/MM/yyyy', { locale: ptBR })}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
+            <UsersManagementTab />
           </TabsContent>
 
           {/* Departments Tab */}
@@ -442,7 +173,7 @@ const Settings = () => {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => deleteDepartment.mutate(dept.id)}
+                        onClick={() => deleteDepartment.mutate({ id: dept.id, name: dept.name })}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -453,7 +184,7 @@ const Settings = () => {
             </Card>
           </TabsContent>
 
-          {/* Logs Tab */}
+          {/* Access Logs Tab */}
           <TabsContent value="logs">
             <Card>
               <CardHeader>
@@ -502,6 +233,11 @@ const Settings = () => {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Audit Logs Tab */}
+          <TabsContent value="audit">
+            <AuditLogsTab />
           </TabsContent>
 
           {/* Backup Tab */}

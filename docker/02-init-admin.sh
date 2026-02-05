@@ -51,9 +51,12 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$DB_NAME" <<-EOSQL
     GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
     GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
     GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+    
+    -- Permissões no schema auth (para funções auth.uid(), auth.role())
+    GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
 EOSQL
 
 echo "============================================"
 echo "  ✓ Extensões e roles criados!"
-echo "  ✓ Schema auth.* será criado pelo GoTrue"
+echo "  ✓ Schema auth criado (GoTrue gerencia tabelas)"
 echo "============================================"

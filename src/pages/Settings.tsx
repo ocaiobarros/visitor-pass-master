@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Settings as SettingsIcon, Users, Activity, Plus, Trash2, Building2, HardDrive, FileText } from 'lucide-react';
+import { Settings as SettingsIcon, Users, Activity, Plus, Trash2, Building2, HardDrive, FileText, FileBarChart } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Navigate } from 'react-router-dom';
@@ -19,6 +19,7 @@ import { logAuditAction } from '@/hooks/useAuditLogs';
 import BackupRestoreTab from '@/components/settings/BackupRestoreTab';
 import AuditLogsTab from '@/components/settings/AuditLogsTab';
 import UsersManagementTab from '@/components/settings/UsersManagementTab';
+import ReportsTab from '@/components/settings/ReportsTab';
 
 const Settings = () => {
   const { hasRole } = useAuth();
@@ -121,6 +122,10 @@ const Settings = () => {
             <TabsTrigger value="audit" className="gap-2">
               <FileText className="w-4 h-4" />
               Auditoria
+            </TabsTrigger>
+            <TabsTrigger value="reports" className="gap-2">
+              <FileBarChart className="w-4 h-4" />
+              Relatórios
             </TabsTrigger>
             <TabsTrigger value="backup" className="gap-2">
               <HardDrive className="w-4 h-4" />
@@ -238,6 +243,11 @@ const Settings = () => {
           {/* Audit Logs Tab */}
           <TabsContent value="audit">
             <AuditLogsTab />
+          </TabsContent>
+
+          {/* Reports Tab */}
+          <TabsContent value="reports">
+            <ReportsTab />
           </TabsContent>
 
           {/* Backup Tab */}

@@ -12,6 +12,7 @@ import { ptBR } from 'date-fns/locale';
 import ActivityChart from '@/components/dashboard/ActivityChart';
 import StatusWidgets from '@/components/dashboard/StatusWidgets';
 import CriticalEventsList from '@/components/dashboard/CriticalEventsList';
+import TodayStats from '@/components/dashboard/TodayStats';
 
 const Dashboard = () => {
   const { data: visitors = [], isLoading } = useVisitors();
@@ -64,6 +65,16 @@ const Dashboard = () => {
             {format(new Date(), "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
           </p>
         </div>
+
+        {/* Today Stats */}
+        <TodayStats 
+          accessLogs={accessLogs.map(log => ({
+            id: log.id,
+            created_at: log.createdAt.toISOString(),
+            direction: log.direction,
+            subject_type: log.subjectType,
+          }))} 
+        />
 
         {/* Status Widgets */}
         <StatusWidgets

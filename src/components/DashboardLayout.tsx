@@ -47,8 +47,8 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
               <Shield className="w-5 h-5 text-sidebar-primary-foreground" />
             </div>
             <div>
-              <h1 className="font-bold text-lg">WRL VisitorPass</h1>
-              <p className="text-xs text-sidebar-foreground/70">Sistema de Visitantes</p>
+              <h1 className="font-bold text-lg">GUARDA OPERACIONAL</h1>
+              <p className="text-xs text-sidebar-foreground/70">Controle de Acesso</p>
             </div>
           </div>
         </div>
@@ -98,7 +98,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
               <Shield className="w-4 h-4 text-primary-foreground" />
             </div>
-            <span className="font-bold">WRL VisitorPass</span>
+            <span className="font-bold">GUARDA OPERACIONAL</span>
           </div>
           <Button variant="ghost" size="icon" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}

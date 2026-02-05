@@ -47,8 +47,8 @@ const Login = () => {
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-primary mb-6">
             <Shield className="w-10 h-10 text-primary-foreground" />
           </div>
-          <h1 className="text-3xl font-bold text-foreground">WRL VisitorPass</h1>
-          <p className="text-muted-foreground mt-2">Sistema de Gestão de Visitantes</p>
+          <h1 className="text-3xl font-bold text-foreground">GUARDA OPERACIONAL</h1>
+          <p className="text-muted-foreground mt-2">Sistema de Controle de Acesso</p>
         </div>
 
         {/* Login Card */}

@@ -1,349 +1,356 @@
-# 🚀 Tutorial Completo: Instalação do Guarda Operacional no Debian
+# 🚀 Tutorial Completo: Instalação do Guarda Operacional em Produção
 
-## 📋 O que você vai precisar
-
-- Um servidor rodando **Debian 11 ou 12** (pode ser uma VM, VPS ou máquina física)
-- Acesso ao terminal (SSH ou direto)
-- Conexão com a internet
-- Aproximadamente **30 minutos** do seu tempo
+> **Versão:** 2.0 | **Ambiente:** Debian 12 | **Nível:** Corporativo/Industrial
 
 ---
 
-## 📦 PARTE 1: Preparando o Servidor
+## 📋 Índice
+
+1. [Requisitos](#-requisitos)
+2. [Instalação do Docker](#-parte-1-instalação-do-docker)
+3. [Deploy da Aplicação](#-parte-2-deploy-da-aplicação)
+4. [Configuração Inicial](#-parte-3-configuração-inicial)
+5. [Hardening de Segurança](#-parte-4-hardening-de-segurança)
+6. [HTTPS (Certificado SSL)](#-parte-5-https-certificado-ssl)
+7. [Backup e Recuperação](#-parte-6-backup-e-recuperação)
+8. [Modo Kiosk na Guarita](#-parte-7-modo-kiosk-na-guarita)
+9. [Validação de Segurança](#-parte-8-validação-de-segurança)
+10. [Manutenção e Operação](#-parte-9-manutenção-e-operação)
+11. [Solução de Problemas](#-solução-de-problemas)
+
+---
+
+## 📦 Requisitos
+
+### Hardware Mínimo
+
+| Componente | Mínimo | Recomendado |
+|------------|--------|-------------|
+| **CPU** | 2 cores | 4 cores |
+| **RAM** | 2 GB | 4 GB |
+| **Disco** | 20 GB | 50 GB SSD |
+| **Rede** | 100 Mbps LAN | Gigabit LAN |
+
+### Software
+
+- Debian 11 ou 12 (servidor limpo)
+- Acesso SSH com usuário sudo
+- Conexão com internet (para downloads iniciais)
+
+### Equipamento da Guarita
+
+- Monitor (mínimo 21", recomendado 24"+)
+- Leitor QR USB (Bematech S-100 ou similar)
+- Opcional: Webcam USB para scan via câmera
+
+---
+
+## 🐳 PARTE 1: Instalação do Docker
 
 ### 1.1 Conectar ao Servidor
 
-Se você está acessando remotamente, abra o terminal e conecte via SSH:
-
 ```bash
-ssh seu_usuario@IP_DO_SERVIDOR
+ssh usuario@IP_DO_SERVIDOR
 ```
 
-Exemplo:
+### 1.2 Atualizar Sistema
+
 ```bash
-ssh admin@192.168.1.100
+sudo apt update && sudo apt upgrade -y
+sudo apt install curl git wget gnupg lsb-release ca-certificates -y
 ```
 
-### 1.2 Atualizar o Sistema
-
-Primeiro, vamos garantir que o sistema está atualizado:
+### 1.3 Instalar Docker
 
 ```bash
-sudo apt update
-sudo apt upgrade -y
-```
-
-> 💡 **O que isso faz?** Atualiza a lista de pacotes e instala as versões mais recentes.
-
----
-
-## 🐳 PARTE 2: Instalando o Docker
-
-### 2.1 Instalar Dependências
-
-```bash
-sudo apt install apt-transport-https ca-certificates curl gnupg lsb-release -y
-```
-
-### 2.2 Adicionar Chave GPG do Docker
-
-```bash
+# Adicionar repositório oficial
 curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-```
 
-### 2.3 Adicionar Repositório do Docker
-
-```bash
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-```
 
-### 2.4 Instalar Docker e Docker Compose
-
-```bash
+# Instalar
 sudo apt update
 sudo apt install docker-ce docker-ce-cli containerd.io docker-compose-plugin -y
+
+# Adicionar usuário ao grupo docker
+sudo usermod -aG docker $USER
+
+# IMPORTANTE: Sair e entrar novamente para aplicar
+exit
 ```
 
-### 2.5 Verificar Instalação
+### 1.4 Verificar Instalação
 
 ```bash
+ssh usuario@IP_DO_SERVIDOR
 docker --version
 docker compose version
 ```
 
-Você deve ver algo como:
-```
-Docker version 24.x.x
-Docker Compose version v2.x.x
-```
-
-### 2.6 (Opcional) Usar Docker sem sudo
-
-Para não precisar digitar `sudo` antes de cada comando Docker:
-
-```bash
-sudo usermod -aG docker $USER
-```
-
-> ⚠️ **IMPORTANTE:** Após este comando, você precisa **sair e entrar novamente** no terminal para a mudança ter efeito.
-
-```bash
-exit
-# Conecte novamente via SSH
-ssh seu_usuario@IP_DO_SERVIDOR
-```
-
 ---
 
-## 📥 PARTE 3: Baixando o Projeto
+## 📥 PARTE 2: Deploy da Aplicação
 
-### 3.1 Instalar Git (se necessário)
-
-```bash
-sudo apt install git -y
-```
-
-### 3.2 Clonar o Repositório
+### 2.1 Baixar Projeto
 
 ```bash
 cd ~
 git clone https://github.com/ocaiobarros/visitor-pass-master.git
-```
-
-### 3.3 Entrar na Pasta do Projeto
-
-```bash
 cd visitor-pass-master
 ```
 
-### 3.4 Verificar Arquivos
+### 2.2 Gerar Credenciais Seguras
 
 ```bash
-ls -la
+# Senha do banco (32 caracteres alfanuméricos)
+DB_PASSWORD=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 32)
+echo "DB_PASSWORD: $DB_PASSWORD"
+
+# Chave JWT
+JWT_SECRET=$(openssl rand -base64 32)
+echo "JWT_SECRET: $JWT_SECRET"
+
+# IP do servidor
+HOST_IP=$(hostname -I | awk '{print $1}')
+echo "HOST_IP: $HOST_IP"
 ```
 
-Você deve ver arquivos como: `Dockerfile`, `docker-compose.yml`, `.env.example`, etc.
+> ⚠️ **ANOTE ESSES VALORES!** Você precisará deles no próximo passo.
 
----
-
-## ⚙️ PARTE 4: Configurando o Sistema
-
-### 4.1 Criar Arquivo de Configuração
+### 2.3 Configurar Ambiente
 
 ```bash
 cp .env.example .env
-```
-
-### 4.2 Gerar Chave JWT Segura
-
-Execute este comando para gerar uma chave segura automaticamente:
-
-```bash
-JWT_SECRET=$(openssl rand -base64 32)
-echo "Sua chave JWT: $JWT_SECRET"
-```
-
-> 📝 **Anote esta chave!** Você vai precisar dela no próximo passo.
-
-### 4.3 Descobrir o IP do Servidor
-
-```bash
-hostname -I | awk '{print $1}'
-```
-
-> 📝 **Anote o IP!** Exemplo: `192.168.1.100`
-
-### 4.4 Editar Configurações
-
-Abra o editor:
-
-```bash
 nano .env
 ```
 
-**Agora edite as seguintes linhas:**
+**Preencha os valores obrigatórios:**
 
 ```env
-# OBRIGATÓRIO: Coloque uma senha forte para o banco de dados
-DB_PASSWORD=MinhaSenhaForte123!
+# OBRIGATÓRIO - Cole os valores gerados acima
+DB_PASSWORD=SEU_DB_PASSWORD_GERADO
+JWT_SECRET=SEU_JWT_SECRET_GERADO
+HOST_IP=SEU_IP_DO_SERVIDOR
 
-# OBRIGATÓRIO: Cole a chave JWT que você gerou no passo 4.2
-JWT_SECRET=COLE_A_CHAVE_AQUI
+# OBRIGATÓRIO - URL do sistema
+SITE_URL=http://SEU_IP_DO_SERVIDOR
 
-# OBRIGATÓRIO: Coloque o IP do seu servidor (do passo 4.3)
-HOST_IP=192.168.1.100
-
-# OBRIGATÓRIO: Atualize a URL do site com o IP
-SITE_URL=http://192.168.1.100
-
-# OPCIONAL: Mude a senha do administrador
-ADMIN_PASSWORD=Admin@123
+# RECOMENDADO - Altere a senha padrão do admin
+ADMIN_PASSWORD=SuaSenhaForte123!
 ```
 
-**Para salvar e sair do nano:**
-1. Pressione `Ctrl + O` (letra O)
-2. Pressione `Enter` para confirmar
-3. Pressione `Ctrl + X` para sair
+Salvar: `Ctrl+O` → `Enter` → `Ctrl+X`
 
-### 4.5 Verificar Configuração
+### 2.4 Proteger Arquivo de Configuração
 
 ```bash
-cat .env | grep -E "DB_PASSWORD|JWT_SECRET|HOST_IP|SITE_URL"
+chmod 600 .env
 ```
 
-Verifique se os valores estão corretos.
-
----
-
-## 🚀 PARTE 5: Iniciando o Sistema
-
-### 5.1 Construir e Iniciar os Containers
+### 2.5 Iniciar Sistema
 
 ```bash
 docker compose up -d --build
 ```
 
-> ⏳ **Aguarde!** Este comando pode demorar de 3 a 10 minutos na primeira vez.
+> ⏳ Primeira execução leva 5-10 minutos.
 
-Você verá mensagens como:
-```
-[+] Building 120.5s (12/12) FINISHED
-[+] Running 5/5
- ✔ Container guarda-db       Started
- ✔ Container guarda-api      Started
- ✔ Container guarda-auth     Started
- ✔ Container guarda-gateway  Started
- ✔ Container guarda-app      Started
-```
-
-### 5.2 Verificar se Tudo Está Rodando
+### 2.6 Verificar Status
 
 ```bash
 docker compose ps
 ```
 
-Você deve ver todos os containers com status `Up`:
+Todos devem mostrar `Up (healthy)`:
 
 ```
 NAME              STATUS
 guarda-db         Up (healthy)
-guarda-api        Up
-guarda-auth       Up
-guarda-gateway    Up
-guarda-app        Up
+guarda-api        Up (healthy)
+guarda-auth       Up (healthy)
+guarda-gateway    Up (healthy)
+guarda-app        Up (healthy)
 ```
-
-### 5.3 Verificar Logs (se algo der errado)
-
-```bash
-docker compose logs -f
-```
-
-Pressione `Ctrl + C` para sair dos logs.
 
 ---
 
-## 🌐 PARTE 6: Acessando o Sistema
+## ⚙️ PARTE 3: Configuração Inicial
 
-### 6.1 Liberar Porta no Firewall (se necessário)
+### 3.1 Acessar Sistema
 
-```bash
-sudo ufw allow 80/tcp
-sudo ufw allow 22/tcp  # SSH
-# NÃO exponha 8000 - Kong é interno ao Docker
-```
-
-### 6.2 Acessar pelo Navegador
-
-Abra o navegador no seu computador e acesse:
+Abra no navegador:
 
 ```
 http://IP_DO_SERVIDOR
 ```
 
-Exemplo:
-```
-http://192.168.1.100
-```
-
-### 6.3 Fazer Login
-
-Use as credenciais padrão:
+### 3.2 Login Inicial
 
 | Campo | Valor |
 |-------|-------|
 | **Email** | `admin@sistema.local` |
-| **Senha** | `Admin@123` (ou a que você definiu em ADMIN_PASSWORD) |
+| **Senha** | A que você definiu em `ADMIN_PASSWORD` |
+
+### 3.3 Trocar Senha do Admin
+
+> ⚠️ **OBRIGATÓRIO** - O sistema solicitará troca de senha no primeiro login.
+
+### 3.4 Criar Usuário para Guarita
+
+1. Vá em **Configurações → Usuários**
+2. Clique em **Novo Usuário**
+3. Preencha:
+   - Nome: `Guarita Principal`
+   - Email: `guarita@sistema.local`
+   - Perfil: `security`
+   - Senha: (gere uma senha forte)
 
 ---
 
-## ✅ PARTE 7: Verificação Final
+## 🔒 PARTE 4: Hardening de Segurança
 
-### 7.1 Testar Funcionalidades
-
-1. ✅ Acessou a tela de login?
-2. ✅ Conseguiu fazer login como admin?
-3. ✅ Vê o dashboard?
-4. ✅ Consegue registrar um visitante?
-5. ✅ O scanner QR funciona?
-
-### 7.2 Testar de Outro Dispositivo
-
-Abra o navegador do seu celular e acesse o mesmo IP:
-
-```
-http://192.168.1.100
-```
-
----
-
-## 🔒 PARTE 8: Configurar HTTPS (Opcional, mas Recomendado)
-
-> ⚠️ **IMPORTANTE:** A câmera do celular só funciona com HTTPS!
-
-### 8.1 Instalar mkcert
+### 4.1 Configurar Firewall (UFW)
 
 ```bash
-sudo apt install libnss3-tools wget -y
+# Política padrão
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
 
+# Permitir apenas o necessário
+sudo ufw allow 22/tcp comment 'SSH'
+sudo ufw allow 80/tcp comment 'HTTP'
+sudo ufw allow 443/tcp comment 'HTTPS'
+
+# BLOQUEAR portas internas (segurança crítica)
+sudo ufw deny 8000/tcp comment 'Kong interno'
+sudo ufw deny 3000/tcp comment 'PostgREST interno'
+sudo ufw deny 9999/tcp comment 'Auth interno'
+sudo ufw deny 5432/tcp comment 'PostgreSQL interno'
+
+# Ativar
+sudo ufw enable
+sudo ufw status verbose
+```
+
+### 4.2 Configurar Limite de Logs do Docker
+
+```bash
+sudo nano /etc/docker/daemon.json
+```
+
+Cole:
+
+```json
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "5"
+  },
+  "no-new-privileges": true
+}
+```
+
+Reiniciar Docker:
+
+```bash
+sudo systemctl restart docker
+```
+
+### 4.3 Hardening SSH
+
+```bash
+sudo nano /etc/ssh/sshd_config
+```
+
+Garanta estas configurações:
+
+```
+PermitRootLogin no
+PasswordAuthentication no  # Use chave SSH
+MaxAuthTries 3
+```
+
+Reiniciar SSH:
+
+```bash
+sudo systemctl restart sshd
+```
+
+### 4.4 Instalar Fail2Ban
+
+```bash
+sudo apt install fail2ban -y
+sudo systemctl enable fail2ban
+sudo systemctl start fail2ban
+```
+
+---
+
+## 🔐 PARTE 5: HTTPS (Certificado SSL)
+
+> ⚠️ **IMPORTANTE:** A câmera do celular requer HTTPS para funcionar!
+
+### Opção A: Rede Interna (mkcert)
+
+Para redes internas sem domínio público:
+
+```bash
+# Instalar mkcert
+sudo apt install libnss3-tools wget -y
 wget -O mkcert https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64
 chmod +x mkcert
 sudo mv mkcert /usr/local/bin/
-```
 
-### 8.2 Gerar Certificado
-
-Substitua `192.168.1.100` pelo IP do seu servidor:
-
-```bash
+# Gerar certificado para o IP
 cd ~/visitor-pass-master
 mkcert -install
-mkcert 192.168.1.100
+mkcert $(hostname -I | awk '{print $1}')
+
+# Mover certificados
+mkdir -p docker/certs
+mv *.pem docker/certs/
+mv *-key.pem docker/certs/key.pem
+mv docker/certs/*.pem docker/certs/cert.pem 2>/dev/null || true
 ```
 
-### 8.3 Mover Certificados
+### Opção B: Domínio Público (Let's Encrypt)
+
+Para servidores com domínio público:
 
 ```bash
-mkdir -p docker/certs
-mv 192.168.1.100.pem docker/certs/cert.pem
-mv 192.168.1.100-key.pem docker/certs/key.pem
+# Instalar Certbot
+sudo apt install certbot python3-certbot-nginx -y
+
+# Gerar certificado
+sudo certbot --nginx -d seu-dominio.com.br
+
+# Testar renovação
+sudo certbot renew --dry-run
 ```
 
-### 8.4 Atualizar Nginx para HTTPS
+### Atualizar Nginx para HTTPS
+
+Edite `docker/nginx.conf`:
 
 ```bash
 nano docker/nginx.conf
 ```
 
-Substitua todo o conteúdo por:
+Adicione no início (após as diretivas existentes):
 
 ```nginx
+# Redirecionar HTTP para HTTPS
 server {
     listen 80;
     server_name _;
     return 301 https://$host$request_uri;
 }
+```
 
+E modifique o bloco principal para:
+
+```nginx
 server {
     listen 443 ssl http2;
     server_name _;
@@ -351,26 +358,15 @@ server {
     ssl_certificate /etc/nginx/certs/cert.pem;
     ssl_certificate_key /etc/nginx/certs/key.pem;
     
-    root /usr/share/nginx/html;
-    index index.html;
-    
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
+    # ... resto das configurações ...
 }
 ```
 
-### 8.5 Atualizar docker-compose para Montar Certificados
-
-```bash
-nano docker-compose.yml
-```
-
-Encontre a seção `app:` e adicione o volume de certificados:
+Atualizar `docker-compose.yml` para montar certificados:
 
 ```yaml
   app:
-    # ... outras configurações ...
+    # ... outras configs ...
     volumes:
       - ./docker/certs:/etc/nginx/certs:ro
     ports:
@@ -378,301 +374,399 @@ Encontre a seção `app:` e adicione o volume de certificados:
       - "443:443"
 ```
 
-### 8.6 Reiniciar
+Reiniciar:
 
 ```bash
 docker compose down
 docker compose up -d --build
 ```
 
-### 8.7 Acessar com HTTPS
-
-```
-https://192.168.1.100
-```
-
-> ⚠️ O navegador pode mostrar um aviso de certificado. Clique em "Avançado" → "Continuar".
-
 ---
 
-## 🛠️ Comandos Úteis do Dia a Dia
+## 💾 PARTE 6: Backup e Recuperação
 
-### Parar o Sistema
-```bash
-cd ~/visitor-pass-master
-docker compose down
-```
-
-### Iniciar o Sistema
-```bash
-cd ~/visitor-pass-master
-docker compose up -d
-```
-
-### Reiniciar Tudo
-```bash
-cd ~/visitor-pass-master
-docker compose restart
-```
-
-### Ver Logs em Tempo Real
-```bash
-docker compose logs -f
-```
-
-### Ver Logs de um Serviço Específico
-```bash
-docker compose logs -f guarda-app
-docker compose logs -f guarda-db
-```
-
-### Fazer Backup do Banco de Dados (Manual)
-```bash
-mkdir -p ~/backups
-docker compose exec guarda-db pg_dump -U postgres guarda_operacional > ~/backups/backup_$(date +%Y%m%d_%H%M%S).sql
-```
-
-### Restaurar Backup
-```bash
-docker compose exec -T guarda-db psql -U postgres guarda_operacional < ~/backups/backup_20240115.sql
-```
-
-### Atualizar para Nova Versão
-```bash
-cd ~/visitor-pass-master
-git pull
-docker compose up -d --build
-```
-
----
-
-## 🔄 PARTE 9: Backup Automático (Recomendado)
-
-Configure backup automático diário para não perder dados.
-
-### 9.1 Criar Diretório de Backups
+### 6.1 Configurar Backup Automático
 
 ```bash
+# Criar diretório
 sudo mkdir -p /var/backups/guarda-operacional
 sudo chown $USER:$USER /var/backups/guarda-operacional
+chmod 700 /var/backups/guarda-operacional
 ```
 
-### 9.2 Criar Script de Backup
+### 6.2 Script de Backup
 
-```bash
-nano ~/visitor-pass-master/backup.sh
-```
-
-Cole o seguinte conteúdo:
-
-```bash
-#!/bin/bash
-# ============================================
-# Guarda Operacional - Backup Automático
-# ============================================
-
-BACKUP_DIR="/var/backups/guarda-operacional"
-PROJECT_DIR="$HOME/visitor-pass-master"
-DATE=$(date +%Y%m%d_%H%M%S)
-RETENTION_DAYS=30
-
-# Criar backup
-cd $PROJECT_DIR
-docker compose exec -T guarda-db pg_dump -U postgres guarda_operacional > "$BACKUP_DIR/backup_$DATE.sql"
-
-# Comprimir
-gzip "$BACKUP_DIR/backup_$DATE.sql"
-
-# Remover backups antigos (manter últimos 30 dias)
-find $BACKUP_DIR -name "backup_*.sql.gz" -mtime +$RETENTION_DAYS -delete
-
-echo "Backup concluído: backup_$DATE.sql.gz"
-```
-
-### 9.3 Tornar Executável
+O projeto já inclui `backup.sh`. Torne-o executável:
 
 ```bash
 chmod +x ~/visitor-pass-master/backup.sh
 ```
 
-### 9.4 Agendar Backup Diário (2h da manhã)
+### 6.3 Agendar Backup Diário
 
 ```bash
 crontab -e
 ```
 
-Adicione a linha no final:
+Adicione:
 
-```
+```cron
+# Backup diário às 2h da manhã
 0 2 * * * /home/SEU_USUARIO/visitor-pass-master/backup.sh >> /var/log/guarda-backup.log 2>&1
+
+# Limpeza de backups > 30 dias
+5 2 * * * find /var/backups/guarda-operacional -name "*.sql.gz" -mtime +30 -delete
 ```
 
-> ⚠️ Substitua `SEU_USUARIO` pelo seu nome de usuário real.
-
-### 9.5 Testar Backup
+### 6.4 Testar Backup
 
 ```bash
 ~/visitor-pass-master/backup.sh
 ls -la /var/backups/guarda-operacional/
 ```
 
----
-
-## 🔒 PARTE 10: Hardening de Segurança (Produção)
-
-### 10.1 Firewall Correto
-
-**IMPORTANTE:** Não exponha portas internas desnecessariamente.
+### 6.5 Restaurar Backup
 
 ```bash
-# Permitir apenas HTTP/HTTPS
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw allow 22/tcp  # SSH
-
-# BLOQUEAR portas internas (Kong, PostgREST, Auth, DB)
-sudo ufw deny 8000/tcp
-sudo ufw deny 3000/tcp
-sudo ufw deny 9999/tcp
-sudo ufw deny 5432/tcp
-
-# Ativar firewall
-sudo ufw enable
-sudo ufw status
+# ATENÇÃO: Isso sobrescreve todos os dados!
+gunzip -c /var/backups/guarda-operacional/ARQUIVO_BACKUP.sql.gz | \
+  docker compose exec -T guarda-db psql -U postgres guarda_operacional
 ```
-
-### 10.2 Senha do Banco Ultra-Forte
-
-Gere uma senha aleatória de 32 caracteres:
-
-```bash
-DB_PASSWORD=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 32)
-echo "Sua senha do banco: $DB_PASSWORD"
-```
-
-Atualize no `.env`:
-
-```bash
-nano .env
-# Cole a senha gerada em DB_PASSWORD=
-```
-
-### 10.3 Limitar Acesso ao Docker
-
-```bash
-# Garantir que apenas root e grupo docker acessem
-sudo chmod 660 /var/run/docker.sock
-```
-
-### 10.4 Logs de Auditoria
-
-O sistema já possui tabela `audit_logs` que registra:
-- ✅ Logins/Logouts
-- ✅ Criação de visitantes
-- ✅ Alterações de usuários
-- ✅ Scans de acesso
-
-Acesse em: **Configurações → Logs de Auditoria**
 
 ---
 
-## 🌐 PARTE 11: HTTPS com Let's Encrypt (Domínio Público)
+## 🖥️ PARTE 7: Modo Kiosk na Guarita
 
-Se você tem um domínio público apontando para o servidor:
-
-### 11.1 Instalar Certbot
+### 7.1 Instalar Chromium
 
 ```bash
-sudo apt install certbot python3-certbot-nginx -y
+sudo apt install chromium -y
 ```
 
-### 11.2 Gerar Certificado
+### 7.2 Criar Script de Auto-Start
 
 ```bash
-sudo certbot --nginx -d seu-dominio.com.br
+nano ~/start-kiosk.sh
 ```
 
-### 11.3 Renovação Automática
-
-O Certbot já configura renovação automática. Teste com:
+Cole:
 
 ```bash
-sudo certbot renew --dry-run
+#!/bin/bash
+# ============================================
+# Guarda Operacional - Modo Kiosk
+# ============================================
+
+# Esperar rede e sistema
+sleep 10
+
+# Desabilitar screensaver
+xset s off
+xset -dpms
+xset s noblank
+
+# Iniciar Chromium em modo kiosk
+chromium \
+  --kiosk \
+  --noerrdialogs \
+  --disable-infobars \
+  --disable-session-crashed-bubble \
+  --disable-restore-session-state \
+  --no-first-run \
+  --start-fullscreen \
+  "http://localhost/scan/kiosk"
 ```
 
-> 💡 Para rede interna sem domínio, use mkcert conforme PARTE 8.
+Tornar executável:
+
+```bash
+chmod +x ~/start-kiosk.sh
+```
+
+### 7.3 Configurar Auto-Start no Boot
+
+Para LXDE/Raspberry Pi:
+
+```bash
+mkdir -p ~/.config/autostart
+nano ~/.config/autostart/kiosk.desktop
+```
+
+Cole:
+
+```ini
+[Desktop Entry]
+Type=Application
+Name=Guarda Kiosk
+Exec=/home/SEU_USUARIO/start-kiosk.sh
+X-GNOME-Autostart-enabled=true
+```
+
+Para systemd (servidores headless com display):
+
+```bash
+sudo nano /etc/systemd/system/guarda-kiosk.service
+```
+
+Cole:
+
+```ini
+[Unit]
+Description=Guarda Operacional Kiosk
+After=graphical.target
+
+[Service]
+Type=simple
+User=SEU_USUARIO
+Environment=DISPLAY=:0
+ExecStart=/home/SEU_USUARIO/start-kiosk.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=graphical.target
+```
+
+Ativar:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable guarda-kiosk
+```
+
+### 7.4 Operação do Kiosk
+
+| Ação | Como fazer |
+|------|------------|
+| **Sair do Kiosk** | Clique 3x rápido no logo |
+| **Tela cheia** | Automático ao iniciar |
+| **Scan** | Basta apontar QR no leitor USB |
+| **Reset** | Tela volta sozinha após 3 segundos |
 
 ---
 
-## ❓ Problemas Comuns
+## ✅ PARTE 8: Validação de Segurança
 
-### "Não consigo acessar pelo navegador"
+### 8.1 Executar Script de Validação
 
-1. Verifique se o container está rodando:
-   ```bash
-   docker compose ps
-   ```
+O projeto inclui um script de validação corporativa:
 
-2. Verifique o IP correto:
-   ```bash
-   hostname -I
-   ```
+```bash
+chmod +x ~/visitor-pass-master/validate-security.sh
+~/visitor-pass-master/validate-security.sh --full
+```
 
-3. Libere o firewall:
-   ```bash
-   sudo ufw allow 80
-   ```
+### 8.2 Saída Esperada
 
-### "Erro ao fazer login"
+```
+============================================
+ GUARDA OPERACIONAL - SECURITY VALIDATION
+============================================
+Timestamp: 2026-02-05T14:30:00-03:00
+Hostname: servidor-guarita
 
-1. Verifique os logs do auth:
-   ```bash
-   docker compose logs guarda-auth
-   ```
+[PASS] Porta 5432 não exposta
+[PASS] Porta 3000 não exposta
+[PASS] Porta 9999 não exposta
+[PASS] Porta 8000 não exposta
+[PASS] Container guarda-db sem portas publicadas
+[PASS] NAT/DNAT sem bypass indevido
+[PASS] Header X-Content-Type-Options presente
+[PASS] .env tem permissão 600
+[PASS] Backup recente encontrado
+[PASS] Restore testado com sucesso
 
-2. Verifique se o banco inicializou corretamente:
-   ```bash
-   docker compose logs guarda-db
-   ```
+SUMMARY
+Pass: 15 | Warn: 1 | Fail: 0 | Critical: 0
+
+✅ VALIDATION PASSED
+```
+
+### 8.3 Gerar Evidência para Auditoria
+
+```bash
+~/visitor-pass-master/validate-security.sh --json > /var/log/guarda/validation-$(date +%Y%m%d).json
+```
+
+---
+
+## 🛠️ PARTE 9: Manutenção e Operação
+
+### Comandos do Dia a Dia
+
+```bash
+cd ~/visitor-pass-master
+
+# Ver status
+docker compose ps
+
+# Ver logs
+docker compose logs -f
+
+# Reiniciar sistema
+docker compose restart
+
+# Parar sistema
+docker compose down
+
+# Iniciar sistema
+docker compose up -d
+
+# Atualizar para nova versão
+git pull
+docker compose up -d --build
+```
+
+### Monitoramento
+
+```bash
+# Uso de recursos
+docker stats
+
+# Espaço em disco
+df -h
+
+# Logs de auditoria (no sistema)
+# Acesse: Configurações → Logs de Auditoria
+```
+
+### Atualização Controlada
+
+```bash
+# 1. Backup primeiro
+./backup.sh
+
+# 2. Pull do código
+git pull origin main
+
+# 3. Rebuild
+docker compose up -d --build
+
+# 4. Verificar
+docker compose ps
+curl -s http://localhost/health
+
+# 5. Se falhar, rollback
+git checkout HEAD~1
+docker compose up -d --build
+```
+
+---
+
+## ❓ Solução de Problemas
 
 ### "Container não inicia"
 
-1. Veja os logs detalhados:
-   ```bash
-   docker compose logs
-   ```
+```bash
+docker compose logs NOME_DO_CONTAINER
+```
 
-2. Reconstrua do zero:
-   ```bash
-   docker compose down -v
-   docker compose up -d --build
-   ```
+### "Erro de conexão com banco"
+
+1. Verifique `DB_PASSWORD` no `.env`
+2. Aguarde 30s após `docker compose up`
+3. Recrie o banco (ATENÇÃO: perde dados):
+
+```bash
+docker compose down -v
+docker compose up -d --build
+```
+
+### "Página não carrega"
+
+```bash
+# Verificar IP
+hostname -I
+
+# Verificar firewall
+sudo ufw status
+
+# Verificar porta 80
+sudo ss -tulpn | grep :80
+```
 
 ### "Câmera não funciona no celular"
 
-A câmera requer HTTPS. Siga a **PARTE 8** deste tutorial.
+- A câmera requer HTTPS
+- Siga a **PARTE 5** para configurar SSL
+
+### "QR não é lido"
+
+1. Verifique se o leitor USB está conectado
+2. Teste com `cat` e escaneie - deve imprimir texto
+3. Verifique se o formato é `VP-XXXXXXXX` ou `EC-XXXXXXXX`
+
+### "Login não funciona"
+
+```bash
+# Verificar logs do auth
+docker compose logs guarda-auth
+
+# Recriar usuário admin
+docker compose exec guarda-db psql -U postgres guarda_operacional -c "
+  UPDATE auth.users SET encrypted_password = crypt('NovaSenha123!', gen_salt('bf'))
+  WHERE email = 'admin@sistema.local';
+"
+```
 
 ---
 
-## 🎉 Parabéns!
+## 📊 Arquitetura Final
 
-Se você chegou até aqui, o sistema **Guarda Operacional** está instalado e funcionando no seu servidor Debian!
-
-**Resumo do que foi instalado:**
-- 📦 Docker e Docker Compose
-- 🗄️ PostgreSQL (banco de dados)
-- 🔐 GoTrue (autenticação)
-- 🔌 PostgREST (API REST)
-- 🚪 Kong (API Gateway)
-- 🌐 Nginx (servidor web)
-
-**Próximos passos sugeridos:**
-1. Criar usuários adicionais (perfil security para guarita)
-2. Cadastrar departamentos
-3. Testar o fluxo completo de visitantes
-4. Configurar backup automático
+```
+                    INTERNET/LAN
+                         │
+                    ┌────▼────┐
+                    │   UFW   │ (22, 80, 443)
+                    └────┬────┘
+                         │
+                 ┌───────▼───────┐
+                 │  Nginx/App    │ :80/:443
+                 │ (Frontend)    │
+                 └───────┬───────┘
+                         │
+        ┌────────────────┼────────────────┐
+        │                │                │
+   ┌────▼────┐     ┌─────▼─────┐    ┌─────▼─────┐
+   │  Kong   │     │ PostgREST │    │  GoTrue   │
+   │ Gateway │     │   (API)   │    │  (Auth)   │
+   └────┬────┘     └─────┬─────┘    └─────┬─────┘
+        │                │                │
+        └────────────────┼────────────────┘
+                         │
+                  ┌──────▼──────┐
+                  │ PostgreSQL  │
+                  │   (Dados)   │
+                  └─────────────┘
+                  
+        [Todos internos - sem portas expostas]
+```
 
 ---
 
-*Tutorial criado para o projeto Guarda Operacional*
-*Versão: 1.0 | Data: 2024*
+## ✅ Checklist Final de Produção
+
+- [ ] Docker instalado e funcionando
+- [ ] Sistema acessível via navegador
+- [ ] Login admin funcionando
+- [ ] Senha admin alterada
+- [ ] Usuário de guarita criado
+- [ ] Firewall UFW configurado
+- [ ] HTTPS configurado (se necessário câmera)
+- [ ] Backup automático configurado
+- [ ] Backup testado (restore funciona)
+- [ ] Validação de segurança passou
+- [ ] Modo kiosk configurado (se aplicável)
+
+---
+
+## 📞 Suporte
+
+- **Repositório:** https://github.com/ocaiobarros/visitor-pass-master
+- **Issues:** https://github.com/ocaiobarros/visitor-pass-master/issues
+- **Documentação:** Ver pasta `docs/`
+
+---
+
+*Guarda Operacional v2.0 - Sistema de Controle de Acesso*
+*Deploy self-hosted para ambientes corporativos*

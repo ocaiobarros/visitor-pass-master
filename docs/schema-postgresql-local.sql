@@ -185,20 +185,10 @@ END;
 $$;
 
 -- ============================================================
--- NOTA SOBRE FUNÇÕES DE AUTENTICAÇÃO
--- ============================================================
--- As funções abaixo usam auth.uid() que é específico do Supabase.
--- Para PostgreSQL local, você precisará implementar sua própria
--- lógica de autenticação. Sugestões:
--- 
--- 1. Usar variáveis de sessão: SET my_app.current_user_id = 'uuid';
--- 2. Criar uma função wrapper: 
---    CREATE FUNCTION auth.uid() RETURNS uuid AS $$
---      SELECT current_setting('my_app.current_user_id', true)::uuid;
---    $$ LANGUAGE sql STABLE;
+-- FUNÇÕES DE AUTORIZAÇÃO (para PostgREST + GoTrue)
 -- ============================================================
 
--- Função para verificar se usuário tem role (ADAPTAR para local)
+-- Função para verificar se usuário tem role
 CREATE OR REPLACE FUNCTION public.has_role(check_role app_role)
 RETURNS boolean
 LANGUAGE plpgsql
@@ -206,16 +196,15 @@ SECURITY DEFINER
 SET search_path TO 'public'
 AS $$
 BEGIN
-  -- Para PostgreSQL local, substitua auth.uid() pela sua lógica
   RETURN EXISTS (
     SELECT 1 FROM public.user_roles
-    WHERE user_id = current_setting('app.current_user_id', true)::uuid
+    WHERE user_id = auth.uid()
       AND role = check_role
   );
 END;
 $$;
 
--- Função para verificar se é admin ou RH (ADAPTAR para local)
+-- Função para verificar se é admin ou RH
 CREATE OR REPLACE FUNCTION public.is_admin_or_rh()
 RETURNS boolean
 LANGUAGE plpgsql
@@ -223,16 +212,15 @@ SECURITY DEFINER
 SET search_path TO 'public'
 AS $$
 BEGIN
-  -- Para PostgreSQL local, substitua pela sua lógica de auth
   RETURN EXISTS (
     SELECT 1 FROM public.user_roles
-    WHERE user_id = current_setting('app.current_user_id', true)::uuid
+    WHERE user_id = auth.uid()
       AND role IN ('admin', 'rh')
   );
 END;
 $$;
 
--- Função para lidar com novo usuário (ADAPTAR para seu sistema de auth)
+-- Função para lidar com novo usuário (GoTrue)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -243,18 +231,18 @@ BEGIN
   -- Criar perfil
   INSERT INTO public.profiles (user_id, full_name, must_change_password)
   VALUES (
-    NEW.id, 
-    COALESCE(NEW.full_name, NEW.email),
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
     CASE WHEN NEW.email = 'admin@sistema.local' THEN true ELSE false END
   );
-  
+
   -- Atribuir role baseado no email
   IF NEW.email = 'admin@sistema.local' THEN
     INSERT INTO public.user_roles (user_id, role) VALUES (NEW.id, 'admin');
   ELSE
     INSERT INTO public.user_roles (user_id, role) VALUES (NEW.id, 'security');
   END IF;
-  
+
   RETURN NEW;
 END;
 $$;
@@ -345,7 +333,7 @@ CREATE POLICY "Profiles visíveis para autenticados"
 
 CREATE POLICY "Usuários editam próprio perfil"
   ON public.profiles FOR UPDATE
-  USING (user_id = current_setting('app.current_user_id', true)::uuid);
+  USING (user_id = auth.uid());
 
 -- Políticas para user_roles
 CREATE POLICY "Roles visíveis para autenticados"
@@ -397,7 +385,7 @@ CREATE POLICY "Logs visíveis para autenticados"
 
 CREATE POLICY "Autenticados criam logs"
   ON public.access_logs FOR INSERT
-  WITH CHECK (true);
+  WITH CHECK (auth.uid() IS NOT NULL);
 
 -- ============================================================
 -- FIM DO SCRIPT

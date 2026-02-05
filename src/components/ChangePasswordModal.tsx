@@ -51,15 +51,22 @@ const ChangePasswordModal = ({ open, onPasswordChanged, isRequired = false }: Ch
     try {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
       // Update profile to mark password as changed
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        await supabase
+        const { error: profileError } = await supabase
           .from('profiles')
           .update({ must_change_password: false })
           .eq('user_id', user.id);
+        
+        if (profileError) {
+          console.error('Error updating profile:', profileError);
+          // Don't throw - password was changed successfully
+        }
       }
 
       toast({
@@ -67,11 +74,16 @@ const ChangePasswordModal = ({ open, onPasswordChanged, isRequired = false }: Ch
         description: 'Sua nova senha foi salva com sucesso.',
       });
 
+      // Reset form
+      setNewPassword('');
+      setConfirmPassword('');
+      
       onPasswordChanged();
     } catch (error: any) {
+      console.error('Password change error:', error);
       toast({
         title: 'Erro ao alterar senha',
-        description: error.message,
+        description: error.message || 'Ocorreu um erro inesperado.',
         variant: 'destructive',
       });
     } finally {

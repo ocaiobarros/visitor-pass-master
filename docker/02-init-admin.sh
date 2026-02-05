@@ -27,52 +27,88 @@ EOSQL
 
 echo "→ Criando schema de autenticação..."
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$DB_NAME" <<-EOSQL
-    -- Schema para autenticação (compatível com Supabase GoTrue)
+    -- Schema para autenticação (compatível com GoTrue)
     CREATE SCHEMA IF NOT EXISTS auth;
-    
-    -- Tabela de usuários do auth
+
+    -- Tabelas mínimas esperadas pelo GoTrue (evita conflito de migração/índices)
     CREATE TABLE IF NOT EXISTS auth.users (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        email TEXT UNIQUE NOT NULL,
-        encrypted_password TEXT,
-        email_confirmed_at TIMESTAMPTZ,
-        invited_at TIMESTAMPTZ,
-        confirmation_token TEXT,
-        confirmation_sent_at TIMESTAMPTZ,
-        recovery_token TEXT,
-        recovery_sent_at TIMESTAMPTZ,
-        email_change_token_new TEXT,
-        email_change TEXT,
-        email_change_sent_at TIMESTAMPTZ,
-        last_sign_in_at TIMESTAMPTZ,
-        raw_app_meta_data JSONB DEFAULT '{}'::jsonb,
-        raw_user_meta_data JSONB DEFAULT '{}'::jsonb,
-        is_super_admin BOOLEAN DEFAULT false,
-        role TEXT DEFAULT 'authenticated',
-        created_at TIMESTAMPTZ DEFAULT now(),
-        updated_at TIMESTAMPTZ DEFAULT now(),
-        phone TEXT,
-        phone_confirmed_at TIMESTAMPTZ,
-        phone_change TEXT,
-        phone_change_token TEXT,
-        phone_change_sent_at TIMESTAMPTZ,
-        confirmed_at TIMESTAMPTZ GENERATED ALWAYS AS (
-            LEAST(email_confirmed_at, phone_confirmed_at)
-        ) STORED,
-        email_change_token_current TEXT,
-        email_change_confirm_status SMALLINT DEFAULT 0,
-        banned_until TIMESTAMPTZ,
-        reauthentication_token TEXT,
-        reauthentication_sent_at TIMESTAMPTZ,
-        is_sso_user BOOLEAN DEFAULT false,
-        deleted_at TIMESTAMPTZ
+        instance_id uuid NULL,
+        id uuid NOT NULL UNIQUE,
+        aud varchar(255) NULL,
+        "role" varchar(255) NULL,
+        email varchar(255) NULL UNIQUE,
+        encrypted_password varchar(255) NULL,
+        confirmed_at timestamptz NULL,
+        invited_at timestamptz NULL,
+        confirmation_token varchar(255) NULL,
+        confirmation_sent_at timestamptz NULL,
+        recovery_token varchar(255) NULL,
+        recovery_sent_at timestamptz NULL,
+        email_change_token varchar(255) NULL,
+        email_change varchar(255) NULL,
+        email_change_sent_at timestamptz NULL,
+        last_sign_in_at timestamptz NULL,
+        raw_app_meta_data jsonb NULL,
+        raw_user_meta_data jsonb NULL,
+        is_super_admin bool NULL,
+        created_at timestamptz NULL,
+        updated_at timestamptz NULL,
+        CONSTRAINT users_pkey PRIMARY KEY (id)
     );
-    
-    -- Índices para auth.users
-    CREATE INDEX IF NOT EXISTS users_email_idx ON auth.users (email);
-    
+
+    CREATE INDEX IF NOT EXISTS users_instance_id_email_idx ON auth.users USING btree (instance_id, email);
+    CREATE INDEX IF NOT EXISTS users_instance_id_idx ON auth.users USING btree (instance_id);
+
+    CREATE TABLE IF NOT EXISTS auth.refresh_tokens (
+        instance_id uuid NULL,
+        id bigserial NOT NULL,
+        "token" varchar(255) NULL,
+        user_id varchar(255) NULL,
+        revoked bool NULL,
+        created_at timestamptz NULL,
+        updated_at timestamptz NULL,
+        CONSTRAINT refresh_tokens_pkey PRIMARY KEY (id)
+    );
+
+    CREATE INDEX IF NOT EXISTS refresh_tokens_instance_id_idx ON auth.refresh_tokens USING btree (instance_id);
+    CREATE INDEX IF NOT EXISTS refresh_tokens_instance_id_user_id_idx ON auth.refresh_tokens USING btree (instance_id, user_id);
+    CREATE INDEX IF NOT EXISTS refresh_tokens_token_idx ON auth.refresh_tokens USING btree ("token");
+
+    CREATE TABLE IF NOT EXISTS auth.instances (
+        id uuid NOT NULL,
+        uuid uuid NULL,
+        raw_base_config text NULL,
+        created_at timestamptz NULL,
+        updated_at timestamptz NULL,
+        CONSTRAINT instances_pkey PRIMARY KEY (id)
+    );
+
+    CREATE TABLE IF NOT EXISTS auth.audit_log_entries (
+        instance_id uuid NULL,
+        id uuid NOT NULL,
+        payload json NULL,
+        created_at timestamptz NULL,
+        CONSTRAINT audit_log_entries_pkey PRIMARY KEY (id)
+    );
+
+    CREATE INDEX IF NOT EXISTS audit_logs_instance_id_idx ON auth.audit_log_entries USING btree (instance_id);
+
+    CREATE TABLE IF NOT EXISTS auth.schema_migrations (
+        "version" varchar(255) NOT NULL,
+        CONSTRAINT schema_migrations_pkey PRIMARY KEY ("version")
+    );
+
+    -- Funções usadas por RLS/PostgREST (claims do JWT)
+    CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid AS $$
+      SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
+    $$ LANGUAGE sql STABLE;
+
+    CREATE OR REPLACE FUNCTION auth.role() RETURNS text AS $$
+      SELECT nullif(current_setting('request.jwt.claim.role', true), '')::text;
+    $$ LANGUAGE sql STABLE;
+
     -- Roles para API
-    DO \$\$
+    DO $$
     BEGIN
         IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'anon') THEN
             CREATE ROLE anon NOLOGIN;
@@ -84,8 +120,8 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$DB_NAME" <<-EOSQL
             CREATE ROLE service_role NOLOGIN;
         END IF;
     END
-    \$\$;
-    
+    $$;
+
     -- Permissões
     GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
     GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
@@ -102,23 +138,31 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$DB_NAME" \
     -v admin_email="$ADMIN_EMAIL" \
     -v admin_password="$ADMIN_PASSWORD" \
     -v admin_name="$ADMIN_NAME" <<-'EOSQL'
-    -- Inserir usuário admin no auth.users
+    -- Inserir usuário admin no auth.users (compatível com GoTrue)
     INSERT INTO auth.users (
+        instance_id,
         id,
+        aud,
+        "role",
         email,
         encrypted_password,
-        email_confirmed_at,
+        confirmed_at,
+        raw_app_meta_data,
         raw_user_meta_data,
-        role,
+        is_super_admin,
         created_at,
         updated_at
     ) VALUES (
+        NULL,
         uuid_generate_v4(),
+        'authenticated',
+        'authenticated',
         :'admin_email',
         crypt(:'admin_password', gen_salt('bf')),
         now(),
+        jsonb_build_object('provider', 'email', 'providers', jsonb_build_array('email')),
         jsonb_build_object('full_name', :'admin_name'),
-        'authenticated',
+        false,
         now(),
         now()
     ) ON CONFLICT (email) DO NOTHING;

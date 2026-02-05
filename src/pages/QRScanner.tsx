@@ -7,10 +7,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { QrCode, UserCheck, UserX, AlertTriangle, CheckCircle, Ban, Car, User, Building2, Info } from 'lucide-react';
+import { QrCode, UserCheck, UserX, AlertTriangle, CheckCircle, Ban, Car, User, Building2, Info, Camera } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Visitor, EmployeeCredential } from '@/types/visitor';
+import CameraScannerModal from '@/components/CameraScannerModal';
 
 type ScanResult = {
   type: 'visitor';
@@ -25,6 +26,7 @@ const QRScanner = () => {
   const [searchCode, setSearchCode] = useState('');
   const [scanResult, setScanResult] = useState<ScanResult>(null);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   
   const { toast } = useToast();
@@ -103,6 +105,19 @@ const QRScanner = () => {
     setSearchCode(code);
     setQrCode('');
     // Focus will be restored by useEffect
+  };
+
+  const handleCameraScan = (code: string) => {
+    const normalizedCode = code.toUpperCase().trim();
+    setQrCode('');
+    setScanError(null);
+    setScanResult(null);
+    
+    if (normalizedCode.startsWith('VP-') || normalizedCode.startsWith('EC-')) {
+      setSearchCode(normalizedCode);
+    } else {
+      setScanError('Código inválido. Use VP-XXXXXXXX para visitantes ou EC-XXXXXXXX para colaboradores.');
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -245,7 +260,7 @@ const QRScanner = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex gap-4">
+            <div className="flex gap-2 sm:gap-4">
               <Input
                 ref={inputRef}
                 placeholder="VP-XXXXXXXX ou EC-XXXXXXXX"
@@ -256,15 +271,31 @@ const QRScanner = () => {
                 autoFocus
                 autoComplete="off"
               />
-              <Button onClick={handleScan} size="lg" disabled={isLoading}>
+              <Button 
+                variant="outline" 
+                size="lg" 
+                onClick={() => setCameraOpen(true)}
+                className="shrink-0 gap-2"
+              >
+                <Camera className="w-5 h-5" />
+                <span className="hidden sm:inline">Câmera</span>
+              </Button>
+              <Button onClick={handleScan} size="lg" disabled={isLoading} className="shrink-0">
                 {isLoading ? 'Buscando...' : 'Verificar'}
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              💡 O leitor USB envia o código + Enter automaticamente
+              💡 Use o leitor USB ou toque em "Câmera" para escanear pelo celular
             </p>
           </CardContent>
         </Card>
+
+        {/* Camera Scanner Modal */}
+        <CameraScannerModal
+          open={cameraOpen}
+          onClose={() => setCameraOpen(false)}
+          onScan={handleCameraScan}
+        />
 
         {/* Scan Error */}
         {scanError && (

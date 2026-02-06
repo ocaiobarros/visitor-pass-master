@@ -246,6 +246,110 @@ app.post('/logs', (req, res) => {
 });
 
 // ==========================================
+// POST /audit - Auditoria Server-Side (RLS Compliant)
+// Acessível via Kong em /admin/v1/audit (strip_path)
+// ==========================================
+app.post('/audit', async (req, res) => {
+  try {
+    // Validar token do usuário (qualquer authenticated)
+    const authHeader = req.headers.authorization;
+    let actorId = null;
+    let actorEmail = null;
+    let actorRole = 'anonymous';
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      
+      try {
+        const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+        
+        if (!userError && user) {
+          actorId = user.id;
+          actorEmail = user.email;
+          
+          // Buscar role do usuário
+          const { data: roles } = await supabaseAdmin
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', user.id)
+            .limit(1);
+          
+          if (roles && roles.length > 0) {
+            actorRole = roles[0].role;
+          }
+        }
+      } catch {
+        // Token inválido, continuar como anonymous
+      }
+    }
+
+    // Extrair dados do evento
+    const { 
+      action_type, 
+      action,
+      resource,
+      details = {},
+      metadata = {}
+    } = req.body;
+
+    // Validar action_type
+    const validActionTypes = [
+      'LOGIN', 'LOGOUT', 'LOGIN_FAILED',
+      'USER_CREATE', 'USER_UPDATE', 'USER_DELETE', 'USER_DEACTIVATE', 'USER_ACTIVATE',
+      'PASSWORD_RESET', 'PASSWORD_CHANGE', 'ROLE_UPDATE', 'CONFIG_UPDATE',
+      'VISITOR_CREATE', 'VISITOR_UPDATE', 'VISITOR_DELETE',
+      'EMPLOYEE_CREATE', 'EMPLOYEE_UPDATE', 'EMPLOYEE_DELETE',
+      'DEPARTMENT_CREATE', 'DEPARTMENT_DELETE',
+      'BACKUP_EXPORT', 'ACCESS_SCAN'
+    ];
+
+    const finalActionType = action_type || action || 'CONFIG_UPDATE';
+    
+    if (!validActionTypes.includes(finalActionType)) {
+      return res.status(400).json({ error: `Invalid action_type: ${finalActionType}` });
+    }
+
+    // Normalizar evento
+    const auditEvent = {
+      user_id: actorId,
+      user_email: actorEmail,
+      action_type: finalActionType,
+      details: {
+        ...details,
+        ...metadata,
+        actor_role: actorRole,
+        resource: resource || null,
+        ip_address: req.ip || req.connection?.remoteAddress,
+        user_agent: req.headers['user-agent'],
+      },
+      ip_address: req.ip || req.connection?.remoteAddress,
+      user_agent: req.headers['user-agent'],
+    };
+
+    // Inserir usando SERVICE_ROLE_KEY (bypassa RLS)
+    const { error: insertError } = await supabaseAdmin
+      .from('audit_logs')
+      .insert(auditEvent);
+
+    if (insertError) {
+      logger.logError('Erro ao inserir audit log', insertError, auditEvent);
+      return res.status(500).json({ error: 'Failed to create audit log' });
+    }
+
+    logger.info('Audit log criado', { 
+      action_type: finalActionType, 
+      actor: actorEmail || 'anonymous',
+      resource 
+    });
+
+    return res.json({ success: true });
+  } catch (err) {
+    logger.logError('Erro no endpoint /admin/audit', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ==========================================
 // GET /debug/log-test - Testa o sistema de logs
 // ==========================================
 app.get('/debug/log-test', (req, res) => {

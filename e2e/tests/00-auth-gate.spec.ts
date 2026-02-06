@@ -1,248 +1,227 @@
 /**
  * ============================================
- * AUTH SMOKE GATE - Fail-Fast Authentication Test
+ * AUTH SMOKE GATE (PROTOCOLO 2026)
  * ============================================
- * 
- * Este teste BLOQUEIA toda a suíte E2E se a autenticação falhar.
- * 
- * Validações:
- *   ✓ HTTP 200 do endpoint /auth/v1/token
- *   ✓ access_token presente
- *   ✓ JWT com 3 partes (x.y.z)
- *   ✓ exp no futuro
- *   ✓ role efetiva = admin
- * 
- * IMPORTANTE:
- *   - NÃO usa SDK do Supabase
- *   - NÃO usa UI
- *   - Fail-fast: process.exit(1) em caso de falha
- * 
- * ============================================
+ * PROVA A (Auth API, sem UI, sem SDK):
+ *   POST /auth/v1/token?grant_type=password
+ *   - apikey SEMPRE por header
+ *   - loga status + body sanitizado (tokens mascarados)
+ *
+ * PROVA B (RBAC real do app):
+ *   - request autenticada com Authorization: Bearer <access_token>
+ *   - lê fonte real: public.user_roles
+ *   - valida role=admin
+ *
+ * Fail-fast: process.exit(1) imediatamente em qualquer falha.
  */
 
 import { test, expect } from '@playwright/test';
 
-// Configuração
 const BASE_URL = process.env.BASE_URL || process.env.API_URL || 'http://localhost:8000';
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@sistema.local';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@123';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const ANON_KEY = process.env.ANON_KEY || '';
 
-interface TokenResponse {
+type TokenResponse = {
   access_token?: string;
   token_type?: string;
   expires_in?: number;
   refresh_token?: string;
-  user?: {
-    id: string;
-    email: string;
-    role?: string;
-  };
   error?: string;
   error_description?: string;
-}
+};
 
-interface JWTPayload {
+type JWTPayload = {
   sub?: string;
   email?: string;
-  role?: string;
   exp?: number;
-  iat?: number;
-  aud?: string;
+  role?: string;
+  aud?: string | string[];
   iss?: string;
-  app_metadata?: {
-    provider?: string;
-  };
-  user_metadata?: {
-    full_name?: string;
+};
+
+function maskToken(token?: string, keep = 12) {
+  if (!token) return undefined;
+  if (token.length <= keep * 2) return `${token.substring(0, 4)}...${token.substring(token.length - 4)}`;
+  return `${token.substring(0, keep)}...${token.substring(token.length - keep)}`;
+}
+
+function sanitizeTokenResponse(body: TokenResponse) {
+  return {
+    ...body,
+    access_token: maskToken(body.access_token),
+    refresh_token: maskToken(body.refresh_token),
   };
 }
 
-function decodeJWT(token: string): JWTPayload | null {
+function decodeJWT(token: string): JWTPayload {
+  const parts = token.split('.');
+  if (parts.length !== 3) throw new Error('JWT inválido (não tem 3 partes)');
+  const payloadJson = Buffer.from(parts[1], 'base64').toString('utf8');
+  return JSON.parse(payloadJson) as JWTPayload;
+}
+
+async function readJsonSafe(res: Response): Promise<unknown> {
+  const text = await res.text();
   try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    
-    const payload = Buffer.from(parts[1], 'base64').toString('utf8');
-    return JSON.parse(payload);
+    return JSON.parse(text);
   } catch {
-    return null;
+    // limitar output
+    return text.length > 2000 ? `${text.slice(0, 2000)}…` : text;
   }
 }
 
-function printDiagnostics(context: string, data: unknown) {
+function failFast(context: string, details: Record<string, unknown>) {
   console.error('\n============================================');
-  console.error(`AUTH GATE FAILURE: ${context}`);
+  console.error(`AUTH GATE FAIL-FAST: ${context}`);
   console.error('============================================');
-  console.error('Response:', JSON.stringify(data, null, 2));
-  console.error('Environment:');
-  console.error(`  BASE_URL: ${BASE_URL}`);
-  console.error(`  ADMIN_EMAIL: ${ADMIN_EMAIL}`);
-  console.error(`  ADMIN_PASSWORD: ${'*'.repeat(ADMIN_PASSWORD.length)}`);
-  console.error(`  ANON_KEY: ${ANON_KEY ? ANON_KEY.substring(0, 20) + '...' : '(not set)'}`);
+  console.error(JSON.stringify(details, null, 2));
   console.error('============================================\n');
+  process.exit(1);
 }
 
-test.describe('Auth Smoke Gate', () => {
-  test('autenticação admin funciona via HTTP direto', async () => {
+test.describe('00 - Auth Gate (Fail-Fast)', () => {
+  test('PROVA A + PROVA B (token + RBAC user_roles)', async () => {
     // ========================================
-    // STEP 1: POST /auth/v1/token
+    // Fail-fast env validation
+    // ========================================
+    if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
+      failFast('Missing ADMIN_EMAIL/ADMIN_PASSWORD', {
+        ADMIN_EMAIL: ADMIN_EMAIL || '(missing)',
+        ADMIN_PASSWORD: ADMIN_PASSWORD ? 'SET' : '(missing)',
+        BASE_URL,
+      });
+    }
+    if (!ANON_KEY) {
+      failFast('Missing ANON_KEY', { BASE_URL });
+    }
+
+    // ========================================
+    // PROVA A — Auth API (NO UI, NO SDK)
     // ========================================
     const tokenUrl = `${BASE_URL}/auth/v1/token?grant_type=password`;
-    
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    
-    if (ANON_KEY) {
-      headers['apikey'] = ANON_KEY;
-      headers['Authorization'] = `Bearer ${ANON_KEY}`;
-    }
-    
-    let response: Response;
-    let body: TokenResponse;
-    
+
+    let tokenRes: Response;
+    let tokenBodyUnknown: unknown;
+
     try {
-      response = await fetch(tokenUrl, {
+      tokenRes = await fetch(tokenUrl, {
         method: 'POST',
-        headers,
-        body: JSON.stringify({
-          email: ADMIN_EMAIL,
-          password: ADMIN_PASSWORD,
-        }),
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: ANON_KEY,
+          Authorization: `Bearer ${ANON_KEY}`,
+        },
+        body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }),
       });
-      
-      body = await response.json() as TokenResponse;
+      tokenBodyUnknown = await readJsonSafe(tokenRes);
     } catch (err) {
-      printDiagnostics('Network error', { error: String(err) });
-      console.error('FATAL: Não foi possível conectar ao servidor de autenticação');
-      process.exit(1);
+      failFast('Network error calling /auth/v1/token', {
+        tokenUrl,
+        error: String(err),
+      });
     }
-    
-    // ========================================
-    // STEP 2: Validar HTTP 200
-    // ========================================
-    if (response.status !== 200) {
-      printDiagnostics(`HTTP ${response.status}`, body);
-      console.error('FATAL: Autenticação retornou status não-200');
-      console.error(`Erro: ${body.error_description || body.error || 'Unknown'}`);
-      process.exit(1);
+
+    const tokenBody = (tokenBodyUnknown ?? {}) as TokenResponse;
+
+    // Log obrigatório (status + body sanitizado)
+    console.log('[PROVA A] /auth/v1/token status:', tokenRes.status);
+    console.log('[PROVA A] /auth/v1/token body:', JSON.stringify(sanitizeTokenResponse(tokenBody), null, 2));
+
+    if (tokenRes.status !== 200) {
+      failFast(`PROVA A failed (HTTP ${tokenRes.status})`, {
+        tokenUrl,
+        status: tokenRes.status,
+        body: sanitizeTokenResponse(tokenBody),
+      });
     }
-    
-    // ========================================
-    // STEP 3: Validar access_token presente
-    // ========================================
-    if (!body.access_token) {
-      printDiagnostics('Missing access_token', body);
-      console.error('FATAL: Resposta não contém access_token');
-      process.exit(1);
+
+    if (!tokenBody.access_token) {
+      failFast('PROVA A failed (missing access_token)', {
+        status: tokenRes.status,
+        body: sanitizeTokenResponse(tokenBody),
+      });
     }
-    
-    // ========================================
-    // STEP 4: Validar JWT com 3 partes
-    // ========================================
-    const tokenParts = body.access_token.split('.');
-    if (tokenParts.length !== 3) {
-      printDiagnostics('Invalid JWT format', { access_token: body.access_token.substring(0, 50) + '...' });
-      console.error('FATAL: access_token não é um JWT válido (precisa ter 3 partes)');
-      process.exit(1);
+
+    const parts = tokenBody.access_token.split('.');
+    if (parts.length !== 3) {
+      failFast('PROVA A failed (access_token not JWT 3 parts)', {
+        access_token: maskToken(tokenBody.access_token),
+      });
     }
-    
-    // ========================================
-    // STEP 5: Decodificar e validar payload
-    // ========================================
-    const payload = decodeJWT(body.access_token);
-    if (!payload) {
-      printDiagnostics('JWT decode failed', { access_token: body.access_token.substring(0, 50) + '...' });
-      console.error('FATAL: Não foi possível decodificar o JWT');
-      process.exit(1);
+
+    let payload: JWTPayload;
+    try {
+      payload = decodeJWT(tokenBody.access_token);
+    } catch (err) {
+      failFast('PROVA A failed (JWT decode)', {
+        access_token: maskToken(tokenBody.access_token),
+        error: String(err),
+      });
     }
-    
-    // ========================================
-    // STEP 6: Validar exp no futuro
-    // ========================================
+
     const now = Math.floor(Date.now() / 1000);
     if (!payload.exp || payload.exp <= now) {
-      printDiagnostics('Token expired', { exp: payload.exp, now });
-      console.error('FATAL: Token já expirou ou não tem exp');
-      process.exit(1);
+      failFast('PROVA A failed (token exp invalid)', { exp: payload.exp, now });
     }
-    
-    // ========================================
-    // STEP 7: Validar que temos user id
-    // ========================================
+
     if (!payload.sub) {
-      printDiagnostics('Missing sub claim', payload);
-      console.error('FATAL: JWT não contém claim sub (user id)');
-      process.exit(1);
+      failFast('PROVA A failed (missing sub)', payload as unknown as Record<string, unknown>);
     }
-    
+
     // ========================================
-    // STEP 8: Verificar role admin via banco
+    // PROVA B — RBAC real (user_roles)
     // ========================================
-    // Fazer request para verificar role no banco
     const rolesUrl = `${BASE_URL}/rest/v1/user_roles?user_id=eq.${payload.sub}&select=role`;
-    
+
+    let rolesRes: Response;
+    let rolesBodyUnknown: unknown;
+
     try {
-      const rolesResponse = await fetch(rolesUrl, {
+      rolesRes = await fetch(rolesUrl, {
         method: 'GET',
         headers: {
-          'apikey': ANON_KEY || body.access_token,
-          'Authorization': `Bearer ${body.access_token}`,
+          apikey: ANON_KEY,
+          Authorization: `Bearer ${tokenBody.access_token}`,
         },
       });
-      
-      if (rolesResponse.ok) {
-        const roles = await rolesResponse.json() as Array<{ role: string }>;
-        const isAdmin = roles.some(r => r.role === 'admin');
-        
-        if (!isAdmin) {
-          printDiagnostics('User is not admin', { user_id: payload.sub, roles });
-          console.error('FATAL: Usuário não tem role admin');
-          process.exit(1);
-        }
-        
-        console.log('✓ Role admin confirmada via banco');
-      } else {
-        // Se não conseguir verificar role, apenas logar warning
-        console.warn('⚠ Não foi possível verificar role via banco (continuando...)');
-      }
-    } catch {
-      console.warn('⚠ Erro ao verificar role via banco (continuando...)');
-    }
-    
-    // ========================================
-    // SUCCESS
-    // ========================================
-    console.log('\n============================================');
-    console.log('  ✓ AUTH SMOKE GATE PASSED');
-    console.log('============================================');
-    console.log(`  User ID: ${payload.sub}`);
-    console.log(`  Email: ${payload.email || ADMIN_EMAIL}`);
-    console.log(`  Token expires: ${new Date(payload.exp * 1000).toISOString()}`);
-    console.log('============================================\n');
-    
-    // Asserções do Playwright para registro
-    expect(response.status).toBe(200);
-    expect(body.access_token).toBeTruthy();
-    expect(tokenParts.length).toBe(3);
-    expect(payload.exp).toBeGreaterThan(now);
-    expect(payload.sub).toBeTruthy();
-  });
-  
-  test('endpoint de saúde da API responde', async () => {
-    // Teste simples de conectividade
-    const healthUrl = `${BASE_URL}/auth/v1/health`;
-    
-    try {
-      const response = await fetch(healthUrl);
-      // GoTrue pode retornar 200 ou 404 dependendo da versão
-      expect([200, 404]).toContain(response.status);
-      console.log(`✓ Auth service respondeu com status ${response.status}`);
+      rolesBodyUnknown = await readJsonSafe(rolesRes);
     } catch (err) {
-      console.error('FATAL: Não foi possível conectar ao serviço de autenticação');
-      console.error(err);
-      process.exit(1);
+      failFast('PROVA B network error reading RBAC', {
+        rolesUrl,
+        error: String(err),
+      });
     }
+
+    console.log('[PROVA B] RBAC source: public.user_roles');
+    console.log('[PROVA B] GET user_roles status:', rolesRes.status);
+    console.log('[PROVA B] GET user_roles body:', JSON.stringify(rolesBodyUnknown, null, 2));
+
+    if (!rolesRes.ok) {
+      failFast(`PROVA B failed (HTTP ${rolesRes.status})`, {
+        rolesUrl,
+        status: rolesRes.status,
+        body: rolesBodyUnknown,
+        hint: 'Erro típico aqui é 401/403/42501 (RLS/headers).',
+      });
+    }
+
+    const roles = Array.isArray(rolesBodyUnknown) ? (rolesBodyUnknown as Array<{ role?: string }>) : [];
+    const isAdmin = roles.some((r) => r.role === 'admin');
+
+    if (!isAdmin) {
+      failFast('PROVA B failed (admin role missing)', {
+        user_id: payload.sub,
+        roles,
+      });
+    }
+
+    console.log('✓ Auth Gate PASSED (token OK + role admin OK)');
+
+    // Asserções (para registrar no report)
+    expect(tokenRes.status).toBe(200);
+    expect(parts.length).toBe(3);
+    expect(payload.exp).toBeGreaterThan(now);
+    expect(isAdmin).toBeTruthy();
   });
 });

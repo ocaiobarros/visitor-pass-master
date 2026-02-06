@@ -4,7 +4,7 @@ export default defineConfig({
   testDir: './tests',
   fullyParallel: false, // Sequencial para evitar race conditions no DB
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 1,
+  retries: 0,
   workers: 1, // Single worker para testes determinísticos
   reporter: [
     ['list'],

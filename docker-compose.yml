@@ -158,13 +158,16 @@ services:
         condition: service_healthy
     environment:
       KONG_DATABASE: "off"
-      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+      # Gera o config declarativo em runtime para injetar o ANON_KEY do .env
+      KONG_DECLARATIVE_CONFIG: /tmp/kong.yml
+      ANON_KEY: ${ANON_KEY:?Defina ANON_KEY no .env}
       KONG_DNS_ORDER: LAST,A,CNAME
       KONG_PLUGINS: request-transformer,cors,key-auth,acl,rate-limiting
       KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
       KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
     volumes:
-      - ./docker/kong.yml:/kong/kong.yml:ro
+      - ./docker/kong.template.yml:/kong/kong.template.yml:ro
+    command: ["sh", "-c", "sed \"s|__ANON_KEY__|$ANON_KEY|g\" /kong/kong.template.yml > /tmp/kong.yml && kong docker-start"]
     # SEGURANÇA: Expor apenas para localhost (nginx no host faz proxy)
     # Em produção, use: 127.0.0.1:8000:8000
     ports:

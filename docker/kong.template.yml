@@ -1,0 +1,176 @@
+# ============================================
+# Guarda Operacional - Kong API Gateway Config (TEMPLATE)
+# ============================================
+# Roteamento + Rate Limiting + CORS
+# 
+# IMPORTANTE:
+# - Este arquivo é um template. O docker-compose gera /tmp/kong.yml
+#   substituindo __ANON_KEY__ pelo valor de ANON_KEY do .env.
+# ============================================
+
+_format_version: "3.0"
+_transform: true
+
+services:
+  # API REST (PostgREST)
+  - name: rest
+    url: http://postgrest:3000
+    routes:
+      - name: rest-all
+        strip_path: true
+        paths:
+          - /rest/v1/
+        plugins:
+          - name: cors
+            config:
+              origins:
+                - "*"
+              methods:
+                - GET
+                - POST
+                - PUT
+                - PATCH
+                - DELETE
+                - OPTIONS
+              headers:
+                - Accept
+                - Accept-Version
+                - Accept-Profile
+                - Authorization
+                - Content-Length
+                - Content-Type
+                - Content-Profile
+                - Date
+                - Prefer
+                - X-Client-Info
+                - apikey
+                - x-supabase-api-version
+                - x-supabase-client-platform
+                - x-supabase-client-platform-version
+                - x-supabase-client-runtime
+                - x-supabase-client-runtime-version
+              exposed_headers:
+                - Content-Range
+              credentials: true
+              max_age: 3600
+              preflight_continue: false
+          - name: key-auth
+            config:
+              key_names:
+                - apikey
+              key_in_header: true
+              key_in_query: true
+              key_in_body: false
+              hide_credentials: false
+              run_on_preflight: false
+          - name: rate-limiting
+            config:
+              minute: 60
+              policy: local
+              fault_tolerant: true
+              hide_client_headers: false
+
+  # Autenticação (GoTrue)
+  - name: auth
+    url: http://auth:9999
+    routes:
+      - name: auth-all
+        strip_path: true
+        paths:
+          - /auth/v1/
+        plugins:
+          - name: cors
+            config:
+              origins:
+                - "*"
+              methods:
+                - GET
+                - POST
+                - PUT
+                - PATCH
+                - DELETE
+                - OPTIONS
+              headers:
+                - Accept
+                - Accept-Profile
+                - Authorization
+                - Content-Type
+                - Content-Profile
+                - Prefer
+                - X-Client-Info
+                - apikey
+                - x-supabase-api-version
+                - x-supabase-client-platform
+                - x-supabase-client-platform-version
+                - x-supabase-client-runtime
+                - x-supabase-client-runtime-version
+              credentials: true
+              max_age: 3600
+              preflight_continue: false
+          - name: key-auth
+            config:
+              key_names:
+                - apikey
+              key_in_header: true
+              key_in_query: true
+              key_in_body: false
+              hide_credentials: false
+              run_on_preflight: false
+          - name: rate-limiting
+            config:
+              minute: 10
+              policy: local
+              fault_tolerant: true
+              hide_client_headers: false
+
+  # Admin API (criação de usuários)
+  - name: admin-api
+    url: http://admin-api:3001
+    routes:
+      - name: admin-api-all
+        strip_path: true
+        paths:
+          - /admin/v1/
+        plugins:
+          - name: cors
+            config:
+              origins:
+                - "*"
+              methods:
+                - GET
+                - POST
+                - OPTIONS
+              headers:
+                - Accept
+                - Authorization
+                - Content-Type
+                - X-Client-Info
+                - apikey
+              credentials: true
+              max_age: 3600
+              preflight_continue: false
+          - name: rate-limiting
+            config:
+              minute: 10
+              policy: local
+              fault_tolerant: true
+              hide_client_headers: false
+
+consumers:
+  - username: anon
+    keyauth_credentials:
+      - key: __ANON_KEY__
+
+plugins:
+  - name: request-transformer
+    config:
+      add:
+        headers:
+          - "X-Request-Id:$(uuid)"
+
+  - name: rate-limiting
+    config:
+      minute: 100
+      policy: local
+      fault_tolerant: true
+      hide_client_headers: false

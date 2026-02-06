@@ -309,76 +309,122 @@ ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.visitors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.employee_credentials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.access_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- Políticas para departments
 CREATE POLICY "Departamentos visíveis para autenticados"
   ON public.departments FOR SELECT
+  TO authenticated
   USING (true);
 
 CREATE POLICY "Admin gerencia departamentos"
   ON public.departments FOR ALL
+  TO authenticated
   USING (has_role('admin'));
 
 -- Políticas para profiles
 CREATE POLICY "Profiles visíveis para autenticados"
   ON public.profiles FOR SELECT
+  TO authenticated
   USING (true);
 
 CREATE POLICY "Usuários editam próprio perfil"
   ON public.profiles FOR UPDATE
+  TO authenticated
   USING (user_id = public.current_user_id());
+
+-- Service role pode inserir profiles (para admin-api)
+CREATE POLICY "Service role insere profiles"
+  ON public.profiles FOR INSERT
+  TO service_role
+  WITH CHECK (true);
 
 -- Políticas para user_roles
 CREATE POLICY "Roles visíveis para autenticados"
   ON public.user_roles FOR SELECT
+  TO authenticated
   USING (true);
 
 CREATE POLICY "Admin gerencia roles"
   ON public.user_roles FOR ALL
+  TO authenticated
   USING (has_role('admin'));
+
+-- Service role pode inserir roles (para admin-api)
+CREATE POLICY "Service role insere roles"
+  ON public.user_roles FOR INSERT
+  TO service_role
+  WITH CHECK (true);
 
 -- Políticas para visitors
 CREATE POLICY "Visitantes visíveis para autenticados"
   ON public.visitors FOR SELECT
+  TO authenticated
   USING (true);
 
 CREATE POLICY "RH/Admin criam visitantes"
   ON public.visitors FOR INSERT
+  TO authenticated
   WITH CHECK (is_admin_or_rh());
 
 CREATE POLICY "RH/Admin editam visitantes"
   ON public.visitors FOR UPDATE
+  TO authenticated
   USING (is_admin_or_rh());
 
 CREATE POLICY "Security atualiza status visitante"
   ON public.visitors FOR UPDATE
+  TO authenticated
   USING (has_role('security'));
 
 -- Políticas para employee_credentials
 CREATE POLICY "Credenciais visíveis para autenticados"
   ON public.employee_credentials FOR SELECT
+  TO authenticated
   USING (true);
 
 CREATE POLICY "RH/Admin criam credenciais"
   ON public.employee_credentials FOR INSERT
+  TO authenticated
   WITH CHECK (is_admin_or_rh());
 
 CREATE POLICY "RH/Admin editam credenciais"
   ON public.employee_credentials FOR UPDATE
+  TO authenticated
   USING (is_admin_or_rh());
 
 CREATE POLICY "RH/Admin deletam credenciais"
   ON public.employee_credentials FOR DELETE
+  TO authenticated
   USING (is_admin_or_rh());
 
 -- Políticas para access_logs
 CREATE POLICY "Logs visíveis para autenticados"
   ON public.access_logs FOR SELECT
+  TO authenticated
   USING (true);
 
 CREATE POLICY "Autenticados criam logs"
   ON public.access_logs FOR INSERT
+  TO authenticated
   WITH CHECK (public.current_user_id() IS NOT NULL);
+
+-- Políticas para audit_logs
+CREATE POLICY "Audit logs visíveis para admin"
+  ON public.audit_logs FOR SELECT
+  TO authenticated
+  USING (has_role('admin'));
+
+CREATE POLICY "Autenticados inserem audit logs"
+  ON public.audit_logs FOR INSERT
+  TO authenticated
+  WITH CHECK (true);
+
+-- Service role pode inserir audit logs (para admin-api)
+CREATE POLICY "Service role insere audit logs"
+  ON public.audit_logs FOR INSERT
+  TO service_role
+  WITH CHECK (true);
 
 -- ============================================================
 -- FIM DO SCRIPT

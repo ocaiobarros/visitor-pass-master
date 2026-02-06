@@ -30,6 +30,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { logAuditAction } from '@/hooks/useAuditLogs';
+import { apiConfig } from '@/config/branding';
 import { 
   Shield, 
   UserPlus, 
@@ -105,7 +106,7 @@ const UsersManagementTab = () => {
     return matchesSearch && matchesStatus;
   }) || [];
 
-  // Create new user via edge function (doesn't log out current user)
+  // Create new user via admin-api (local) or edge function (cloud)
   const handleCreateUser = async () => {
     if (!newUserEmail || !newUserPassword || newUserPassword.length < 6) {
       toast({
@@ -126,21 +127,52 @@ const UsersManagementTab = () => {
         throw new Error('Sessão expirada. Faça login novamente.');
       }
 
-      const response = await supabase.functions.invoke('admin-create-user', {
-        body: {
-          email: newUserEmail,
-          password: newUserPassword,
-          full_name: newUserName || newUserEmail,
-          role: newUserRole,
-        },
-      });
+      // Check if admin-api is available (self-hosted)
+      const adminApiUrl = apiConfig.adminApiUrl;
+      
+      let result;
+      
+      if (adminApiUrl) {
+        // Use local admin-api (self-hosted Docker)
+        const response = await fetch(`${adminApiUrl}/admin/create-user`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            email: newUserEmail,
+            password: newUserPassword,
+            full_name: newUserName || newUserEmail,
+            role: newUserRole,
+          }),
+        });
 
-      if (response.error) {
-        throw new Error(response.error.message || 'Erro ao criar usuário');
-      }
+        result = await response.json();
 
-      if (response.data?.error) {
-        throw new Error(response.data.error);
+        if (!response.ok) {
+          throw new Error(result.error || 'Erro ao criar usuário');
+        }
+      } else {
+        // Use Supabase edge function (Cloud)
+        const response = await supabase.functions.invoke('admin-create-user', {
+          body: {
+            email: newUserEmail,
+            password: newUserPassword,
+            full_name: newUserName || newUserEmail,
+            role: newUserRole,
+          },
+        });
+
+        if (response.error) {
+          throw new Error(response.error.message || 'Erro ao criar usuário');
+        }
+
+        if (response.data?.error) {
+          throw new Error(response.data.error);
+        }
+
+        result = response.data;
       }
 
       toast({

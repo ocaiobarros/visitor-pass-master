@@ -18,6 +18,15 @@ export const branding = {
   useLogo: true,
 } as const;
 
+// API configuration for self-hosted environments
+export const apiConfig = {
+  // Admin API URL - used for creating users without logging out admin
+  // In Docker self-hosted: set via VITE_ADMIN_API_URL build arg
+  // Falls back to supabase URL + /admin/v1 path
+  adminApiUrl: import.meta.env.VITE_ADMIN_API_URL || 
+    (import.meta.env.VITE_SUPABASE_URL ? `${import.meta.env.VITE_SUPABASE_URL}/admin/v1` : ''),
+};
+
 // Helper to generate page titles
 export const getPageTitle = (page?: string): string => {
   if (page) {

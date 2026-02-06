@@ -104,7 +104,7 @@ const QRScanner = () => {
     return () => clearTimeout(timer);
   }, [searchCode, visitor, credential, isLoadingVisitor, isLoadingCredential]);
 
-  const handleScan = () => {
+  const handleScan = async () => {
     if (!qrCode.trim()) {
       toast({
         title: 'Código vazio',
@@ -127,8 +127,40 @@ const QRScanner = () => {
 
     setSearchCode(code);
     setQrCode('');
-    // Focus will be restored by useEffect
+    // Auto-registro será feito pelo useEffect após dados carregarem
   };
+
+  // Auto-registrar entrada quando dados carregarem (após Verificar)
+  const [autoRegister, setAutoRegister] = useState(false);
+  
+  useEffect(() => {
+    if (!autoRegister || !scanResult) return;
+    
+    const doAutoRegister = async () => {
+      setAutoRegister(false);
+      
+      if (scanResult.type === 'visitor') {
+        const v = scanResult.data;
+        if (v.status !== 'inside' && v.status !== 'closed' && new Date() <= new Date(v.validUntil)) {
+          await handleCheckIn();
+        }
+      } else if (scanResult.type === 'employee') {
+        const c = scanResult.data;
+        if (c.status !== 'blocked') {
+          await handleCheckIn();
+        }
+      }
+    };
+    
+    doAutoRegister();
+  }, [scanResult, autoRegister]);
+
+  // Trigger auto-register quando searchCode muda
+  useEffect(() => {
+    if (searchCode) {
+      setAutoRegister(true);
+    }
+  }, [searchCode]);
 
   const handleCameraScan = (code: string) => {
     const normalizedCode = code.toUpperCase().trim();

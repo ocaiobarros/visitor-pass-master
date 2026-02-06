@@ -95,9 +95,12 @@ const Login = () => {
     await logAuditAction('PASSWORD_CHANGE', { first_login: true });
     setShowPasswordModal(false);
     
-    // Force refresh profile cache to pick up the must_change_password = false
-    // This prevents the modal from reappearing
-    window.location.href = '/dashboard';
+    // Force full page reload to clear all React Query cache and re-fetch profile
+    // This ensures must_change_password = false is picked up from DB
+    // Using window.location.href forces a complete state reset
+    setTimeout(() => {
+      window.location.href = '/dashboard';
+    }, 500); // Small delay to ensure DB update propagated
   };
 
   // Show loading while auth is initializing

@@ -207,6 +207,10 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       LOG_DIR: /var/log/visitor-pass
       SERVICE_NAME: admin-api
+      # Credenciais do admin inicial (bootstrap)
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@sistema.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin@123}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrador}
     volumes:
       - /var/log/visitor-pass:/var/log/visitor-pass
     expose:
@@ -254,6 +258,38 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    networks:
+      - guarda-internal
+
+  # ==========================================
+  # E2E Tests - Playwright
+  # ==========================================
+  e2e:
+    build:
+      context: ./e2e
+      dockerfile: Dockerfile
+    container_name: guarda-e2e
+    profiles:
+      - test
+    depends_on:
+      app:
+        condition: service_healthy
+      kong:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+      postgrest:
+        condition: service_healthy
+      admin-api:
+        condition: service_healthy
+    environment:
+      BASE_URL: http://guarda-app
+      ANON_KEY: ${ANON_KEY}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@sistema.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin@123}
+      CI: "true"
+    volumes:
+      - ./e2e-artifacts:/e2e-artifacts
     networks:
       - guarda-internal
 

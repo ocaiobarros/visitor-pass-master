@@ -6,11 +6,15 @@
  * 
  * Endpoints:
  *   POST /admin/create-user
+ *   POST /logs - Recebe logs do frontend
+ *   GET /debug/log-test - Testa o sistema de logs
+ *   GET /health
  */
 
 const express = require('express');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
+const logger = require('./logger');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -18,10 +22,9 @@ const PORT = process.env.PORT || 3001;
 // Configuração
 const SUPABASE_URL = process.env.SUPABASE_URL || 'http://kong:8000';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const JWT_SECRET = process.env.JWT_SECRET;
 
 if (!SERVICE_ROLE_KEY) {
-  console.error('FATAL: SUPABASE_SERVICE_ROLE_KEY não definida!');
+  logger.fatal('SUPABASE_SERVICE_ROLE_KEY não definida!');
   process.exit(1);
 }
 
@@ -39,13 +42,27 @@ app.use(cors({
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'apikey'],
 }));
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
+
+// Request logging middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    // Não logar health checks para evitar spam
+    if (req.path !== '/health') {
+      logger.logRequest(req, res.statusCode, duration);
+    }
+  });
+  next();
+});
 
 // Middleware de autenticação (verifica se chamador é admin)
 const requireAdmin = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      logger.warn('Tentativa de acesso sem token', { path: req.path, ip: req.ip });
       return res.status(401).json({ error: 'Token não fornecido' });
     }
 
@@ -55,6 +72,7 @@ const requireAdmin = async (req, res, next) => {
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     
     if (userError || !user) {
+      logger.warn('Token inválido', { path: req.path, ip: req.ip, error: userError?.message });
       return res.status(401).json({ error: 'Token inválido' });
     }
 
@@ -65,24 +83,27 @@ const requireAdmin = async (req, res, next) => {
       .eq('user_id', user.id);
 
     if (rolesError) {
-      console.error('Erro ao verificar roles:', rolesError);
+      logger.logError('Erro ao verificar roles', rolesError, { userId: user.id });
       return res.status(500).json({ error: 'Erro ao verificar permissões' });
     }
 
     const isAdmin = roles?.some(r => r.role === 'admin');
     if (!isAdmin) {
+      logger.warn('Acesso negado - usuário não é admin', { userId: user.id, email: user.email });
       return res.status(403).json({ error: 'Acesso negado - requer permissão de admin' });
     }
 
     req.adminUser = user;
     next();
   } catch (error) {
-    console.error('Erro de autenticação:', error);
+    logger.logError('Erro de autenticação', error);
     return res.status(500).json({ error: 'Erro interno de autenticação' });
   }
 };
 
+// ==========================================
 // POST /admin/create-user
+// ==========================================
 app.post('/admin/create-user', requireAdmin, async (req, res) => {
   try {
     const { email, password, full_name, role = 'security' } = req.body;
@@ -101,7 +122,11 @@ app.post('/admin/create-user', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Role inválida' });
     }
 
-    console.log(`[admin-api] Criando usuário: ${email} (role: ${role})`);
+    logger.info(`Criando usuário: ${email} (role: ${role})`, { 
+      createdBy: req.adminUser.email,
+      targetEmail: email,
+      targetRole: role 
+    });
 
     // 1. Criar usuário no auth
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
@@ -112,7 +137,7 @@ app.post('/admin/create-user', requireAdmin, async (req, res) => {
     });
 
     if (authError) {
-      console.error('[admin-api] Erro ao criar usuário:', authError);
+      logger.logError('Erro ao criar usuário no auth', authError, { email });
       return res.status(400).json({ error: authError.message });
     }
 
@@ -129,7 +154,7 @@ app.post('/admin/create-user', requireAdmin, async (req, res) => {
       });
 
     if (profileError) {
-      console.error('[admin-api] Erro ao criar perfil:', profileError);
+      logger.logError('Erro ao criar perfil', profileError, { userId, email });
       // Rollback: deletar usuário criado
       await supabaseAdmin.auth.admin.deleteUser(userId);
       return res.status(500).json({ error: 'Erro ao criar perfil: ' + profileError.message });
@@ -144,7 +169,7 @@ app.post('/admin/create-user', requireAdmin, async (req, res) => {
       });
 
     if (roleError) {
-      console.error('[admin-api] Erro ao atribuir role:', roleError);
+      logger.logError('Erro ao atribuir role', roleError, { userId, email, role });
       // Não faz rollback completo, usuário já existe com perfil
       return res.status(500).json({ error: 'Usuário criado mas erro ao atribuir role: ' + roleError.message });
     }
@@ -160,7 +185,7 @@ app.post('/admin/create-user', requireAdmin, async (req, res) => {
       },
     });
 
-    console.log(`[admin-api] ✓ Usuário criado com sucesso: ${email}`);
+    logger.info(`Usuário criado com sucesso: ${email}`, { userId, role });
 
     return res.status(201).json({
       success: true,
@@ -172,18 +197,117 @@ app.post('/admin/create-user', requireAdmin, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('[admin-api] Erro interno:', error);
+    logger.logError('Erro interno ao criar usuário', error);
     return res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-// Health check
+// ==========================================
+// POST /logs - Recebe logs do frontend
+// ==========================================
+app.post('/logs', (req, res) => {
+  try {
+    const { level = 'error', message, error, source = 'frontend', meta = {} } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    const logMeta = {
+      service: source,
+      ...meta,
+      userAgent: req.headers['user-agent'],
+      ip: req.ip || req.connection?.remoteAddress,
+    };
+
+    // Adicionar stack se for erro
+    if (error?.stack) {
+      logMeta.stack = error.stack;
+    }
+
+    // Mapear níveis do frontend para winston
+    const levelMap = {
+      'fatal': 'fatal',
+      'error': 'error',
+      'warn': 'warn',
+      'warning': 'warn',
+      'info': 'info',
+      'debug': 'debug',
+    };
+
+    const winstonLevel = levelMap[level.toLowerCase()] || 'error';
+    logger.log(winstonLevel, `[FRONTEND] ${message}`, logMeta);
+
+    return res.json({ success: true });
+  } catch (err) {
+    logger.logError('Erro ao processar log do frontend', err);
+    return res.status(500).json({ error: 'Failed to log' });
+  }
+});
+
+// ==========================================
+// GET /debug/log-test - Testa o sistema de logs
+// ==========================================
+app.get('/debug/log-test', (req, res) => {
+  const timestamp = new Date().toISOString();
+  
+  logger.info(`Log test INFO - ${timestamp}`);
+  logger.warn(`Log test WARN - ${timestamp}`);
+  logger.error(`Log test ERROR - ${timestamp}`);
+  
+  // Simular erro com stack trace
+  try {
+    throw new Error('Simulated error for testing');
+  } catch (e) {
+    logger.logError('Log test ERROR with stack', e, { test: true });
+  }
+
+  logger.info('Log test completed', { 
+    levels: ['INFO', 'WARN', 'ERROR'],
+    timestamp,
+    service: 'admin-api'
+  });
+
+  return res.json({ 
+    success: true, 
+    message: 'Logs gerados! Verifique com: tail -f /var/log/visitor-pass/app.log',
+    timestamp,
+    levels: ['INFO', 'WARN', 'ERROR']
+  });
+});
+
+// ==========================================
+// GET /health - Health check
+// ==========================================
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'guarda-admin-api' });
 });
 
+// Error handling middleware
+app.use((err, req, res, next) => {
+  logger.logError('Unhandled error', err, { path: req.path, method: req.method });
+  res.status(500).json({ error: 'Internal server error' });
+});
+
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[admin-api] Servidor rodando na porta ${PORT}`);
-  console.log(`[admin-api] SUPABASE_URL: ${SUPABASE_URL}`);
+  logger.info(`Servidor iniciado na porta ${PORT}`, {
+    supabaseUrl: SUPABASE_URL,
+    logDir: process.env.LOG_DIR || '/var/log/visitor-pass',
+  });
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  logger.info('Recebido SIGTERM, encerrando...');
+  process.exit(0);
+});
+
+process.on('uncaughtException', (error) => {
+  logger.fatal('Uncaught exception', { stack: error.stack, message: error.message });
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled rejection', { reason: String(reason) });
 });

@@ -1,0 +1,22 @@
+# ============================================
+# GUARDA OPERACIONAL - Logrotate Configuration
+# ============================================
+# Instalar em: /etc/logrotate.d/visitor-pass
+# 
+# Rotação diária, mantém 7 dias, comprime após rotação
+# ============================================
+
+/var/log/visitor-pass/*.log {
+    daily
+    missingok
+    rotate 7
+    compress
+    delaycompress
+    notifempty
+    create 0644 root root
+    sharedscripts
+    postrotate
+        # Sinalizar containers para reabrir arquivos de log (se suportado)
+        docker kill --signal=HUP guarda-admin-api 2>/dev/null || true
+    endscript
+}

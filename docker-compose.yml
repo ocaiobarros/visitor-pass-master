@@ -160,6 +160,8 @@ services:
       KONG_DATABASE: "off"
       # Gera o config declarativo em runtime para injetar o ANON_KEY do .env
       KONG_DECLARATIVE_CONFIG: /tmp/kong.yml
+      # Prefixo gravável (Kong gera nginx.conf aqui). Evita crash por permissão em /usr/local/kong
+      KONG_PREFIX: /tmp/kong
       ANON_KEY: ${ANON_KEY:?Defina ANON_KEY no .env}
       KONG_DNS_ORDER: LAST,A,CNAME
       KONG_PLUGINS: request-transformer,cors,key-auth,acl,rate-limiting

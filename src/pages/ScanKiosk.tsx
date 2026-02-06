@@ -242,8 +242,18 @@ const ScanKiosk = () => {
         </div>
 
         {/* Botão Voltar - SEMPRE visível */}
-        <div className="absolute top-4 left-4 z-20 print:hidden">
-          <Button variant="outline" onClick={handleExit} className="gap-2 bg-white/90">
+        <div
+          className="fixed z-50 print:hidden"
+          style={{
+            top: 'calc(1rem + env(safe-area-inset-top))',
+            left: 'calc(1rem + env(safe-area-inset-left))',
+          }}
+        >
+          <Button
+            variant="outline"
+            onClick={handleExit}
+            className="gap-2 bg-background/90 shadow-lg border border-border"
+          >
             <ArrowLeft className="w-4 h-4" />
             Voltar
           </Button>
@@ -368,8 +378,18 @@ const ScanKiosk = () => {
         </div>
 
         {/* Botão Voltar - SEMPRE visível */}
-        <div className="absolute top-4 left-4 z-20">
-          <Button variant="outline" onClick={handleExit} className="gap-2 bg-white/90">
+        <div
+          className="fixed z-50"
+          style={{
+            top: 'calc(1rem + env(safe-area-inset-top))',
+            left: 'calc(1rem + env(safe-area-inset-left))',
+          }}
+        >
+          <Button
+            variant="outline"
+            onClick={handleExit}
+            className="gap-2 bg-background/90 shadow-lg border border-border"
+          >
             <ArrowLeft className="w-4 h-4" />
             Voltar
           </Button>
@@ -434,13 +454,16 @@ const ScanKiosk = () => {
       )}
 
       {/* Header com botão voltar - SEMPRE VISÍVEL */}
-      <header className="absolute top-4 left-4 right-4 z-10 flex justify-between items-center print:hidden">
+      <header
+        className="fixed left-4 right-4 z-50 flex justify-between items-center print:hidden"
+        style={{ top: 'calc(1rem + env(safe-area-inset-top))' }}
+      >
         <div onClick={handleLogoClick} className="cursor-pointer opacity-50 hover:opacity-100 transition-opacity">
           <BrandLogo size="sm" />
         </div>
-        
+
         {/* Botão Voltar - SEMPRE visível */}
-        <Button variant="outline" onClick={handleExit} className="gap-2 bg-background/90">
+        <Button variant="outline" onClick={handleExit} className="gap-2 bg-background/90 shadow-lg border border-border">
           <ArrowLeft className="w-4 h-4" />
           Voltar ao Sistema
         </Button>

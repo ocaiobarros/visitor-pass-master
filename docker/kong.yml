@@ -126,6 +126,40 @@ services:
               fault_tolerant: true
               hide_client_headers: false
 
+  # Admin API (criação de usuários)
+  - name: admin-api
+    url: http://admin-api:3001
+    routes:
+      - name: admin-api-all
+        strip_path: true
+        paths:
+          - /admin/v1/
+        plugins:
+          - name: cors
+            config:
+              origins:
+                - "*"
+              methods:
+                - GET
+                - POST
+                - OPTIONS
+              headers:
+                - Accept
+                - Authorization
+                - Content-Type
+                - X-Client-Info
+                - apikey
+              credentials: true
+              max_age: 3600
+              preflight_continue: false
+          # Rate limit para admin-api (10 req/min)
+          - name: rate-limiting
+            config:
+              minute: 10
+              policy: local
+              fault_tolerant: true
+              hide_client_headers: false
+
 # ==========================================
 # Consumidores e Autenticação
 # ==========================================

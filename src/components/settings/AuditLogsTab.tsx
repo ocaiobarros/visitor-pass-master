@@ -170,16 +170,19 @@ const AuditLogsTab = () => {
               Tipo de Ação
             </Label>
             <Select
-              value={tempFilters.actionType || ''}
+              value={tempFilters.actionType ?? 'all'}
               onValueChange={(value) =>
-                setTempFilters({ ...tempFilters, actionType: value as AuditActionType || undefined })
+                setTempFilters({
+                  ...tempFilters,
+                  actionType: (value === 'all' ? undefined : (value as AuditActionType)),
+                })
               }
             >
               <SelectTrigger>
                 <SelectValue placeholder="Todos" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todos</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
                 {ACTION_TYPES.map((action) => (
                   <SelectItem key={action.value} value={action.value}>
                     {action.label}

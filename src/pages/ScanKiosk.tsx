@@ -241,15 +241,13 @@ const ScanKiosk = () => {
           </h1>
         </div>
 
-        {/* Botão Voltar - visível quando não estiver em fullscreen */}
-        {!isFullscreen && (
-          <div className="absolute top-4 left-4 z-20 print:hidden">
-            <Button variant="outline" onClick={handleExit} className="gap-2 bg-white/90">
-              <ArrowLeft className="w-4 h-4" />
-              Voltar
-            </Button>
-          </div>
-        )}
+        {/* Botão Voltar - SEMPRE visível */}
+        <div className="absolute top-4 left-4 z-20 print:hidden">
+          <Button variant="outline" onClick={handleExit} className="gap-2 bg-white/90">
+            <ArrowLeft className="w-4 h-4" />
+            Voltar
+          </Button>
+        </div>
 
         {/* Botão Imprimir */}
         <div className="absolute top-4 right-4 z-20 print:hidden">
@@ -369,15 +367,13 @@ const ScanKiosk = () => {
           </h1>
         </div>
 
-        {/* Botão Voltar - visível quando não estiver em fullscreen */}
-        {!isFullscreen && (
-          <div className="absolute top-4 left-4 z-20">
-            <Button variant="outline" onClick={handleExit} className="gap-2 bg-white/90">
-              <ArrowLeft className="w-4 h-4" />
-              Voltar
-            </Button>
-          </div>
-        )}
+        {/* Botão Voltar - SEMPRE visível */}
+        <div className="absolute top-4 left-4 z-20">
+          <Button variant="outline" onClick={handleExit} className="gap-2 bg-white/90">
+            <ArrowLeft className="w-4 h-4" />
+            Voltar
+          </Button>
+        </div>
 
         {/* Main content */}
         <div className="text-center text-white">
@@ -437,19 +433,17 @@ const ScanKiosk = () => {
         </div>
       )}
 
-      {/* Header com botão voltar */}
-      <header className="absolute top-4 left-4 right-4 z-10 flex justify-between items-center">
+      {/* Header com botão voltar - SEMPRE VISÍVEL */}
+      <header className="absolute top-4 left-4 right-4 z-10 flex justify-between items-center print:hidden">
         <div onClick={handleLogoClick} className="cursor-pointer opacity-50 hover:opacity-100 transition-opacity">
           <BrandLogo size="sm" />
         </div>
         
-        {/* Botão Voltar - sempre visível quando não estiver em fullscreen */}
-        {!isFullscreen && (
-          <Button variant="outline" onClick={handleExit} className="gap-2">
-            <ArrowLeft className="w-4 h-4" />
-            Voltar ao Sistema
-          </Button>
-        )}
+        {/* Botão Voltar - SEMPRE visível */}
+        <Button variant="outline" onClick={handleExit} className="gap-2 bg-background/90">
+          <ArrowLeft className="w-4 h-4" />
+          Voltar ao Sistema
+        </Button>
       </header>
 
       {/* Main content - centered */}

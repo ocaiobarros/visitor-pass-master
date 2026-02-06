@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@sistema.local';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@456'; // Senha após primeiro login
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@123';
 
 test.describe('Gerenciamento de Usuários', () => {
   test.beforeEach(async ({ page }) => {
@@ -32,7 +32,8 @@ test.describe('Gerenciamento de Usuários', () => {
   test('criar usuário RH não troca sessão do admin', async ({ page }) => {
     // Capturar ID do admin antes
     const adminIdBefore = await page.evaluate(() => {
-      const storage = localStorage.getItem('sb-xjtamcmodgbtkmujhrxa-auth-token');
+      const key = Object.keys(localStorage).find(k => /sb-.*-auth-token/.test(k)) || '';
+      const storage = key ? localStorage.getItem(key) : null;
       if (storage) {
         const data = JSON.parse(storage);
         return data?.user?.id || null;
@@ -77,7 +78,8 @@ test.describe('Gerenciamento de Usuários', () => {
 
     // Verificar que admin continua logado (mesmo ID)
     const adminIdAfter = await page.evaluate(() => {
-      const storage = localStorage.getItem('sb-xjtamcmodgbtkmujhrxa-auth-token');
+      const key = Object.keys(localStorage).find(k => /sb-.*-auth-token/.test(k)) || '';
+      const storage = key ? localStorage.getItem(key) : null;
       if (storage) {
         const data = JSON.parse(storage);
         return data?.user?.id || null;

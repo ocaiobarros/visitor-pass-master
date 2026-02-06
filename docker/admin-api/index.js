@@ -277,6 +277,33 @@ app.get('/debug/log-test', (req, res) => {
 });
 
 // ==========================================
+// GET /ready - Readiness check (admin bootstrap pronto)
+// ==========================================
+const hasAnyAdmin = async () => {
+  const { data, error } = await supabaseAdmin
+    .from('user_roles')
+    .select('user_id')
+    .eq('role', 'admin')
+    .limit(1);
+
+  if (error) throw error;
+  return (data || []).length > 0;
+};
+
+app.get('/ready', async (req, res) => {
+  try {
+    const ok = await hasAnyAdmin();
+    if (!ok) {
+      return res.status(503).json({ status: 'not_ready', reason: 'no_admin' });
+    }
+    return res.json({ status: 'ok' });
+  } catch (err) {
+    logger.logError('Readiness check failed', err);
+    return res.status(503).json({ status: 'not_ready', reason: 'error' });
+  }
+});
+
+// ==========================================
 // GET /health - Health check
 // ==========================================
 app.get('/health', (req, res) => {

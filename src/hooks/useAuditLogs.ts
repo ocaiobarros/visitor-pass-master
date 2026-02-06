@@ -106,14 +106,28 @@ export const logAuditAction = async (
   details: Record<string, unknown> = {},
   userInfo?: { id?: string; email?: string }
 ) => {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const session = sessionData?.session;
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const session = sessionData?.session;
 
-  await supabase.from('audit_logs').insert({
-    user_id: userInfo?.id || session?.user?.id || null,
-    user_email: userInfo?.email || session?.user?.email || null,
-    action_type,
-    details,
-    user_agent: navigator.userAgent,
-  } as any);
+    // Sem sessão e sem userInfo => não temos como passar RLS (evita spam/429)
+    const actorId = userInfo?.id || session?.user?.id;
+    const actorEmail = userInfo?.email || session?.user?.email;
+    if (!actorId && !actorEmail) return;
+
+    const { error } = await supabase.from('audit_logs').insert({
+      user_id: actorId || null,
+      user_email: actorEmail || null,
+      action_type,
+      details,
+      user_agent: navigator.userAgent,
+    } as any);
+
+    if (error) {
+      // Não quebrar fluxo de login/UX por falha de auditoria
+      console.warn('[audit_logs] Falha ao registrar auditoria:', error);
+    }
+  } catch (err) {
+    console.warn('[audit_logs] Erro ao registrar auditoria:', err);
+  }
 };

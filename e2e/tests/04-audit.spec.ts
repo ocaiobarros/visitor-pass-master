@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@sistema.local';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@456';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@123';
 
 test.describe('Logs de Auditoria', () => {
   test.beforeEach(async ({ page }) => {

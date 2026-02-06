@@ -134,7 +134,7 @@ if [ "$SKIP_BUILD" = false ]; then
     HEALTHY=$(docker compose ps --format json 2>/dev/null | grep -c '"healthy"' || echo "0")
     TOTAL=$(docker compose ps --format json 2>/dev/null | grep -c '"running"' || echo "0")
     
-    if [ "$HEALTHY" -ge 5 ]; then
+    if [ "$HEALTHY" -ge 6 ]; then
       echo -e "${GREEN}✓ Stack healthy ($HEALTHY containers)${NC}"
       break
     fi

@@ -151,7 +151,7 @@ services:
               preflight_continue: false
           - name: rate-limiting
             config:
-              minute: 10
+              minute: 300
               policy: local
               fault_tolerant: true
               hide_client_headers: false

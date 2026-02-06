@@ -55,17 +55,36 @@ const ChangePasswordModal = ({ open, onPasswordChanged, isRequired = false }: Ch
         throw error;
       }
 
-      // Update profile to mark password as changed
+      // Update profile to mark password as changed - CRITICAL: must succeed
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({ must_change_password: false })
-          .eq('user_id', user.id);
+        // Retry logic for robustness
+        let retryCount = 0;
+        let profileError = null;
+        
+        while (retryCount < 3) {
+          const { error } = await supabase
+            .from('profiles')
+            .update({ 
+              must_change_password: false,
+              updated_at: new Date().toISOString()
+            })
+            .eq('user_id', user.id);
+          
+          if (!error) {
+            profileError = null;
+            break;
+          }
+          
+          profileError = error;
+          retryCount++;
+          await new Promise(r => setTimeout(r, 500)); // Wait before retry
+        }
         
         if (profileError) {
-          console.error('Error updating profile:', profileError);
-          // Don't throw - password was changed successfully
+          console.error('Error updating profile after retries:', profileError);
+          // Still proceed - password was changed, flag update failed
+          // Log this for debugging
         }
       }
 

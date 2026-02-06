@@ -6,6 +6,56 @@
 -- ============================================================
 
 -- ============================================================
+-- PARTE 0: SCHEMAS E ROLES NECESSÁRIOS PARA GOTRUE
+-- ============================================================
+-- O GoTrue (Supabase Auth) requer o schema 'auth' para criar
+-- suas tabelas de migração e gerenciamento de usuários.
+-- ============================================================
+
+-- Criar schema auth para o GoTrue
+CREATE SCHEMA IF NOT EXISTS auth;
+
+-- Criar roles necessárias para PostgREST/GoTrue
+DO $$
+BEGIN
+  -- Role anon (usuários não autenticados)
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'anon') THEN
+    CREATE ROLE anon NOLOGIN NOINHERIT;
+  END IF;
+  
+  -- Role authenticated (usuários autenticados)
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'authenticated') THEN
+    CREATE ROLE authenticated NOLOGIN NOINHERIT;
+  END IF;
+  
+  -- Role service_role (acesso administrativo)
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'service_role') THEN
+    CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS;
+  END IF;
+  
+  -- Role authenticator (PostgREST connection role)
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'authenticator') THEN
+    CREATE ROLE authenticator NOINHERIT LOGIN;
+  END IF;
+END
+$$;
+
+-- Conceder permissões ao authenticator
+GRANT anon TO authenticator;
+GRANT authenticated TO authenticator;
+GRANT service_role TO authenticator;
+
+-- Conceder permissões no schema auth
+GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
+GRANT ALL ON SCHEMA auth TO service_role;
+
+-- Conceder permissões no schema public
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO service_role;
+
+-- ============================================================
 -- PARTE 1: TIPOS ENUM
 -- ============================================================
 

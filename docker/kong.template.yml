@@ -123,7 +123,7 @@ services:
               fault_tolerant: true
               hide_client_headers: false
 
-  # Admin API (criação de usuários)
+  # Admin API (criação de usuários + auditoria)
   - name: admin-api
     url: http://admin-api:3001
     routes:
@@ -155,6 +155,36 @@ services:
               policy: local
               fault_tolerant: true
               hide_client_headers: false
+      # Rota específica para auditoria com rate limit mais alto
+      - name: admin-audit
+        strip_path: false
+        paths:
+          - /admin/v1/audit
+        plugins:
+          - name: cors
+            config:
+              origins:
+                - "*"
+              methods:
+                - POST
+                - OPTIONS
+              headers:
+                - Accept
+                - Authorization
+                - Content-Type
+              credentials: true
+              max_age: 3600
+              preflight_continue: false
+          - name: rate-limiting
+            config:
+              minute: 600
+              policy: local
+              fault_tolerant: true
+              hide_client_headers: false
+          - name: request-transformer
+            config:
+              replace:
+                uri: "/audit"
 
 consumers:
   - username: anon

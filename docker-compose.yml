@@ -283,13 +283,21 @@ services:
       admin-api:
         condition: service_healthy
     environment:
+      # URLs
       BASE_URL: http://guarda-app
+      API_URL: http://kong:8000
+      SUPABASE_URL: http://kong:8000
+      # Chaves
       ANON_KEY: ${ANON_KEY}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      # Credenciais do admin (sincronizadas com bootstrap)
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@sistema.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin@123}
+      # CI mode
       CI: "true"
     volumes:
       - ./e2e-artifacts:/e2e-artifacts
+      - ./scripts:/e2e/scripts:ro
     networks:
       - guarda-internal
 

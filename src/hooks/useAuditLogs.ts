@@ -87,13 +87,8 @@ export const useCreateAuditLog = () => {
       action_type: AuditActionType;
       details?: Record<string, unknown>;
     }) => {
-      const { error } = await supabase.from('audit_logs').insert({
-        action_type,
-        details,
-        user_agent: navigator.userAgent,
-      } as any);
-
-      if (error) throw error;
+      // Usar endpoint server-side para auditoria (RLS compliant)
+      await logAuditAction(action_type, details);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['audit-logs'] });
@@ -101,33 +96,96 @@ export const useCreateAuditLog = () => {
   });
 };
 
+/**
+ * Registra uma ação de auditoria via endpoint server-side.
+ * 
+ * IMPORTANTE: Esta função NÃO faz INSERT direto no banco.
+ * Ela usa o endpoint POST /admin/audit que opera com SERVICE_ROLE_KEY,
+ * garantindo compliance com RLS e imutabilidade dos logs.
+ * 
+ * A função é resiliente a falhas - nunca interrompe o fluxo principal.
+ */
 export const logAuditAction = async (
   action_type: AuditActionType,
   details: Record<string, unknown> = {},
   userInfo?: { id?: string; email?: string }
 ) => {
   try {
+    // Obter token de sessão para autenticação
     const { data: sessionData } = await supabase.auth.getSession();
     const session = sessionData?.session;
 
-    // Sem sessão e sem userInfo => não temos como passar RLS (evita spam/429)
-    const actorId = userInfo?.id || session?.user?.id;
-    const actorEmail = userInfo?.email || session?.user?.email;
-    if (!actorId && !actorEmail) return;
-
-    const { error } = await supabase.from('audit_logs').insert({
-      user_id: actorId || null,
-      user_email: actorEmail || null,
+    // Construir payload
+    const payload = {
       action_type,
-      details,
-      user_agent: navigator.userAgent,
-    } as any);
+      details: {
+        ...details,
+        user_info: userInfo || null,
+      },
+      resource: details.resource || null,
+    };
 
-    if (error) {
-      // Não quebrar fluxo de login/UX por falha de auditoria
-      console.warn('[audit_logs] Falha ao registrar auditoria:', error);
+    // Determinar URL base da API
+    const apiUrl = getApiUrl();
+    
+    // Headers com autenticação se disponível
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    // Adicionar apikey para passar pelo Kong (se disponível)
+    const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    if (anonKey) {
+      headers['apikey'] = anonKey;
+    }
+
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+
+    // Enviar para endpoint server-side
+    const response = await fetch(`${apiUrl}/admin/v1/audit`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      // Log silencioso - não quebrar fluxo do usuário
+      console.warn('[audit] Falha ao registrar auditoria:', response.status);
     }
   } catch (err) {
-    console.warn('[audit_logs] Erro ao registrar auditoria:', err);
+    // Falhas de auditoria NUNCA devem interromper o fluxo principal
+    console.warn('[audit] Erro ao registrar auditoria:', err);
   }
 };
+
+/**
+ * Determina a URL base da API considerando ambiente local e produção.
+ */
+function getApiUrl(): string {
+  // Em produção (Docker), usar URL relativa ou configurada
+  if (typeof window !== 'undefined') {
+    // Se estamos em localhost:80 ou similar, usar porta 8000 para API
+    const origin = window.location.origin;
+    
+    // Verificar se há variável de ambiente
+    const envApiUrl = import.meta.env.VITE_API_URL;
+    if (envApiUrl) {
+      return envApiUrl;
+    }
+    
+    // Self-hosted: assumir Kong na porta 8000
+    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      const url = new URL(origin);
+      url.port = '8000';
+      return url.origin;
+    }
+    
+    // Produção: usar mesmo host com subpath /api ou porta diferente
+    // Tentar detectar se há Kong configurado
+    return origin.replace(':80', ':8000').replace(':443', ':8000');
+  }
+  
+  return 'http://localhost:8000';
+}

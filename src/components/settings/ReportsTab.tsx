@@ -431,14 +431,14 @@ const ReportsTab = () => {
                   Tipo de Sujeito
                 </Label>
                 <Select
-                  value={filters.subjectType || ''}
-                  onValueChange={(v) => setFilters({ ...filters, subjectType: v || undefined })}
+                  value={filters.subjectType ?? 'all'}
+                  onValueChange={(v) => setFilters({ ...filters, subjectType: v === 'all' ? undefined : v })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Todos" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Todos</SelectItem>
+                    <SelectItem value="all">Todos</SelectItem>
                     <SelectItem value="visitor">Visitantes</SelectItem>
                     <SelectItem value="employee">Colaboradores</SelectItem>
                   </SelectContent>
@@ -451,14 +451,14 @@ const ReportsTab = () => {
                   Direção
                 </Label>
                 <Select
-                  value={filters.direction || ''}
-                  onValueChange={(v) => setFilters({ ...filters, direction: v || undefined })}
+                  value={filters.direction ?? 'all'}
+                  onValueChange={(v) => setFilters({ ...filters, direction: v === 'all' ? undefined : v })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Todos" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Todos</SelectItem>
+                    <SelectItem value="all">Todos</SelectItem>
                     <SelectItem value="in">Entrada</SelectItem>
                     <SelectItem value="out">Saída</SelectItem>
                   </SelectContent>

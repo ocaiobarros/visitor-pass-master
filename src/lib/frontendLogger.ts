@@ -36,6 +36,10 @@ class FrontendLogger {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private isOnline = true;
 
+  // Circuit-breaker para evitar loop/429 quando endpoint de logs falha
+  private disabledUntilMs = 0;
+  private consecutiveSendFailures = 0;
+
   constructor(config: FrontendLoggerConfig) {
     this.config = {
       endpoint: config.endpoint,
@@ -49,8 +53,12 @@ class FrontendLogger {
 
     // Track online/offline status
     if (typeof window !== 'undefined') {
-      window.addEventListener('online', () => { this.isOnline = true; });
-      window.addEventListener('offline', () => { this.isOnline = false; });
+      window.addEventListener('online', () => {
+        this.isOnline = true;
+      });
+      window.addEventListener('offline', () => {
+        this.isOnline = false;
+      });
     }
   }
 
@@ -83,14 +91,29 @@ class FrontendLogger {
     if (!w.__vpFetchWrapped && typeof w.fetch === 'function') {
       const originalFetch = w.fetch.bind(window);
       w.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : (input as Request).url);
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : (input as Request).url;
+
+        // CRÍTICO: nunca logar requests do próprio logger (evita loop infinito)
+        const isLoggerRequest =
+          url === this.config.endpoint ||
+          url.startsWith(this.config.endpoint) ||
+          url.includes('/admin/v1/logs');
 
         try {
           const res = await originalFetch(input as any, init);
 
           // Logar somente endpoints sensíveis para não inundar log
-          const shouldInspect = url.includes('/auth/v1/') || url.includes('/rest/v1/') || url.includes('/admin/v1/');
-          if (shouldInspect && !res.ok) {
+          const shouldInspect =
+            !isLoggerRequest &&
+            (url.includes('/auth/v1/') || url.includes('/rest/v1/') || url.includes('/admin/v1/'));
+
+          // Evitar flood de 429 (rate limit) e evitar loop no logger
+          if (shouldInspect && !res.ok && res.status !== 429) {
             // Clonar para ler sem afetar o consumidor
             const cloned = res.clone();
             const bodyPreview = await cloned.text().catch(() => '');
@@ -105,7 +128,9 @@ class FrontendLogger {
 
           return res;
         } catch (err) {
-          this.logFetchError(url, err, init);
+          if (!isLoggerRequest) {
+            this.logFetchError(url, err, init);
+          }
           throw err;
         }
       }) as any;
@@ -116,7 +141,7 @@ class FrontendLogger {
 
   private startFlushTimer() {
     if (this.flushTimer) return;
-    
+
     this.flushTimer = setInterval(() => {
       this.flush();
     }, this.config.flushInterval);
@@ -126,22 +151,41 @@ class FrontendLogger {
     if (!this.config.enabled || entries.length === 0) return;
     if (!this.isOnline) return;
 
+    // circuit-breaker
+    if (Date.now() < this.disabledUntilMs) return;
+
     try {
       for (const entry of entries) {
-        await fetch(this.config.endpoint, {
+        const res = await fetch(this.config.endpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(entry),
         });
+
+        if (!res.ok) {
+          this.consecutiveSendFailures += 1;
+
+          // Se o endpoint não existe / foi rate-limited, pausar o envio por 60s
+          if (res.status === 404 || res.status === 429) {
+            this.disabledUntilMs = Date.now() + 60_000;
+          } else if (this.consecutiveSendFailures >= 3) {
+            // backoff mais agressivo após 3 falhas seguidas
+            this.disabledUntilMs = Date.now() + 5 * 60_000;
+          }
+
+          // Não re-logar aqui (evita loop). Apenas aborta o envio do lote.
+          return;
+        }
+
+        // sucesso
+        this.consecutiveSendFailures = 0;
       }
-    } catch (err) {
-      // Fallback para console se falhar envio
-      console.error('[FrontendLogger] Failed to send logs:', err);
-      entries.forEach(entry => {
-        console.log(`[${entry.level.toUpperCase()}] ${entry.message}`, entry.meta);
-      });
+    } catch {
+      // Falha de rede: pausar e não re-enfileirar
+      this.consecutiveSendFailures += 1;
+      this.disabledUntilMs = Date.now() + 60_000;
     }
   }
 
@@ -158,7 +202,7 @@ class FrontendLogger {
 
   public flush() {
     if (this.queue.length === 0) return;
-    
+
     const entries = [...this.queue];
     this.queue = [];
     this.sendLogs(entries);

@@ -69,7 +69,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       };
     } catch (error) {
       console.error('Error fetching user profile:', error);
-      return null;
+      // Fallback: não bloquear login por falha de profile/roles
+      return {
+        id: authUser.id,
+        email: authUser.email || '',
+        fullName: authUser.user_metadata?.full_name || authUser.email || '',
+        roles: ['security'],
+      };
     }
   }, []);
 
@@ -241,7 +247,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       login,
       signup,
       logout,
-      isAuthenticated: !!user && !!session,
+      // Sessão é a fonte de verdade de autenticação (evita ficar preso no /login enquanto o profile carrega)
+      isAuthenticated: !!session?.user,
       isLoading,
       hasRole,
       isAdminOrRh,

@@ -23,7 +23,11 @@ const Login = () => {
   const { toast } = useToast();
 
   // Check if user needs to change password
-  const { data: profile, isLoading: profileLoading } = useProfile(supabaseUser?.id);
+  const {
+    data: profile,
+    isLoading: profileLoading,
+    isError: profileIsError,
+  } = useProfile(supabaseUser?.id);
 
   // Set page title
   useEffect(() => {
@@ -33,19 +37,25 @@ const Login = () => {
   useEffect(() => {
     // Only process redirect after auth is loaded
     if (authLoading) return;
-    
-    if (isAuthenticated) {
-      // Check if profile needs password change
-      if (profileLoading) return; // Still loading profile
-      
+
+    // Use supabaseUser as the source of truth for "logged in"
+    // (session might be ready before our app-level user profile finishes loading)
+    if (supabaseUser) {
+      if (profileLoading) return;
+
+      // If profile fetch fails (RLS/schema mismatch), do NOT trap user on /login.
+      if (profileIsError) {
+        navigate('/dashboard', { replace: true });
+        return;
+      }
+
       if (profile?.mustChangePassword) {
         setShowPasswordModal(true);
       } else {
-        // Redirect immediately - don't wait for profile if not needed
         navigate('/dashboard', { replace: true });
       }
     }
-  }, [isAuthenticated, profile, navigate, authLoading, profileLoading]);
+  }, [supabaseUser, profile, navigate, authLoading, profileLoading, profileIsError]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

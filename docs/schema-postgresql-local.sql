@@ -243,21 +243,33 @@ $$;
 -- ============================================================
 
 -- Obtém o user_id do JWT (equivalente a auth.uid())
+-- Compatível com variações do PostgREST:
+--  - request.jwt.claim.sub
+--  - request.jwt.claims (JSON)
 CREATE OR REPLACE FUNCTION public.current_user_id()
 RETURNS uuid
 LANGUAGE sql
 STABLE
 AS $$
-  SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid;
+  SELECT COALESCE(
+    NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid,
+    NULLIF((NULLIF(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'), '')::uuid
+  );
 $$;
 
 -- Obtém a role do JWT (equivalente a auth.role())
+-- Compatível com variações do PostgREST:
+--  - request.jwt.claim.role
+--  - request.jwt.claims (JSON)
 CREATE OR REPLACE FUNCTION public.current_user_role()
 RETURNS text
 LANGUAGE sql
 STABLE
 AS $$
-  SELECT NULLIF(current_setting('request.jwt.claim.role', true), '');
+  SELECT COALESCE(
+    NULLIF(current_setting('request.jwt.claim.role', true), ''),
+    NULLIF((NULLIF(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role'), '')
+  );
 $$;
 
 -- Função para verificar se usuário tem role

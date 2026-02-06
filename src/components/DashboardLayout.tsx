@@ -15,6 +15,8 @@ import {
   ClipboardList,
   ChevronDown,
   Loader2,
+  FileText,
+  FileBarChart,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
@@ -37,6 +39,8 @@ const navItems = [
   { href: '/employees', label: 'Funcionários', icon: Users },
   { href: '/vehicles', label: 'Veículos', icon: Car },
   { href: '/scan', label: 'Scanner QR', icon: QrCode },
+  { href: '/audit', label: 'Auditoria', icon: FileText, roles: ['admin'] },
+  { href: '/reports', label: 'Relatórios', icon: FileBarChart, roles: ['admin'] },
   { href: '/settings', label: 'Configurações', icon: Settings, roles: ['admin'] },
 ];
 

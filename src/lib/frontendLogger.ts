@@ -76,6 +76,42 @@ class FrontendLogger {
         stack: reason?.stack,
       });
     });
+
+    // Capturar falhas de fetch (network error) e respostas 4xx/5xx do auth
+    // (sem quebrar a aplicação e sem consumir o body do caller)
+    const w = window as unknown as { __vpFetchWrapped?: boolean; fetch: typeof fetch };
+    if (!w.__vpFetchWrapped && typeof w.fetch === 'function') {
+      const originalFetch = w.fetch.bind(window);
+      w.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : (input as Request).url);
+
+        try {
+          const res = await originalFetch(input as any, init);
+
+          // Logar somente endpoints sensíveis para não inundar log
+          const shouldInspect = url.includes('/auth/v1/') || url.includes('/rest/v1/') || url.includes('/admin/v1/');
+          if (shouldInspect && !res.ok) {
+            // Clonar para ler sem afetar o consumidor
+            const cloned = res.clone();
+            const bodyPreview = await cloned.text().catch(() => '');
+
+            this.warn(`Fetch non-OK: ${url}`, {
+              status: res.status,
+              statusText: res.statusText,
+              method: init?.method || 'GET',
+              bodyPreview: bodyPreview?.slice(0, 500),
+            });
+          }
+
+          return res;
+        } catch (err) {
+          this.logFetchError(url, err, init);
+          throw err;
+        }
+      }) as any;
+
+      w.__vpFetchWrapped = true;
+    }
   }
 
   private startFlushTimer() {

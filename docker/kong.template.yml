@@ -5,7 +5,7 @@
 # 
 # IMPORTANTE:
 # - Este arquivo é um template. O docker-compose gera /tmp/kong.yml
-#   substituindo __ANON_KEY__ pelo valor de ANON_KEY do .env.
+#   substituindo __ANON_KEY__ e __SERVICE_ROLE_KEY__ pelos valores do .env.
 # ============================================
 
 _format_version: "3.0"
@@ -160,6 +160,9 @@ consumers:
   - username: anon
     keyauth_credentials:
       - key: __ANON_KEY__
+  - username: service-role
+    keyauth_credentials:
+      - key: __SERVICE_ROLE_KEY__
 
 plugins:
   - name: request-transformer

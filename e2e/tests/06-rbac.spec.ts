@@ -48,7 +48,7 @@ test.describe('Controle de Acesso por Perfil (RBAC)', () => {
 
   test('dashboard é acessível após login', async ({ page }) => {
     const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@sistema.local';
-    const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@456';
+    const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@123';
 
     await page.goto('/login');
     await page.getByLabel(/email/i).fill(ADMIN_EMAIL);

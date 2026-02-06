@@ -30,7 +30,7 @@ test.describe('Autenticação e Sessão', () => {
       const modal = page.getByRole('dialog');
       if (await modal.isVisible()) {
         // Trocar senha se necessário
-        const newPassword = 'Admin@456';
+        const newPassword = ADMIN_PASSWORD;
         await page.getByLabel(/nova senha/i).first().fill(newPassword);
         await page.getByLabel(/confirmar/i).fill(newPassword);
         await page.getByRole('button', { name: /alterar|salvar/i }).click();
@@ -68,7 +68,7 @@ test.describe('Autenticação e Sessão', () => {
     if (page.url().includes('/login')) {
       const modal = page.getByRole('dialog');
       if (await modal.isVisible()) {
-        const newPassword = 'Admin@456';
+        const newPassword = ADMIN_PASSWORD;
         await page.getByLabel(/nova senha/i).first().fill(newPassword);
         await page.getByLabel(/confirmar/i).fill(newPassword);
         await page.getByRole('button', { name: /alterar|salvar/i }).click();
@@ -101,7 +101,7 @@ test.describe('Autenticação e Sessão', () => {
     if (page.url().includes('/login')) {
       const modal = page.getByRole('dialog');
       if (await modal.isVisible()) {
-        const newPassword = 'Admin@456';
+        const newPassword = ADMIN_PASSWORD;
         await page.getByLabel(/nova senha/i).first().fill(newPassword);
         await page.getByLabel(/confirmar/i).fill(newPassword);
         await page.getByRole('button', { name: /alterar|salvar/i }).click();
@@ -132,7 +132,7 @@ test.describe('Autenticação e Sessão', () => {
     if (page.url().includes('/login')) {
       const modal = page.getByRole('dialog');
       if (await modal.isVisible()) {
-        const newPassword = 'Admin@456';
+        const newPassword = ADMIN_PASSWORD;
         await page.getByLabel(/nova senha/i).first().fill(newPassword);
         await page.getByLabel(/confirmar/i).fill(newPassword);
         await page.getByRole('button', { name: /alterar|salvar/i }).click();

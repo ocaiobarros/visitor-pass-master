@@ -145,10 +145,7 @@ if [ "$SKIP_BUILD" = false ]; then
 
   docker compose down --remove-orphans 2>/dev/null || true
   docker compose up -d --build --remove-orphans
-
-  echo "→ Aguardando containers iniciarem..."
-  sleep 5
-else
+  echo "→ Containers iniciados; seguindo imediatamente para healthchecks reais..."
   echo -e "${YELLOW}[1/5] Skipping build (--skip-build)${NC}"
 fi
 

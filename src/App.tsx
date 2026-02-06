@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import ConnectionErrorBoundary from "@/components/ConnectionErrorBoundary";
 import GlobalErrorHandler from "@/components/GlobalErrorHandler";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import { isSystemConfigured, hasEnvVars } from "@/pages/InstallWizard";
 
 import Index from "./pages/Index";
@@ -22,6 +23,8 @@ import CredentialPass from "./pages/CredentialPass";
 import QRScanner from "./pages/QRScanner";
 import ScanKiosk from "./pages/ScanKiosk";
 import Settings from "./pages/Settings";
+import AuditLogs from "./pages/AuditLogs";
+import Reports from "./pages/Reports";
 import InstallWizard from "./pages/InstallWizard";
 import NotFound from "./pages/NotFound";
 
@@ -50,23 +53,19 @@ const queryClient = new QueryClient({
   },
 });
 
-// Protected route wrapper - redirects to wizard if not configured
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  // If env vars are missing, redirect to wizard
+// Wrapper para verificar se env vars existem antes de carregar AuthProvider
+const EnvGuard = ({ children }: { children: React.ReactNode }) => {
   if (!hasEnvVars()) {
     return <Navigate to="/install-wizard" replace />;
   }
-  
   return <>{children}</>;
 };
 
 // Wizard route wrapper - redirects to login if already configured
 const WizardRoute = ({ children }: { children: React.ReactNode }) => {
-  // If already fully configured, go to login
   if (isSystemConfigured()) {
     return <Navigate to="/login" replace />;
   }
-  
   return <>{children}</>;
 };
 
@@ -88,33 +87,102 @@ const App = () => (
             } 
           />
           
-          {/* Protected Routes - require configuration */}
+          {/* Protected Routes - require env vars + authentication */}
           <Route 
             path="/*" 
             element={
-              <ProtectedRoute>
+              <EnvGuard>
                 <ConnectionErrorBoundary>
                   <AuthProvider>
                     <Routes>
+                      {/* Public routes (dentro do AuthProvider para ter acesso ao contexto) */}
                       <Route path="/" element={<Index />} />
                       <Route path="/login" element={<Login />} />
-                      <Route path="/dashboard" element={<Dashboard />} />
-                      <Route path="/register" element={<RegisterVisitor />} />
-                      <Route path="/register/employee" element={<RegisterEmployee />} />
-                      <Route path="/register/vehicle" element={<RegisterVehicle />} />
-                      <Route path="/employees" element={<EmployeeList />} />
-                      <Route path="/vehicles" element={<VehicleList />} />
-                      <Route path="/visitors" element={<VisitorList />} />
+                      
+                      {/* Rotas públicas de passes (não requerem login) */}
                       <Route path="/pass/:id" element={<VisitorPass />} />
                       <Route path="/credential/:id" element={<CredentialPass />} />
-                      <Route path="/scan" element={<QRScanner />} />
-                      <Route path="/scan/kiosk" element={<ScanKiosk />} />
-                      <Route path="/settings" element={<Settings />} />
+                      
+                      {/* Protected routes - requerem autenticação */}
+                      <Route path="/dashboard" element={
+                        <ProtectedRoute>
+                          <Dashboard />
+                        </ProtectedRoute>
+                      } />
+                      
+                      <Route path="/register" element={
+                        <ProtectedRoute requiredRoles={['admin', 'rh']}>
+                          <RegisterVisitor />
+                        </ProtectedRoute>
+                      } />
+                      
+                      <Route path="/register/employee" element={
+                        <ProtectedRoute requiredRoles={['admin', 'rh']}>
+                          <RegisterEmployee />
+                        </ProtectedRoute>
+                      } />
+                      
+                      <Route path="/register/vehicle" element={
+                        <ProtectedRoute requiredRoles={['admin', 'rh']}>
+                          <RegisterVehicle />
+                        </ProtectedRoute>
+                      } />
+                      
+                      <Route path="/employees" element={
+                        <ProtectedRoute>
+                          <EmployeeList />
+                        </ProtectedRoute>
+                      } />
+                      
+                      <Route path="/vehicles" element={
+                        <ProtectedRoute>
+                          <VehicleList />
+                        </ProtectedRoute>
+                      } />
+                      
+                      <Route path="/visitors" element={
+                        <ProtectedRoute>
+                          <VisitorList />
+                        </ProtectedRoute>
+                      } />
+                      
+                      <Route path="/scan" element={
+                        <ProtectedRoute>
+                          <QRScanner />
+                        </ProtectedRoute>
+                      } />
+                      
+                      <Route path="/scan/kiosk" element={
+                        <ProtectedRoute>
+                          <ScanKiosk />
+                        </ProtectedRoute>
+                      } />
+                      
+                      {/* Admin routes */}
+                      <Route path="/settings" element={
+                        <ProtectedRoute requiredRoles={['admin']}>
+                          <Settings />
+                        </ProtectedRoute>
+                      } />
+                      
+                      <Route path="/audit" element={
+                        <ProtectedRoute requiredRoles={['admin']}>
+                          <AuditLogs />
+                        </ProtectedRoute>
+                      } />
+                      
+                      <Route path="/reports" element={
+                        <ProtectedRoute requiredRoles={['admin']}>
+                          <Reports />
+                        </ProtectedRoute>
+                      } />
+                      
+                      {/* 404 */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </AuthProvider>
                 </ConnectionErrorBoundary>
-              </ProtectedRoute>
+              </EnvGuard>
             } 
           />
         </Routes>

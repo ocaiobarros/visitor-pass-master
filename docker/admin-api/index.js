@@ -289,12 +289,132 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+// ==========================================
+// BOOTSTRAP: cria o primeiro admin (se não existir)
+// Usa ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME do .env
+// Não crasha o sistema se falhar.
+// ==========================================
+const ensureInitialAdmin = async () => {
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  const adminName = process.env.ADMIN_NAME || 'Administrador';
+
+  if (!adminEmail || !adminPassword) {
+    logger.warn('Bootstrap admin ignorado (ADMIN_EMAIL/ADMIN_PASSWORD não definidos)');
+    return;
+  }
+
+  try {
+    // Já existe algum admin?
+    const { data: existingAdmins, error: existingAdminsError } = await supabaseAdmin
+      .from('user_roles')
+      .select('user_id')
+      .eq('role', 'admin')
+      .limit(1);
+
+    if (existingAdminsError) {
+      logger.logError('Bootstrap admin: erro ao checar admins existentes', existingAdminsError);
+      return;
+    }
+
+    if ((existingAdmins || []).length > 0) {
+      logger.info('Bootstrap admin: já existe admin, pulando criação');
+      return;
+    }
+
+    logger.warn('Bootstrap admin: nenhum admin encontrado, criando admin inicial', { adminEmail });
+
+    // Criar/recuperar usuário no auth
+    let userId = null;
+    const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
+      email: adminEmail,
+      password: adminPassword,
+      email_confirm: true,
+      user_metadata: { full_name: adminName },
+    });
+
+    if (createError) {
+      // Se já existir, buscar pelo listUsers
+      const msg = (createError.message || '').toLowerCase();
+      if (msg.includes('already') || msg.includes('exists') || msg.includes('registered')) {
+        const { data: listed, error: listError } = await supabaseAdmin.auth.admin.listUsers({
+          page: 1,
+          perPage: 1000,
+        });
+
+        if (listError) {
+          logger.logError('Bootstrap admin: erro ao listar usuários', listError, { adminEmail });
+          return;
+        }
+
+        const found = (listed?.users || []).find((u) => (u.email || '').toLowerCase() === adminEmail.toLowerCase());
+        if (!found) {
+          logger.error('Bootstrap admin: usuário já existe mas não foi encontrado no listUsers', { adminEmail });
+          return;
+        }
+        userId = found.id;
+      } else {
+        logger.logError('Bootstrap admin: erro ao criar usuário no auth', createError, { adminEmail });
+        return;
+      }
+    } else {
+      userId = created?.user?.id;
+    }
+
+    if (!userId) {
+      logger.error('Bootstrap admin: não foi possível determinar userId', { adminEmail });
+      return;
+    }
+
+    // Upsert perfil
+    const { error: profileUpsertError } = await supabaseAdmin
+      .from('profiles')
+      .upsert(
+        {
+          user_id: userId,
+          full_name: adminName,
+          must_change_password: true,
+          is_active: true,
+        },
+        { onConflict: 'user_id' }
+      );
+
+    if (profileUpsertError) {
+      logger.logError('Bootstrap admin: erro ao upsert do perfil', profileUpsertError, { userId, adminEmail });
+      return;
+    }
+
+    // Upsert role admin
+    const { error: roleUpsertError } = await supabaseAdmin
+      .from('user_roles')
+      .upsert(
+        {
+          user_id: userId,
+          role: 'admin',
+        },
+        { onConflict: 'user_id,role' }
+      );
+
+    if (roleUpsertError) {
+      logger.logError('Bootstrap admin: erro ao upsert da role admin', roleUpsertError, { userId, adminEmail });
+      return;
+    }
+
+    logger.info('Bootstrap admin: admin inicial pronto', { userId, adminEmail });
+  } catch (error) {
+    logger.logError('Bootstrap admin: erro inesperado', error, { adminEmail: process.env.ADMIN_EMAIL });
+  }
+};
+
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
   logger.info(`Servidor iniciado na porta ${PORT}`, {
     supabaseUrl: SUPABASE_URL,
     logDir: process.env.LOG_DIR || '/var/log/visitor-pass',
   });
+
+  // Rodar bootstrap em background
+  ensureInitialAdmin().catch((e) => logger.logError('Bootstrap admin: falha', e));
 });
 
 // Graceful shutdown

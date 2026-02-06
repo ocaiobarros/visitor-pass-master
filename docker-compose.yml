@@ -167,7 +167,7 @@ services:
       KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
     volumes:
       - ./docker/kong.template.yml:/kong/kong.template.yml:ro
-    command: ["sh", "-c", "sed \"s|__ANON_KEY__|$ANON_KEY|g\" /kong/kong.template.yml > /tmp/kong.yml && kong docker-start"]
+    command: ["sh", "-c", "sed \"s|__ANON_KEY__|$ANON_KEY|g\" /kong/kong.template.yml > /tmp/kong.yml && kong start -c /tmp/kong.yml --nginx-conf /usr/local/kong/nginx.conf"]
     # SEGURANÇA: Expor apenas para localhost (nginx no host faz proxy)
     # Em produção, use: 127.0.0.1:8000:8000
     ports:

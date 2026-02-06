@@ -31,13 +31,17 @@ const Login = () => {
   }, []);
 
   useEffect(() => {
-    // Only process redirect after auth and profile are both loaded
-    if (authLoading || profileLoading) return;
+    // Only process redirect after auth is loaded
+    if (authLoading) return;
     
-    if (isAuthenticated && profile) {
-      if (profile.mustChangePassword) {
+    if (isAuthenticated) {
+      // Check if profile needs password change
+      if (profileLoading) return; // Still loading profile
+      
+      if (profile?.mustChangePassword) {
         setShowPasswordModal(true);
       } else {
+        // Redirect immediately - don't wait for profile if not needed
         navigate('/dashboard', { replace: true });
       }
     }

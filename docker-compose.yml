@@ -205,7 +205,7 @@ services:
       LOG_DIR: /var/log/visitor-pass
       SERVICE_NAME: admin-api
     volumes:
-      - visitor-pass-logs:/var/log/visitor-pass
+      - /var/log/visitor-pass:/var/log/visitor-pass
     expose:
       - "3001"
     healthcheck:
@@ -260,12 +260,6 @@ services:
 volumes:
   postgres_data:
     driver: local
-  visitor-pass-logs:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /var/log/visitor-pass
 
 # ==========================================
 # Rede interna (isolada)

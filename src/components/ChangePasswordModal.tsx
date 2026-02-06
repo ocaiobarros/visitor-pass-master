@@ -61,30 +61,40 @@ const ChangePasswordModal = ({ open, onPasswordChanged, isRequired = false }: Ch
         // Retry logic for robustness
         let retryCount = 0;
         let profileError = null;
+        let updateSuccess = false;
         
-        while (retryCount < 3) {
-          const { error } = await supabase
+        while (retryCount < 5) {
+          const { error, data } = await supabase
             .from('profiles')
             .update({ 
               must_change_password: false,
               updated_at: new Date().toISOString()
             })
-            .eq('user_id', user.id);
+            .eq('user_id', user.id)
+            .select()
+            .maybeSingle();
           
-          if (!error) {
+          if (!error && data) {
             profileError = null;
+            updateSuccess = true;
+            console.log('[ChangePassword] Profile updated successfully, must_change_password=false');
             break;
           }
           
           profileError = error;
           retryCount++;
-          await new Promise(r => setTimeout(r, 500)); // Wait before retry
+          console.warn(`[ChangePassword] Retry ${retryCount}/5 - Error:`, error?.message);
+          await new Promise(r => setTimeout(r, 500 * retryCount)); // Exponential backoff
         }
         
-        if (profileError) {
-          console.error('Error updating profile after retries:', profileError);
-          // Still proceed - password was changed, flag update failed
-          // Log this for debugging
+        if (!updateSuccess) {
+          console.error('[ChangePassword] Failed to update profile after all retries:', profileError);
+          // Show warning but still proceed - password was changed
+          toast({
+            title: 'Aviso',
+            description: 'Senha alterada, mas houve um problema. Se o modal reaparecer, contate o administrador.',
+            variant: 'destructive',
+          });
         }
       }
 

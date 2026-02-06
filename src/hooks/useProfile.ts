@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface Profile {
@@ -35,5 +35,17 @@ export const useProfile = (userId: string | undefined) => {
       } as Profile;
     },
     enabled: !!userId,
+    // Não usar cache agressivo para profile - importante para must_change_password
+    staleTime: 0,
+    gcTime: 0,
   });
+};
+
+// Hook para invalidar cache do perfil
+export const useInvalidateProfile = () => {
+  const queryClient = useQueryClient();
+  
+  return (userId: string) => {
+    queryClient.invalidateQueries({ queryKey: ['profile', userId] });
+  };
 };

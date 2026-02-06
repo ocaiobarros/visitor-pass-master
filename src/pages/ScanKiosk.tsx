@@ -3,13 +3,14 @@ import { useVisitorByPassId, useUpdateVisitorStatus } from '@/hooks/useVisitors'
 import { useCredentialByQrId } from '@/hooks/useEmployeeCredentials';
 import { useCreateAccessLog } from '@/hooks/useAccessLogs';
 import { useScanFeedback } from '@/hooks/useScanFeedback';
-import { Camera, User, Car, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { Camera, User, Car, CheckCircle, XCircle, AlertTriangle, ArrowLeft, Printer } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Visitor, EmployeeCredential } from '@/types/visitor';
 import { useNavigate } from 'react-router-dom';
 import BrandLogo from '@/components/BrandLogo';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 type ScanResult = {
   type: 'visitor';
@@ -31,11 +32,13 @@ const ScanKiosk = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [settingsClicks, setSettingsClicks] = useState(0);
   const [currentTime, setCurrentTime] = useState(format(new Date(), 'HH:mm:ss'));
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const focusIntervalRef = useRef<ReturnType<typeof setInterval>>();
+  const printRef = useRef<HTMLDivElement>(null);
   
   const navigate = useNavigate();
   const { playSuccess, playError, playBlocked } = useScanFeedback();
@@ -71,6 +74,7 @@ const ScanKiosk = () => {
       try {
         if (containerRef.current && !document.fullscreenElement) {
           await containerRef.current.requestFullscreen();
+          setIsFullscreen(true);
         }
       } catch (e) {
         // Fullscreen might not be available
@@ -78,11 +82,18 @@ const ScanKiosk = () => {
     };
     enterFullscreen();
     
+    // Track fullscreen changes
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    
     // Eternal focus guard
     focusIntervalRef.current = setInterval(forceFocus, 1000);
     
     return () => {
       if (focusIntervalRef.current) clearInterval(focusIntervalRef.current);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
     };
   }, [forceFocus]);
 
@@ -202,6 +213,12 @@ const ScanKiosk = () => {
     navigate('/dashboard');
   };
 
+  // Print badge
+  const handlePrint = () => {
+    if (!scanResult || scanResult.type === 'error') return;
+    window.print();
+  };
+
   const isLoading = isLoadingVisitor || isLoadingCredential;
 
   // ==================== RESULT SCREENS ====================
@@ -215,81 +232,99 @@ const ScanKiosk = () => {
     return (
       <div 
         ref={containerRef}
-        className="min-h-screen flex flex-col items-center justify-center p-8 bg-kiosk-allowed"
+        className="min-h-screen flex flex-col items-center justify-center p-8 bg-kiosk-allowed print:bg-white"
       >
-        {/* Header bar */}
-        <div className="absolute top-0 left-0 right-0 py-4 px-8 text-center bg-black/20">
+        {/* Header bar - hidden on print */}
+        <div className="absolute top-0 left-0 right-0 py-4 px-8 text-center bg-black/20 print:hidden">
           <h1 className="text-4xl md:text-5xl font-black tracking-wider text-white">
             ✓ ACESSO LIBERADO
           </h1>
         </div>
 
+        {/* Botão Voltar - visível quando não estiver em fullscreen */}
+        {!isFullscreen && (
+          <div className="absolute top-4 left-4 z-20 print:hidden">
+            <Button variant="outline" onClick={handleExit} className="gap-2 bg-white/90">
+              <ArrowLeft className="w-4 h-4" />
+              Voltar
+            </Button>
+          </div>
+        )}
+
+        {/* Botão Imprimir */}
+        <div className="absolute top-4 right-4 z-20 print:hidden">
+          <Button onClick={handlePrint} className="gap-2">
+            <Printer className="w-4 h-4" />
+            Imprimir
+          </Button>
+        </div>
+
         {/* Main content */}
-        <div className="flex flex-col md:flex-row items-center gap-8 md:gap-12 mt-16">
+        <div ref={printRef} className="flex flex-col md:flex-row items-center gap-8 md:gap-12 mt-16 print:mt-0 print:flex-col print:text-black">
           {/* Photo */}
-          <div className="w-40 h-40 md:w-56 md:h-56 rounded-2xl flex items-center justify-center overflow-hidden border-4 bg-white/90 border-white/50">
+          <div className="w-40 h-40 md:w-56 md:h-56 rounded-2xl flex items-center justify-center overflow-hidden border-4 bg-white/90 border-white/50 print:w-32 print:h-32 print:border-gray-300">
             {scanResult.data.photoUrl ? (
               <img src={scanResult.data.photoUrl} alt="" className="w-full h-full object-cover" />
             ) : isVehicle ? (
-              <Car className="w-24 h-24 text-foreground" />
+              <Car className="w-24 h-24 text-foreground print:text-gray-700" />
             ) : (
-              <User className="w-24 h-24 text-foreground" />
+              <User className="w-24 h-24 text-foreground print:text-gray-700" />
             )}
           </div>
 
           {/* Info */}
-          <div className="text-center md:text-left text-white">
+          <div className="text-center md:text-left text-white print:text-black">
             {isVehicle && scanResult.type === 'employee' && (
               <>
-                <p className="text-2xl mb-2 flex items-center justify-center md:justify-start gap-2">
-                  <Car className="w-8 h-8" /> VEÍCULO AUTORIZADO
+                <p className="text-2xl mb-2 flex items-center justify-center md:justify-start gap-2 print:text-lg print:text-gray-600">
+                  <Car className="w-8 h-8 print:w-5 print:h-5" /> VEÍCULO AUTORIZADO
                 </p>
-                <h2 className="text-5xl md:text-6xl font-black mb-4">{scanResult.data.vehiclePlate}</h2>
+                <h2 className="text-5xl md:text-6xl font-black mb-4 print:text-3xl">{scanResult.data.vehiclePlate}</h2>
                 {scanResult.data.vehicleMakeModel && (
-                  <p className="text-2xl opacity-90">{scanResult.data.vehicleMakeModel}</p>
+                  <p className="text-2xl opacity-90 print:text-lg">{scanResult.data.vehicleMakeModel}</p>
                 )}
-                <p className="text-3xl mt-4">Motorista: <strong>{scanResult.data.fullName}</strong></p>
+                <p className="text-3xl mt-4 print:text-xl">Motorista: <strong>{scanResult.data.fullName}</strong></p>
               </>
             )}
             
             {!isVehicle && scanResult.type === 'employee' && (
               <>
-                <h2 className="text-5xl md:text-6xl font-black mb-4">{scanResult.data.fullName}</h2>
+                <h2 className="text-5xl md:text-6xl font-black mb-4 print:text-3xl">{scanResult.data.fullName}</h2>
                 {scanResult.data.jobTitle && (
-                  <p className="text-3xl opacity-90">{scanResult.data.jobTitle}</p>
+                  <p className="text-3xl opacity-90 print:text-xl">{scanResult.data.jobTitle}</p>
                 )}
               </>
             )}
             
             {isVisitor && scanResult.type === 'visitor' && (
               <>
-                <p className="text-2xl mb-2">✓ VISITANTE OK</p>
-                <h2 className="text-5xl md:text-6xl font-black mb-2">{scanResult.data.fullName}</h2>
+                <p className="text-2xl mb-2 print:text-lg print:text-gray-600">✓ VISITANTE OK</p>
+                <h2 className="text-5xl md:text-6xl font-black mb-2 print:text-3xl">{scanResult.data.fullName}</h2>
                 {scanResult.data.company && (
-                  <p className="text-2xl opacity-90 mb-4">{scanResult.data.company}</p>
+                  <p className="text-2xl opacity-90 mb-4 print:text-lg">{scanResult.data.company}</p>
                 )}
-                <div className="mt-6 p-4 rounded-xl bg-black/20">
-                  <p className="text-2xl">
-                    VEIO PARA: <strong className="text-3xl">{scanResult.data.visitToName}</strong>
+                <div className="mt-6 p-4 rounded-xl bg-black/20 print:bg-gray-100 print:border print:border-gray-300">
+                  <p className="text-2xl print:text-lg">
+                    VEIO PARA: <strong className="text-3xl print:text-xl">{scanResult.data.visitToName}</strong>
                   </p>
                   {scanResult.data.gateObs && (
-                    <p className="text-2xl mt-2 text-warning">
+                    <p className="text-2xl mt-2 text-warning print:text-orange-600">
                       OBS: <strong>{scanResult.data.gateObs}</strong>
                     </p>
                   )}
                 </div>
-                <p className="text-xl mt-4 opacity-80">
+                <p className="text-xl mt-4 opacity-80 print:text-sm print:text-gray-500">
                   Validade: até {format(new Date(scanResult.data.validUntil), 'HH:mm', { locale: ptBR })}
                 </p>
               </>
             )}
 
-            <div className="mt-8 flex items-center justify-center md:justify-start gap-3">
+            <div className="mt-8 flex items-center justify-center md:justify-start gap-3 print:hidden">
               <CheckCircle className="w-8 h-8" />
               <span className="text-2xl">STATUS: LIBERADO</span>
             </div>
             
-            <p className="text-xl mt-4 opacity-80">
+            <p className="text-xl mt-4 opacity-80 print:text-sm print:text-gray-500">
               ⏰ Entrada registrada às {currentTime}
             </p>
           </div>
@@ -333,6 +368,16 @@ const ScanKiosk = () => {
             ✕ ACESSO NEGADO
           </h1>
         </div>
+
+        {/* Botão Voltar - visível quando não estiver em fullscreen */}
+        {!isFullscreen && (
+          <div className="absolute top-4 left-4 z-20">
+            <Button variant="outline" onClick={handleExit} className="gap-2 bg-white/90">
+              <ArrowLeft className="w-4 h-4" />
+              Voltar
+            </Button>
+          </div>
+        )}
 
         {/* Main content */}
         <div className="text-center text-white">
@@ -392,11 +437,19 @@ const ScanKiosk = () => {
         </div>
       )}
 
-      {/* Minimal header - click 3x on logo to access settings */}
-      <header className="absolute top-4 left-4 z-10">
+      {/* Header com botão voltar */}
+      <header className="absolute top-4 left-4 right-4 z-10 flex justify-between items-center">
         <div onClick={handleLogoClick} className="cursor-pointer opacity-50 hover:opacity-100 transition-opacity">
           <BrandLogo size="sm" />
         </div>
+        
+        {/* Botão Voltar - sempre visível quando não estiver em fullscreen */}
+        {!isFullscreen && (
+          <Button variant="outline" onClick={handleExit} className="gap-2">
+            <ArrowLeft className="w-4 h-4" />
+            Voltar ao Sistema
+          </Button>
+        )}
       </header>
 
       {/* Main content - centered */}
@@ -418,6 +471,13 @@ const ScanKiosk = () => {
           {isLoading ? '⏳ Processando...' : '⏳ Aguardando leitura...'}
         </p>
 
+        {/* Dica para sair */}
+        {isFullscreen && (
+          <p className="text-sm text-muted-foreground mt-8 opacity-50">
+            💡 Clique 3x no logo para sair do modo kiosk
+          </p>
+        )}
+
         {/* Clock */}
         <div className="absolute bottom-8 right-8 opacity-50">
           <p className="text-2xl font-mono text-foreground">
@@ -425,6 +485,22 @@ const ScanKiosk = () => {
           </p>
         </div>
       </main>
+
+      {/* Print styles */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          .print\\:bg-white,
+          .print\\:bg-white * {
+            visibility: visible;
+          }
+          .print\\:hidden {
+            display: none !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };

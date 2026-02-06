@@ -94,7 +94,10 @@ const Login = () => {
   const handlePasswordChanged = async () => {
     await logAuditAction('PASSWORD_CHANGE', { first_login: true });
     setShowPasswordModal(false);
-    navigate('/dashboard', { replace: true });
+    
+    // Force refresh profile cache to pick up the must_change_password = false
+    // This prevents the modal from reappearing
+    window.location.href = '/dashboard';
   };
 
   // Show loading while auth is initializing

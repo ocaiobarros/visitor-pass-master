@@ -1,7 +1,7 @@
 # ============================================
 # Guarda Operacional - Playwright E2E Tests
 # ============================================
-FROM mcr.microsoft.com/playwright:v1.40.0-jammy
+FROM mcr.microsoft.com/playwright:v1.52.0-jammy
 
 WORKDIR /e2e
 

@@ -2,150 +2,51 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useVisitorByPassId, useUpdateVisitorStatus } from '@/hooks/useVisitors';
-import { useCredentialByQrId, useUpdateCredentialStatus } from '@/hooks/useEmployeeCredentials';
+import { useCredentialByQrId } from '@/hooks/useEmployeeCredentials';
 import { useScanFeedback } from '@/hooks/useScanFeedback';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { QrCode, UserCheck, AlertTriangle, Car, User, Building2, Clock, ArrowDownLeft, ArrowUpRight, Camera, Maximize } from 'lucide-react';
+import { QrCode, AlertTriangle, Car, User, Building2, Clock, ArrowDownLeft, ArrowUpRight, Camera, Maximize, Ban } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Visitor, EmployeeCredential, AccessLog, AccessDirection } from '@/types/visitor';
+import { Visitor, EmployeeCredential, AccessDirection } from '@/types/visitor';
 import { supabase } from '@/integrations/supabase/client';
 import CameraScannerModal from '@/components/CameraScannerModal';
 import { logAuditAction } from '@/hooks/useAuditLogs';
 
 // ============================================
-// ANTI-DUPLICATION: Cooldown tracking
+// GLOBAL STATE: Anti-duplicação por janela de tempo
 // ============================================
-const lastScanRegistry: Map<string, number> = new Map();
-const SCAN_COOLDOWN_MS = 5000; // 5 seconds cooldown between same QR scans
-
-/**
- * Checks if a scan should be allowed based on cooldown.
- * Returns true if scan is allowed, false if it should be rejected.
- */
-const canProcessScan = (subjectId: string): boolean => {
-  const now = Date.now();
-  const lastScan = lastScanRegistry.get(subjectId);
-  
-  if (lastScan && (now - lastScan) < SCAN_COOLDOWN_MS) {
-    console.log(`[SCAN] Cooldown active for ${subjectId}, rejecting duplicate scan`);
-    return false;
-  }
-  
-  return true;
-};
-
-/**
- * Registers a successful scan timestamp for cooldown tracking.
- */
-const registerScan = (subjectId: string): void => {
-  lastScanRegistry.set(subjectId, Date.now());
-};
+const scanTimestamps: Map<string, number> = new Map();
+const ANTI_DUP_WINDOW_MS = 10000; // 10 segundos conforme especificação
 
 // ============================================
-// TOGGLE LOGIC: Deterministic direction fetch
+// TIPOS
 // ============================================
-
-/**
- * Fetches the REAL last access direction directly from the database.
- * This ensures toggle accuracy by always consulting fresh data.
- * Uses ORDER BY created_at DESC LIMIT 1 for deterministic results.
- */
-const fetchLastAccessDirection = async (
-  subjectType: 'visitor' | 'employee',
-  subjectId: string
-): Promise<{ direction: AccessDirection | null; lastLogId: string | null }> => {
-  console.log(`[TOGGLE] Fetching last direction for ${subjectType}:${subjectId}`);
-  
-  const { data, error } = await supabase
-    .from('access_logs')
-    .select('id, direction, created_at')
-    .eq('subject_type', subjectType)
-    .eq('subject_id', subjectId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    console.error('[TOGGLE] Error fetching last direction:', error);
-    return { direction: null, lastLogId: null };
-  }
-  
-  console.log(`[TOGGLE] Last direction result:`, data);
-  return { 
-    direction: data?.direction as AccessDirection | null,
-    lastLogId: data?.id || null
-  };
-};
-
-/**
- * Creates an access log with the correct direction based on toggle logic.
- * This is atomic: fetch last → calculate next → insert.
- */
-const createAccessLogWithToggle = async (
-  subjectType: 'visitor' | 'employee',
-  subjectId: string
-): Promise<{ success: boolean; direction: AccessDirection; error?: string }> => {
-  // Step 1: Get current user
-  const { data: userData } = await supabase.auth.getUser();
-  
-  // Step 2: Fetch REAL last direction from DB
-  const { direction: lastDirection } = await fetchLastAccessDirection(subjectType, subjectId);
-  
-  // Step 3: DETERMINISTIC TOGGLE
-  // If last was 'in' → next MUST be 'out'
-  // If last was 'out' or null → next MUST be 'in'
-  const nextDirection: AccessDirection = lastDirection === 'in' ? 'out' : 'in';
-  
-  console.log(`[TOGGLE] Last: ${lastDirection || 'none'} → Next: ${nextDirection}`);
-  
-  // Step 4: Insert the new log
-  const { error } = await supabase
-    .from('access_logs')
-    .insert({
-      subject_type: subjectType,
-      subject_id: subjectId,
-      direction: nextDirection,
-      gate_id: 'GUARITA_01',
-      operator_id: userData.user?.id || null,
-    });
-
-  if (error) {
-    console.error('[TOGGLE] Insert error:', error);
-    return { success: false, direction: nextDirection, error: error.message };
-  }
-  
-  // Step 5: Register scan for cooldown
-  registerScan(subjectId);
-  
-  console.log(`[TOGGLE] Successfully registered ${nextDirection} for ${subjectId}`);
-  return { success: true, direction: nextDirection };
-};
-
-// ============================================
-// TYPES
-// ============================================
+type ScanAction = 'in' | 'out' | 'blocked' | 'expired' | 'closed' | 'duplicate';
 
 type ScanResult = {
   type: 'visitor';
   data: Visitor;
-  lastDirection: AccessDirection | null;
-  autoAction: 'in' | 'out' | 'blocked' | 'expired' | 'closed' | 'cooldown';
+  action: ScanAction;
 } | {
   type: 'employee';
   data: EmployeeCredential;
-  lastDirection: AccessDirection | null;
-  autoAction: 'in' | 'out' | 'blocked' | 'cooldown';
+  action: ScanAction;
 } | null;
 
-// ============================================
-// COMPONENTS
-// ============================================
+interface RecentLog {
+  id: string;
+  direction: AccessDirection;
+  createdAt: Date;
+}
 
-const AccessLogItem = ({ log }: { log: AccessLog }) => (
+// ============================================
+// COMPONENTE: Item de Log Recente
+// ============================================
+const LogItem = ({ log }: { log: RecentLog }) => (
   <div className="flex items-center gap-3 py-2 px-3 bg-muted/50 rounded-lg text-sm">
     {log.direction === 'in' ? (
       <ArrowDownLeft className="w-4 h-4 text-success shrink-0" />
@@ -164,7 +65,6 @@ const AccessLogItem = ({ log }: { log: AccessLog }) => (
 // ============================================
 // MAIN COMPONENT
 // ============================================
-
 const QRScanner = () => {
   const [qrCode, setQrCode] = useState('');
   const [searchCode, setSearchCode] = useState('');
@@ -172,63 +72,38 @@ const QRScanner = () => {
   const [scanError, setScanError] = useState<string | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [recentLogs, setRecentLogs] = useState<AccessLog[]>([]);
+  const [recentLogs, setRecentLogs] = useState<RecentLog[]>([]);
+  
   const inputRef = useRef<HTMLInputElement>(null);
   const autoResetTimerRef = useRef<ReturnType<typeof setTimeout>>();
-  const processingLockRef = useRef<string | null>(null);
+  const processingRef = useRef(false); // Mutex local
   
   const { toast } = useToast();
   const { playSuccess, playError, playBlocked } = useScanFeedback();
   const updateVisitorStatus = useUpdateVisitorStatus();
-  const updateCredentialStatus = useUpdateCredentialStatus();
 
-  // Query for visitor
-  const { data: visitor, isLoading: isLoadingVisitor } = useVisitorByPassId(
+  // Queries
+  const { data: visitor, isLoading: loadingVisitor } = useVisitorByPassId(
     searchCode.startsWith('VP-') ? searchCode : ''
   );
-  
-  // Query for employee credential
-  const { data: credential, isLoading: isLoadingCredential } = useCredentialByQrId(
+  const { data: credential, isLoading: loadingCredential } = useCredentialByQrId(
     searchCode.startsWith('EC-') ? searchCode : ''
   );
 
-  // Auto-focus on mount
+  // Auto-focus
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
-  // Re-focus after actions
   useEffect(() => {
-    const timer = setTimeout(() => {
-      inputRef.current?.focus();
-    }, 100);
+    const timer = setTimeout(() => inputRef.current?.focus(), 100);
     return () => clearTimeout(timer);
   }, [scanResult, scanError]);
 
-  // Fetch recent logs for display
-  const fetchRecentLogs = async (subjectType: 'visitor' | 'employee', subjectId: string) => {
-    const { data } = await supabase
-      .from('access_logs')
-      .select('*')
-      .eq('subject_type', subjectType)
-      .eq('subject_id', subjectId)
-      .order('created_at', { ascending: false })
-      .limit(5);
-    
-    if (data) {
-      setRecentLogs(data.map(row => ({
-        id: row.id,
-        subjectType: row.subject_type,
-        subjectId: row.subject_id,
-        direction: row.direction,
-        gateId: row.gate_id,
-        operatorId: row.operator_id,
-        createdAt: new Date(row.created_at),
-      })));
-    }
-  };
-
-  // Clear scan and reset for next
+  // ============================================
+  // FUNÇÕES AUXILIARES
+  // ============================================
+  
   const clearScan = useCallback(() => {
     if (autoResetTimerRef.current) clearTimeout(autoResetTimerRef.current);
     setQrCode('');
@@ -237,227 +112,280 @@ const QRScanner = () => {
     setScanError(null);
     setIsProcessing(false);
     setRecentLogs([]);
-    processingLockRef.current = null;
+    processingRef.current = false;
     inputRef.current?.focus();
   }, []);
 
-  // Schedule auto-reset after showing result
-  const scheduleAutoReset = useCallback((delay: number = 3000) => {
+  const scheduleReset = useCallback((ms = 3000) => {
     if (autoResetTimerRef.current) clearTimeout(autoResetTimerRef.current);
-    autoResetTimerRef.current = setTimeout(clearScan, delay);
+    autoResetTimerRef.current = setTimeout(clearScan, ms);
   }, [clearScan]);
 
-  // ============================================
-  // MAIN PROCESSING LOGIC
-  // ============================================
-  useEffect(() => {
-    if (!searchCode || isProcessing) return;
+  const fetchRecentLogs = async (subjectType: 'visitor' | 'employee', subjectId: string) => {
+    const { data } = await supabase
+      .from('access_logs')
+      .select('id, direction, created_at')
+      .eq('subject_type', subjectType)
+      .eq('subject_id', subjectId)
+      .order('created_at', { ascending: false })
+      .limit(5);
+    
+    if (data) {
+      setRecentLogs(data.map(r => ({
+        id: r.id,
+        direction: r.direction as AccessDirection,
+        createdAt: new Date(r.created_at),
+      })));
+    }
+  };
 
-    const processAutoToggle = async () => {
-      // Wait for data to load
-      if (searchCode.startsWith('VP-') && isLoadingVisitor) return;
-      if (searchCode.startsWith('EC-') && isLoadingCredential) return;
+  // ============================================
+  // TOGGLE DETERMINÍSTICO: Lógica Server-First
+  // ============================================
+  
+  /**
+   * Executa o toggle determinístico:
+   * 1. Busca último log do subject
+   * 2. Verifica janela anti-duplicação (10s)
+   * 3. Calcula próxima direção
+   * 4. Insere novo log
+   */
+  const executeToggle = async (
+    subjectType: 'visitor' | 'employee',
+    subjectId: string
+  ): Promise<{ success: boolean; direction: AccessDirection; reason?: string }> => {
+    
+    // STEP 1: Buscar último log do subject
+    const { data: lastLog, error: fetchError } = await supabase
+      .from('access_logs')
+      .select('id, direction, created_at')
+      .eq('subject_type', subjectType)
+      .eq('subject_id', subjectId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-      // Prevent double-processing with lock
-      if (processingLockRef.current === searchCode) {
-        console.log(`[SCAN] Already processing ${searchCode}, skipping`);
-        return;
-      }
+    if (fetchError) {
+      console.error('[TOGGLE] Erro ao buscar último log:', fetchError);
+      return { success: false, direction: 'in', reason: fetchError.message };
+    }
+
+    // STEP 2: Anti-duplicação por janela de tempo (10 segundos)
+    const now = Date.now();
+    if (lastLog) {
+      const lastTime = new Date(lastLog.created_at).getTime();
+      const elapsed = now - lastTime;
       
-      processingLockRef.current = searchCode;
+      if (elapsed < ANTI_DUP_WINDOW_MS) {
+        console.log(`[TOGGLE] Anti-dup: ${elapsed}ms < ${ANTI_DUP_WINDOW_MS}ms, rejeitando`);
+        return { 
+          success: false, 
+          direction: lastLog.direction as AccessDirection, 
+          reason: 'duplicate' 
+        };
+      }
+    }
+
+    // Verificação secundária com Map local (para bips muito rápidos)
+    const lastLocalScan = scanTimestamps.get(subjectId);
+    if (lastLocalScan && (now - lastLocalScan) < ANTI_DUP_WINDOW_MS) {
+      console.log('[TOGGLE] Anti-dup local ativado');
+      return { success: false, direction: 'in', reason: 'duplicate' };
+    }
+
+    // STEP 3: Determinar próxima direção
+    // Se último foi 'in' → próximo DEVE ser 'out'
+    // Se último foi 'out' ou não existe → próximo DEVE ser 'in'
+    const nextDirection: AccessDirection = lastLog?.direction === 'in' ? 'out' : 'in';
+    
+    console.log(`[TOGGLE] Último: ${lastLog?.direction || 'nenhum'} → Próximo: ${nextDirection}`);
+
+    // STEP 4: Inserir novo log
+    const { data: user } = await supabase.auth.getUser();
+    
+    const { error: insertError } = await supabase
+      .from('access_logs')
+      .insert({
+        subject_type: subjectType,
+        subject_id: subjectId,
+        direction: nextDirection,
+        gate_id: 'GUARITA_01',
+        operator_id: user.user?.id || null,
+      });
+
+    if (insertError) {
+      console.error('[TOGGLE] Erro ao inserir log:', insertError);
+      return { success: false, direction: nextDirection, reason: insertError.message };
+    }
+
+    // Registrar timestamp local para anti-dup
+    scanTimestamps.set(subjectId, now);
+    
+    console.log(`[TOGGLE] Sucesso: ${nextDirection} registrado para ${subjectId}`);
+    return { success: true, direction: nextDirection };
+  };
+
+  // ============================================
+  // PROCESSAMENTO PRINCIPAL
+  // ============================================
+  
+  useEffect(() => {
+    if (!searchCode) return;
+    if (processingRef.current) return;
+    if (searchCode.startsWith('VP-') && loadingVisitor) return;
+    if (searchCode.startsWith('EC-') && loadingCredential) return;
+
+    const process = async () => {
+      // Mutex: evita duplo processamento
+      if (processingRef.current) return;
+      processingRef.current = true;
       setIsProcessing(true);
 
       try {
-        // ========== VISITOR PROCESSING ==========
+        // =============== VISITANTE ===============
         if (searchCode.startsWith('VP-')) {
           if (!visitor) {
             playError();
             setScanError(`Passe ${searchCode} não encontrado`);
-            scheduleAutoReset(3000);
+            scheduleReset(3000);
             return;
           }
 
-          // ANTI-DUPLICATION CHECK
-          if (!canProcessScan(visitor.id)) {
-            playBlocked();
-            setScanResult({ 
-              type: 'visitor', 
-              data: visitor, 
-              lastDirection: null, 
-              autoAction: 'cooldown' 
-            });
-            toast({
-              title: '⏱️ Aguarde',
-              description: 'Bip repetido detectado. Aguarde alguns segundos.',
-            });
-            scheduleAutoReset(2000);
-            return;
-          }
+          await fetchRecentLogs('visitor', visitor.id);
 
-          // BLOCK CHECK: Visitor closed
+          // BLOQUEIO: Passe fechado
           if (visitor.status === 'closed') {
             playBlocked();
-            await fetchRecentLogs('visitor', visitor.id);
-            setScanResult({ 
-              type: 'visitor', 
-              data: visitor, 
-              lastDirection: null, 
-              autoAction: 'closed' 
-            });
+            setScanResult({ type: 'visitor', data: visitor, action: 'closed' });
             logAuditAction('ACCESS_SCAN', {
-              subject_type: 'visitor',
-              subject_id: visitor.id,
-              result: 'DENIED',
-              reason: 'closed',
+              subject_type: 'visitor', subject_id: visitor.id,
+              result: 'DENIED', reason: 'closed'
             });
-            scheduleAutoReset(4000);
+            scheduleReset(4000);
             return;
           }
 
-          // BLOCK CHECK: Visitor expired
+          // BLOQUEIO: Passe expirado
           if (new Date() > new Date(visitor.validUntil)) {
             playBlocked();
-            await fetchRecentLogs('visitor', visitor.id);
-            setScanResult({ 
-              type: 'visitor', 
-              data: visitor, 
-              lastDirection: null, 
-              autoAction: 'expired' 
-            });
+            setScanResult({ type: 'visitor', data: visitor, action: 'expired' });
             logAuditAction('ACCESS_SCAN', {
-              subject_type: 'visitor',
-              subject_id: visitor.id,
-              result: 'DENIED',
-              reason: 'expired',
+              subject_type: 'visitor', subject_id: visitor.id,
+              result: 'DENIED', reason: 'expired'
             });
-            scheduleAutoReset(4000);
+            scheduleReset(4000);
             return;
           }
 
-          // TOGGLE: Create access log with deterministic direction
-          const result = await createAccessLogWithToggle('visitor', visitor.id);
-          
+          // TOGGLE
+          const result = await executeToggle('visitor', visitor.id);
+
           if (!result.success) {
-            playError();
-            setScanError(result.error || 'Erro ao registrar acesso');
-            scheduleAutoReset(3000);
+            if (result.reason === 'duplicate') {
+              playBlocked();
+              setScanResult({ type: 'visitor', data: visitor, action: 'duplicate' });
+              toast({ title: '⏱️ Aguarde', description: 'Bip repetido. Aguarde 10 segundos.' });
+              scheduleReset(2000);
+            } else {
+              playError();
+              setScanError(result.reason || 'Erro ao registrar');
+              scheduleReset(3000);
+            }
             return;
           }
 
-          // Update visitor status based on direction
+          // Atualizar status do visitante
           if (result.direction === 'in') {
             await updateVisitorStatus.mutateAsync({ id: visitor.id, status: 'inside' });
           } else {
             await updateVisitorStatus.mutateAsync({ id: visitor.id, status: 'closed' });
           }
 
-          // Fetch updated logs for display
+          // Recarregar logs para exibição
           await fetchRecentLogs('visitor', visitor.id);
-          
+
           playSuccess();
           setScanResult({ 
             type: 'visitor', 
             data: { ...visitor, status: result.direction === 'in' ? 'inside' : 'closed' }, 
-            lastDirection: result.direction,
-            autoAction: result.direction 
+            action: result.direction 
           });
           toast({
             title: result.direction === 'in' ? '✓ Entrada registrada!' : '✓ Saída registrada!',
             description: `${visitor.fullName} ${result.direction === 'in' ? 'entrou' : 'saiu'}.`,
           });
-          scheduleAutoReset(3000);
+          scheduleReset(3000);
 
-        // ========== EMPLOYEE PROCESSING ==========
+        // =============== COLABORADOR ===============
         } else if (searchCode.startsWith('EC-')) {
           if (!credential) {
             playError();
             setScanError(`Credencial ${searchCode} não encontrada`);
-            scheduleAutoReset(3000);
+            scheduleReset(3000);
             return;
           }
 
-          // ANTI-DUPLICATION CHECK
-          if (!canProcessScan(credential.id)) {
-            playBlocked();
-            setScanResult({ 
-              type: 'employee', 
-              data: credential, 
-              lastDirection: null, 
-              autoAction: 'cooldown' 
-            });
-            toast({
-              title: '⏱️ Aguarde',
-              description: 'Bip repetido detectado. Aguarde alguns segundos.',
-            });
-            scheduleAutoReset(2000);
-            return;
-          }
+          await fetchRecentLogs('employee', credential.id);
 
-          // BLOCK CHECK: Credential blocked
+          // BLOQUEIO: Credencial bloqueada
           if (credential.status === 'blocked') {
             playBlocked();
-            await fetchRecentLogs('employee', credential.id);
-            setScanResult({ 
-              type: 'employee', 
-              data: credential, 
-              lastDirection: null, 
-              autoAction: 'blocked' 
-            });
+            setScanResult({ type: 'employee', data: credential, action: 'blocked' });
             logAuditAction('ACCESS_SCAN', {
-              subject_type: 'employee',
-              subject_id: credential.id,
+              subject_type: 'employee', subject_id: credential.id,
               credential_id: credential.credentialId,
-              result: 'DENIED',
-              reason: 'blocked',
+              result: 'DENIED', reason: 'blocked'
             });
-            scheduleAutoReset(4000);
+            scheduleReset(4000);
             return;
           }
 
-          // TOGGLE: Create access log with deterministic direction
-          const result = await createAccessLogWithToggle('employee', credential.id);
-          
+          // TOGGLE
+          const result = await executeToggle('employee', credential.id);
+
           if (!result.success) {
-            playError();
-            setScanError(result.error || 'Erro ao registrar acesso');
-            scheduleAutoReset(3000);
+            if (result.reason === 'duplicate') {
+              playBlocked();
+              setScanResult({ type: 'employee', data: credential, action: 'duplicate' });
+              toast({ title: '⏱️ Aguarde', description: 'Bip repetido. Aguarde 10 segundos.' });
+              scheduleReset(2000);
+            } else {
+              playError();
+              setScanError(result.reason || 'Erro ao registrar');
+              scheduleReset(3000);
+            }
             return;
           }
 
-          // Fetch updated logs for display
+          // Recarregar logs
           await fetchRecentLogs('employee', credential.id);
-          
+
           playSuccess();
-          setScanResult({ 
-            type: 'employee', 
-            data: credential, 
-            lastDirection: result.direction,
-            autoAction: result.direction 
-          });
+          setScanResult({ type: 'employee', data: credential, action: result.direction });
           toast({
             title: result.direction === 'in' ? '✓ Entrada registrada!' : '✓ Saída registrada!',
             description: `${credential.fullName} ${result.direction === 'in' ? 'entrou' : 'saiu'}.`,
           });
-          scheduleAutoReset(3000);
+          scheduleReset(3000);
         }
       } catch (error: any) {
-        console.error('[SCAN] Processing error:', error);
+        console.error('[SCAN] Erro:', error);
         playError();
         setScanError(error.message || 'Erro ao processar');
-        scheduleAutoReset(3000);
+        scheduleReset(3000);
       }
     };
 
-    processAutoToggle();
-  }, [searchCode, visitor, credential, isLoadingVisitor, isLoadingCredential, isProcessing]);
+    process();
+  }, [searchCode, visitor, credential, loadingVisitor, loadingCredential]);
+
+  // ============================================
+  // HANDLERS
+  // ============================================
 
   const handleScan = () => {
     if (!qrCode.trim()) {
-      toast({
-        title: 'Código vazio',
-        description: 'Digite ou escaneie o código.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Código vazio', description: 'Digite ou escaneie o código.', variant: 'destructive' });
       inputRef.current?.focus();
       return;
     }
@@ -468,25 +396,24 @@ const QRScanner = () => {
       playError();
       setScanError('Código inválido. Use VP-XXXXXXXX ou EC-XXXXXXXX.');
       setQrCode('');
-      scheduleAutoReset(3000);
+      scheduleReset(3000);
       return;
     }
 
-    // Clear previous and trigger new search
     clearScan();
     setSearchCode(code);
   };
 
   const handleCameraScan = (code: string) => {
-    const normalizedCode = code.toUpperCase().trim();
+    const normalized = code.toUpperCase().trim();
     clearScan();
     
-    if (normalizedCode.startsWith('VP-') || normalizedCode.startsWith('EC-')) {
-      setSearchCode(normalizedCode);
+    if (normalized.startsWith('VP-') || normalized.startsWith('EC-')) {
+      setSearchCode(normalized);
     } else {
       playError();
       setScanError('Código inválido.');
-      scheduleAutoReset(3000);
+      scheduleReset(3000);
     }
   };
 
@@ -497,18 +424,23 @@ const QRScanner = () => {
     }
   };
 
-  const isLoading = isLoadingVisitor || isLoadingCredential || isProcessing;
+  const isLoading = loadingVisitor || loadingCredential || isProcessing;
+
+  // ============================================
+  // RENDER
+  // ============================================
 
   return (
     <DashboardLayout>
       <div className="max-w-2xl mx-auto space-y-6">
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
               <QrCode className="w-8 h-8 text-primary" />
               Scanner de Acesso
             </h1>
-            <p className="text-muted-foreground mt-1">Escaneie para registro automático de entrada/saída</p>
+            <p className="text-muted-foreground mt-1">Registro automático de entrada/saída</p>
           </div>
           <Link to="/scan/kiosk">
             <Button variant="outline" className="gap-2">
@@ -518,12 +450,12 @@ const QRScanner = () => {
           </Link>
         </div>
 
-        {/* Scanner Input */}
+        {/* Input Card */}
         <Card>
           <CardHeader>
             <CardTitle>Escanear Código</CardTitle>
             <CardDescription>
-              Posicione o leitor e escaneie. O sistema registra automaticamente entrada ou saída.
+              Posicione o leitor. O sistema alterna automaticamente entrada/saída.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -538,12 +470,7 @@ const QRScanner = () => {
                 autoFocus
                 autoComplete="off"
               />
-              <Button 
-                variant="outline" 
-                size="lg" 
-                onClick={() => setCameraOpen(true)}
-                className="shrink-0 gap-2"
-              >
+              <Button variant="outline" size="lg" onClick={() => setCameraOpen(true)} className="shrink-0 gap-2">
                 <Camera className="w-5 h-5" />
                 <span className="hidden sm:inline">Câmera</span>
               </Button>
@@ -552,19 +479,14 @@ const QRScanner = () => {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              💡 Zero-clique: O sistema alterna automaticamente entre entrada e saída
+              💡 Zero-clique: Toggle automático com proteção anti-bip repetido (10s)
             </p>
           </CardContent>
         </Card>
 
-        {/* Camera Scanner Modal */}
-        <CameraScannerModal
-          open={cameraOpen}
-          onClose={() => setCameraOpen(false)}
-          onScan={handleCameraScan}
-        />
+        <CameraScannerModal open={cameraOpen} onClose={() => setCameraOpen(false)} onScan={handleCameraScan} />
 
-        {/* Scan Error */}
+        {/* Error State */}
         {scanError && (
           <Card className="border-destructive/50 bg-destructive/5">
             <CardContent className="pt-6">
@@ -577,9 +499,7 @@ const QRScanner = () => {
                   <p className="text-muted-foreground">{scanError}</p>
                 </div>
               </div>
-              <Button variant="outline" onClick={clearScan} className="mt-4 w-full">
-                Escanear Outro
-              </Button>
+              <Button variant="outline" onClick={clearScan} className="mt-4 w-full">Escanear Outro</Button>
             </CardContent>
           </Card>
         )}
@@ -587,29 +507,28 @@ const QRScanner = () => {
         {/* Visitor Result */}
         {scanResult?.type === 'visitor' && (
           <Card className={
-            scanResult.autoAction === 'in' ? 'border-success/50 bg-success/5' :
-            scanResult.autoAction === 'out' ? 'border-primary/50 bg-primary/5' :
-            scanResult.autoAction === 'cooldown' ? 'border-warning/50 bg-warning/5' :
+            scanResult.action === 'in' ? 'border-success/50 bg-success/5' :
+            scanResult.action === 'out' ? 'border-primary/50 bg-primary/5' :
+            scanResult.action === 'duplicate' ? 'border-warning/50 bg-warning/5' :
             'border-destructive/50 bg-destructive/5'
           }>
             <CardContent className="pt-6">
-              {/* Status Banner */}
               <div className={`mb-4 p-4 rounded-lg text-center text-white font-bold text-xl ${
-                scanResult.autoAction === 'in' ? 'bg-success' :
-                scanResult.autoAction === 'out' ? 'bg-primary' :
-                scanResult.autoAction === 'cooldown' ? 'bg-warning' :
+                scanResult.action === 'in' ? 'bg-success' :
+                scanResult.action === 'out' ? 'bg-primary' :
+                scanResult.action === 'duplicate' ? 'bg-warning' :
                 'bg-destructive'
               }`}>
-                {scanResult.autoAction === 'in' && '✓ ENTRADA REGISTRADA'}
-                {scanResult.autoAction === 'out' && '✓ SAÍDA REGISTRADA'}
-                {scanResult.autoAction === 'blocked' && '✕ ACESSO NEGADO'}
-                {scanResult.autoAction === 'expired' && '✕ PASSE EXPIRADO'}
-                {scanResult.autoAction === 'closed' && '✕ PASSE JÁ UTILIZADO'}
-                {scanResult.autoAction === 'cooldown' && '⏱️ AGUARDE - BIP REPETIDO'}
+                {scanResult.action === 'in' && '✓ ENTRADA REGISTRADA'}
+                {scanResult.action === 'out' && '✓ SAÍDA REGISTRADA'}
+                {scanResult.action === 'duplicate' && '⏱️ AGUARDE - BIP REPETIDO'}
+                {scanResult.action === 'blocked' && '✕ ACESSO NEGADO'}
+                {scanResult.action === 'expired' && '✕ PASSE EXPIRADO'}
+                {scanResult.action === 'closed' && '✕ PASSE JÁ UTILIZADO'}
               </div>
 
               <div className="flex items-start gap-4">
-                <div className="w-20 h-20 rounded-xl bg-muted border border-border flex items-center justify-center overflow-hidden shrink-0">
+                <div className="w-20 h-20 rounded-xl bg-muted border flex items-center justify-center overflow-hidden shrink-0">
                   {scanResult.data.photoUrl ? (
                     <img src={scanResult.data.photoUrl} alt={scanResult.data.fullName} className="w-full h-full object-cover" />
                   ) : (
@@ -617,68 +536,58 @@ const QRScanner = () => {
                   )}
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-2xl font-bold text-foreground">{scanResult.data.fullName}</h3>
+                  <h3 className="text-2xl font-bold">{scanResult.data.fullName}</h3>
                   <p className="text-muted-foreground">{scanResult.data.company || 'Visitante'}</p>
-                  
-                  {/* Gate Info */}
                   <div className="mt-4 p-3 rounded-lg bg-primary/10 border border-primary/20">
                     <p className="text-lg">
                       <span className="font-medium">DESTINO:</span>{' '}
                       <span className="font-bold">{scanResult.data.visitToType === 'setor' ? '📍 ' : '👤 '}{scanResult.data.visitToName}</span>
                     </p>
-                    {scanResult.data.gateObs && (
-                      <p className="text-warning font-bold mt-1">⚠️ {scanResult.data.gateObs}</p>
-                    )}
+                    {scanResult.data.gateObs && <p className="text-warning font-bold mt-1">⚠️ {scanResult.data.gateObs}</p>}
                   </div>
                 </div>
               </div>
 
-              {/* Recent Logs */}
               {recentLogs.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-border">
+                <div className="mt-4 pt-4 border-t">
                   <div className="flex items-center gap-2 mb-3">
                     <Clock className="w-4 h-4 text-muted-foreground" />
                     <span className="font-medium text-sm text-muted-foreground">HISTÓRICO</span>
                   </div>
                   <div className="space-y-2">
-                    {recentLogs.map((log) => (
-                      <AccessLogItem key={log.id} log={log} />
-                    ))}
+                    {recentLogs.map(log => <LogItem key={log.id} log={log} />)}
                   </div>
                 </div>
               )}
 
-              <Button variant="ghost" onClick={clearScan} className="mt-4 w-full">
-                Escanear Outro Código
-              </Button>
+              <Button variant="ghost" onClick={clearScan} className="mt-4 w-full">Escanear Outro Código</Button>
             </CardContent>
           </Card>
         )}
 
-        {/* Employee Credential Result */}
+        {/* Employee Result */}
         {scanResult?.type === 'employee' && (
           <Card className={
-            scanResult.autoAction === 'blocked' ? 'border-destructive/50 bg-destructive/5' :
-            scanResult.autoAction === 'cooldown' ? 'border-warning/50 bg-warning/5' :
-            scanResult.autoAction === 'in' ? 'border-success/50 bg-success/5' :
+            scanResult.action === 'blocked' ? 'border-destructive/50 bg-destructive/5' :
+            scanResult.action === 'duplicate' ? 'border-warning/50 bg-warning/5' :
+            scanResult.action === 'in' ? 'border-success/50 bg-success/5' :
             'border-primary/50 bg-primary/5'
           }>
             <CardContent className="pt-6">
-              {/* Status Banner */}
               <div className={`mb-4 p-4 rounded-lg text-center text-white font-bold text-xl ${
-                scanResult.autoAction === 'blocked' ? 'bg-destructive' :
-                scanResult.autoAction === 'cooldown' ? 'bg-warning' :
-                scanResult.autoAction === 'in' ? 'bg-success' : 'bg-primary'
+                scanResult.action === 'blocked' ? 'bg-destructive' :
+                scanResult.action === 'duplicate' ? 'bg-warning' :
+                scanResult.action === 'in' ? 'bg-success' : 'bg-primary'
               }`}>
-                {scanResult.autoAction === 'in' && '✓ ENTRADA REGISTRADA'}
-                {scanResult.autoAction === 'out' && '✓ SAÍDA REGISTRADA'}
-                {scanResult.autoAction === 'blocked' && '✕ ACESSO BLOQUEADO'}
-                {scanResult.autoAction === 'cooldown' && '⏱️ AGUARDE - BIP REPETIDO'}
+                {scanResult.action === 'in' && '✓ ENTRADA REGISTRADA'}
+                {scanResult.action === 'out' && '✓ SAÍDA REGISTRADA'}
+                {scanResult.action === 'blocked' && '✕ ACESSO BLOQUEADO'}
+                {scanResult.action === 'duplicate' && '⏱️ AGUARDE - BIP REPETIDO'}
               </div>
 
               <div className="flex items-start gap-4">
                 {scanResult.data.type === 'personal' ? (
-                  <div className="w-24 h-24 rounded-xl bg-muted border border-border flex items-center justify-center overflow-hidden shrink-0">
+                  <div className="w-24 h-24 rounded-xl bg-muted border flex items-center justify-center overflow-hidden shrink-0">
                     {scanResult.data.photoUrl ? (
                       <img src={scanResult.data.photoUrl} alt={scanResult.data.fullName} className="w-full h-full object-cover" />
                     ) : (
@@ -686,14 +595,14 @@ const QRScanner = () => {
                     )}
                   </div>
                 ) : (
-                  <div className="w-24 h-24 rounded-xl bg-muted border border-border flex flex-col items-center justify-center shrink-0">
+                  <div className="w-24 h-24 rounded-xl bg-muted border flex flex-col items-center justify-center shrink-0">
                     <Car className="w-10 h-10 text-muted-foreground mb-1" />
                     <p className="text-xs font-mono font-bold">{scanResult.data.vehiclePlate}</p>
                   </div>
                 )}
                 
                 <div className="flex-1">
-                  <h3 className="text-2xl font-bold text-foreground">{scanResult.data.fullName}</h3>
+                  <h3 className="text-2xl font-bold">{scanResult.data.fullName}</h3>
                   
                   {scanResult.data.type === 'vehicle' && (
                     <div className="mt-2 p-3 rounded-lg bg-muted">
@@ -718,24 +627,19 @@ const QRScanner = () => {
                 </div>
               </div>
 
-              {/* Recent Logs */}
               {recentLogs.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-border">
+                <div className="mt-4 pt-4 border-t">
                   <div className="flex items-center gap-2 mb-3">
                     <Clock className="w-4 h-4 text-muted-foreground" />
                     <span className="font-medium text-sm text-muted-foreground">HISTÓRICO</span>
                   </div>
                   <div className="space-y-2">
-                    {recentLogs.map((log) => (
-                      <AccessLogItem key={log.id} log={log} />
-                    ))}
+                    {recentLogs.map(log => <LogItem key={log.id} log={log} />)}
                   </div>
                 </div>
               )}
 
-              <Button variant="ghost" onClick={clearScan} className="mt-4 w-full">
-                Escanear Outro Código
-              </Button>
+              <Button variant="ghost" onClick={clearScan} className="mt-4 w-full">Escanear Outro Código</Button>
             </CardContent>
           </Card>
         )}

@@ -1,64 +1,48 @@
 -- ============================================================
 -- GUARDA OPERACIONAL - SCHEMA COMPLETO IDEMPOTENTE
+-- ============================================================
 -- Executar no Postgres do container Debian:
--- docker compose exec postgres psql -U postgres -d guarda_operacional -f /tmp/schema.sql
+-- 
+-- docker compose exec postgres psql -U postgres -d guarda_operacional -c "$(cat docs/schema-operacional.sql)"
+--
+-- OU copiar o conteúdo e colar no psql
 -- ============================================================
 
 BEGIN;
 
 -- ============================================================
--- 1. TIPOS ENUM (idempotente)
+-- EXTENSÕES
 -- ============================================================
-
-DO $$ BEGIN
-    CREATE TYPE public.app_role AS ENUM ('admin', 'rh', 'security');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
-    CREATE TYPE public.access_direction AS ENUM ('in', 'out');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
-    CREATE TYPE public.subject_type AS ENUM ('visitor', 'employee');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
-    CREATE TYPE public.credential_status AS ENUM ('allowed', 'blocked');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
-    CREATE TYPE public.credential_type AS ENUM ('personal', 'vehicle');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
-    CREATE TYPE public.visitor_status AS ENUM ('pending', 'inside', 'outside', 'closed');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
-    CREATE TYPE public.visit_to_type AS ENUM ('setor', 'pessoa');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
-    CREATE TYPE public.audit_action_type AS ENUM (
-        'LOGIN', 'LOGOUT', 'LOGIN_FAILED',
-        'USER_CREATE', 'USER_UPDATE', 'USER_DELETE',
-        'USER_DEACTIVATE', 'USER_ACTIVATE',
-        'PASSWORD_RESET', 'PASSWORD_CHANGE',
-        'ROLE_UPDATE', 'CONFIG_UPDATE',
-        'VISITOR_CREATE', 'VISITOR_UPDATE', 'VISITOR_DELETE',
-        'EMPLOYEE_CREATE', 'EMPLOYEE_UPDATE', 'EMPLOYEE_DELETE',
-        'DEPARTMENT_CREATE', 'DEPARTMENT_DELETE',
-        'BACKUP_EXPORT', 'ACCESS_SCAN'
-    );
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ============================================================
--- 2. TABELA: profiles (dados de usuário)
+-- 1. TIPOS ENUM (Idempotente)
 -- ============================================================
+DO $$ BEGIN CREATE TYPE public.app_role AS ENUM ('admin', 'rh', 'security'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE public.access_direction AS ENUM ('in', 'out'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE public.subject_type AS ENUM ('visitor', 'employee'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE public.credential_status AS ENUM ('allowed', 'blocked'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE public.credential_type AS ENUM ('personal', 'vehicle'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE public.visitor_status AS ENUM ('pending', 'inside', 'outside', 'closed'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE public.visit_to_type AS ENUM ('setor', 'pessoa'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE public.audit_action_type AS ENUM (
+    'LOGIN', 'LOGOUT', 'LOGIN_FAILED',
+    'USER_CREATE', 'USER_UPDATE', 'USER_DELETE',
+    'USER_DEACTIVATE', 'USER_ACTIVATE',
+    'PASSWORD_RESET', 'PASSWORD_CHANGE',
+    'ROLE_UPDATE', 'CONFIG_UPDATE',
+    'VISITOR_CREATE', 'VISITOR_UPDATE', 'VISITOR_DELETE',
+    'EMPLOYEE_CREATE', 'EMPLOYEE_UPDATE', 'EMPLOYEE_DELETE',
+    'DEPARTMENT_CREATE', 'DEPARTMENT_DELETE',
+    'BACKUP_EXPORT', 'ACCESS_SCAN'
+); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+-- ============================================================
+-- 2. TABELA: profiles
+-- ============================================================
 CREATE TABLE IF NOT EXISTS public.profiles (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL UNIQUE,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID UNIQUE NOT NULL,
     full_name TEXT NOT NULL,
     photo_url TEXT,
     is_active BOOLEAN NOT NULL DEFAULT true,
@@ -67,31 +51,27 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Índices
 CREATE INDEX IF NOT EXISTS idx_profiles_user_id ON public.profiles(user_id);
 CREATE INDEX IF NOT EXISTS idx_profiles_is_active ON public.profiles(is_active);
 
 -- ============================================================
 -- 3. TABELA: user_roles (RBAC)
 -- ============================================================
-
 CREATE TABLE IF NOT EXISTS public.user_roles (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL UNIQUE,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID UNIQUE NOT NULL,
     role public.app_role NOT NULL DEFAULT 'security',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Índices
 CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON public.user_roles(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_roles_role ON public.user_roles(role);
 
 -- ============================================================
 -- 4. TABELA: departments
 -- ============================================================
-
 CREATE TABLE IF NOT EXISTS public.departments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -99,9 +79,8 @@ CREATE TABLE IF NOT EXISTS public.departments (
 -- ============================================================
 -- 5. TABELA: employee_credentials
 -- ============================================================
-
 CREATE TABLE IF NOT EXISTS public.employee_credentials (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     credential_id TEXT NOT NULL UNIQUE,
     type public.credential_type NOT NULL,
     full_name TEXT NOT NULL,
@@ -117,17 +96,16 @@ CREATE TABLE IF NOT EXISTS public.employee_credentials (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Índices
 CREATE INDEX IF NOT EXISTS idx_credentials_status ON public.employee_credentials(status);
 CREATE INDEX IF NOT EXISTS idx_credentials_type ON public.employee_credentials(type);
 CREATE INDEX IF NOT EXISTS idx_credentials_document ON public.employee_credentials(document);
+CREATE INDEX IF NOT EXISTS idx_credentials_credential_id ON public.employee_credentials(credential_id);
 
 -- ============================================================
 -- 6. TABELA: visitors
 -- ============================================================
-
 CREATE TABLE IF NOT EXISTS public.visitors (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     pass_id TEXT NOT NULL UNIQUE,
     full_name TEXT NOT NULL,
     document TEXT NOT NULL,
@@ -145,16 +123,14 @@ CREATE TABLE IF NOT EXISTS public.visitors (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Índices
 CREATE INDEX IF NOT EXISTS idx_visitors_status ON public.visitors(status);
 CREATE INDEX IF NOT EXISTS idx_visitors_pass_id ON public.visitors(pass_id);
 
 -- ============================================================
 -- 7. TABELA: access_logs (CORAÇÃO DO TOGGLE)
 -- ============================================================
-
 CREATE TABLE IF NOT EXISTS public.access_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     subject_type public.subject_type NOT NULL,
     subject_id UUID NOT NULL,
     direction public.access_direction NOT NULL,
@@ -163,7 +139,7 @@ CREATE TABLE IF NOT EXISTS public.access_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- ÍNDICE CRÍTICO: Para busca do último registro por subject
+-- ÍNDICE CRÍTICO: Busca do último registro por subject
 CREATE INDEX IF NOT EXISTS idx_access_logs_subject_created 
     ON public.access_logs(subject_type, subject_id, created_at DESC);
 
@@ -171,11 +147,10 @@ CREATE INDEX IF NOT EXISTS idx_access_logs_created_at
     ON public.access_logs(created_at DESC);
 
 -- ============================================================
--- 8. TABELA: audit_logs (Auditoria Imutável)
+-- 8. TABELA: audit_logs
 -- ============================================================
-
 CREATE TABLE IF NOT EXISTS public.audit_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     action_type public.audit_action_type NOT NULL,
     user_id UUID,
     user_email TEXT,
@@ -185,15 +160,12 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Índices
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON public.audit_logs(action_type);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON public.audit_logs(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON public.audit_logs(user_id);
 
 -- ============================================================
 -- 9. FUNÇÕES AUXILIARES (RBAC)
 -- ============================================================
-
 CREATE OR REPLACE FUNCTION public.has_role(check_role app_role)
 RETURNS boolean
 LANGUAGE plpgsql
@@ -225,7 +197,6 @@ $$;
 -- ============================================================
 -- 10. TRIGGER: Atualizar updated_at
 -- ============================================================
-
 CREATE OR REPLACE FUNCTION public.update_updated_at()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -237,7 +208,6 @@ BEGIN
 END;
 $$;
 
--- Aplicar trigger nas tabelas relevantes
 DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
 CREATE TRIGGER update_profiles_updated_at
     BEFORE UPDATE ON public.profiles
@@ -256,7 +226,6 @@ CREATE TRIGGER update_visitors_updated_at
 -- ============================================================
 -- 11. TRIGGER: Auditoria de Alteração de is_active
 -- ============================================================
-
 CREATE OR REPLACE FUNCTION public.audit_profile_status_change()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -286,10 +255,9 @@ CREATE TRIGGER audit_profile_status
     FOR EACH ROW EXECUTE FUNCTION public.audit_profile_status_change();
 
 -- ============================================================
--- 12. DESABILITAR RLS (Ambiente Local de Dev)
--- Para evitar erros 401/403/42501 no fluxo do admin
+-- 12. DESABILITAR RLS (Ambiente Local Dev)
+-- Evita erros 401/403/42501 no fluxo do admin
 -- ============================================================
-
 ALTER TABLE public.profiles DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_roles DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.access_logs DISABLE ROW LEVEL SECURITY;
@@ -301,13 +269,10 @@ ALTER TABLE public.departments DISABLE ROW LEVEL SECURITY;
 -- ============================================================
 -- 13. CONFIGURAR ADMIN PADRÃO (Idempotente)
 -- ============================================================
-
--- Ativar profile do admin
 UPDATE public.profiles 
 SET is_active = true, must_change_password = false
 WHERE user_id = (SELECT id FROM auth.users WHERE email = 'admin@sistema.local');
 
--- Garantir role admin
 INSERT INTO public.user_roles (user_id, role)
 SELECT id, 'admin' FROM auth.users WHERE email = 'admin@sistema.local'
 ON CONFLICT (user_id) DO UPDATE SET role = 'admin';
@@ -318,17 +283,14 @@ COMMIT;
 -- NOTA SOBRE AUDITORIA DE LOGIN
 -- ============================================================
 -- 
--- O login ocorre via GoTrue (auth.users). Para auditar:
+-- Login ocorre via GoTrue (auth.users). Auditoria via:
+-- Frontend chama POST /admin/v1/audit após sessão válida.
+-- O endpoint Node.js (admin-api) insere o log com IP/User-Agent.
 -- 
--- ABORDAGEM ESCOLHIDA: Frontend chama endpoint /admin/v1/audit
--- após obter sessão válida. O endpoint Node.js (admin-api)
--- insere o log no banco com IP/User-Agent reais.
+-- Motivo:
+-- 1. GoTrue não expõe hooks customizáveis
+-- 2. service_role não vai para o browser (segurança)
+-- 3. Captura IP/User-Agent real do request
 -- 
--- Por quê?
--- 1. GoTrue não expõe hooks de login customizáveis
--- 2. Manter service_role fora do browser (segurança)
--- 3. Capturar IP/User-Agent do request real
--- 
--- O AuthContext.tsx já chama logAuditAction('LOGIN') após 
--- signInWithPassword bem-sucedido.
+-- AuthContext.tsx já chama logAuditAction('LOGIN')
 -- ============================================================

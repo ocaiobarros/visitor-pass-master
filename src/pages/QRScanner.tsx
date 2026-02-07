@@ -226,14 +226,94 @@ const QRScanner = () => {
   };
 
   // ============================================
+  // CONSULTA DIRETA AO BANCO (Bypass Cache)
+  // Garante reflexo instantâneo de bloqueio
+  // ============================================
+  
+  const fetchFreshVisitor = async (passId: string): Promise<Visitor | null> => {
+    const { data, error } = await supabase
+      .from('visitors')
+      .select('*')
+      .eq('pass_id', passId)
+      .maybeSingle();
+    
+    if (error || !data) return null;
+    
+    return {
+      id: data.id,
+      passId: data.pass_id,
+      fullName: data.full_name,
+      document: data.document,
+      company: data.company,
+      phone: data.phone,
+      photoUrl: data.photo_url,
+      visitToType: data.visit_to_type,
+      visitToName: data.visit_to_name,
+      gateObs: data.gate_obs,
+      validFrom: new Date(data.valid_from),
+      validUntil: new Date(data.valid_until),
+      status: data.status,
+      createdBy: data.created_by,
+      createdAt: new Date(data.created_at),
+      updatedAt: new Date(data.updated_at),
+    };
+  };
+
+  const fetchFreshCredential = async (credentialId: string): Promise<EmployeeCredential | null> => {
+    const { data, error } = await supabase
+      .from('employee_credentials')
+      .select('*, departments(id, name)')
+      .eq('credential_id', credentialId)
+      .maybeSingle();
+    
+    if (error || !data) return null;
+    
+    return {
+      id: data.id,
+      credentialId: data.credential_id,
+      type: data.type,
+      fullName: data.full_name,
+      document: data.document,
+      departmentId: data.department_id,
+      department: data.departments ? { id: data.departments.id, name: data.departments.name } : undefined,
+      jobTitle: data.job_title,
+      photoUrl: data.photo_url,
+      vehicleMakeModel: data.vehicle_make_model,
+      vehiclePlate: data.vehicle_plate,
+      status: data.status,
+      createdBy: data.created_by,
+      createdAt: new Date(data.created_at),
+      updatedAt: new Date(data.updated_at),
+    };
+  };
+
+  // Para veículos: buscar dados do proprietário pelo documento
+  const fetchOwnerByDocument = async (document: string): Promise<{ jobTitle?: string; department?: { id: string; name: string } } | null> => {
+    // Primeiro tenta buscar na tabela de credenciais pessoais
+    const { data: credential } = await supabase
+      .from('employee_credentials')
+      .select('job_title, departments(id, name)')
+      .eq('document', document)
+      .eq('type', 'personal')
+      .maybeSingle();
+    
+    if (credential) {
+      return {
+        jobTitle: credential.job_title || undefined,
+        department: credential.departments ? { id: credential.departments.id, name: credential.departments.name } : undefined,
+      };
+    }
+    
+    return null;
+  };
+
+  // ============================================
   // PROCESSAMENTO PRINCIPAL
   // ============================================
   
   useEffect(() => {
     if (!searchCode) return;
     if (processingRef.current) return;
-    if (searchCode.startsWith('VP-') && loadingVisitor) return;
-    if (searchCode.startsWith('EC-') && loadingCredential) return;
 
     const process = async () => {
       // Mutex: evita duplo processamento
@@ -244,21 +324,24 @@ const QRScanner = () => {
       try {
         // =============== VISITANTE ===============
         if (searchCode.startsWith('VP-')) {
-          if (!visitor) {
+          // CONSULTA DIRETA - Bypass total do cache
+          const freshVisitor = await fetchFreshVisitor(searchCode);
+          
+          if (!freshVisitor) {
             playError();
             setScanError(`Passe ${searchCode} não encontrado`);
             scheduleReset(3000);
             return;
           }
 
-          await fetchRecentLogs('visitor', visitor.id);
+          await fetchRecentLogs('visitor', freshVisitor.id);
 
-          // BLOQUEIO: Passe fechado
-          if (visitor.status === 'closed') {
+          // BLOQUEIO: Passe fechado (reflexo instantâneo)
+          if (freshVisitor.status === 'closed') {
             playBlocked();
-            setScanResult({ type: 'visitor', data: visitor, action: 'closed' });
+            setScanResult({ type: 'visitor', data: freshVisitor, action: 'closed' });
             logAuditAction('ACCESS_SCAN', {
-              subject_type: 'visitor', subject_id: visitor.id,
+              subject_type: 'visitor', subject_id: freshVisitor.id,
               result: 'DENIED', reason: 'closed'
             });
             scheduleReset(4000);
@@ -266,11 +349,11 @@ const QRScanner = () => {
           }
 
           // BLOQUEIO: Passe expirado
-          if (new Date() > new Date(visitor.validUntil)) {
+          if (new Date() > new Date(freshVisitor.validUntil)) {
             playBlocked();
-            setScanResult({ type: 'visitor', data: visitor, action: 'expired' });
+            setScanResult({ type: 'visitor', data: freshVisitor, action: 'expired' });
             logAuditAction('ACCESS_SCAN', {
-              subject_type: 'visitor', subject_id: visitor.id,
+              subject_type: 'visitor', subject_id: freshVisitor.id,
               result: 'DENIED', reason: 'expired'
             });
             scheduleReset(4000);
@@ -278,12 +361,12 @@ const QRScanner = () => {
           }
 
           // TOGGLE
-          const result = await executeToggle('visitor', visitor.id);
+          const result = await executeToggle('visitor', freshVisitor.id);
 
           if (!result.success) {
             if (result.reason === 'duplicate') {
               playBlocked();
-              setScanResult({ type: 'visitor', data: visitor, action: 'duplicate' });
+              setScanResult({ type: 'visitor', data: freshVisitor, action: 'duplicate' });
               toast({ title: '⏱️ Aguarde', description: 'Bip repetido. Aguarde 10 segundos.' });
               scheduleReset(2000);
             } else {
@@ -296,44 +379,59 @@ const QRScanner = () => {
 
           // Atualizar status do visitante
           if (result.direction === 'in') {
-            await updateVisitorStatus.mutateAsync({ id: visitor.id, status: 'inside' });
+            await updateVisitorStatus.mutateAsync({ id: freshVisitor.id, status: 'inside' });
           } else {
-            await updateVisitorStatus.mutateAsync({ id: visitor.id, status: 'closed' });
+            await updateVisitorStatus.mutateAsync({ id: freshVisitor.id, status: 'closed' });
           }
 
           // Recarregar logs para exibição
-          await fetchRecentLogs('visitor', visitor.id);
+          await fetchRecentLogs('visitor', freshVisitor.id);
 
           playSuccess();
           setScanResult({ 
             type: 'visitor', 
-            data: { ...visitor, status: result.direction === 'in' ? 'inside' : 'closed' }, 
+            data: { ...freshVisitor, status: result.direction === 'in' ? 'inside' : 'closed' }, 
             action: result.direction 
           });
           toast({
             title: result.direction === 'in' ? '✓ Entrada registrada!' : '✓ Saída registrada!',
-            description: `${visitor.fullName} ${result.direction === 'in' ? 'entrou' : 'saiu'}.`,
+            description: `${freshVisitor.fullName} ${result.direction === 'in' ? 'entrou' : 'saiu'}.`,
           });
           scheduleReset(3000);
 
         // =============== COLABORADOR ===============
         } else if (searchCode.startsWith('EC-')) {
-          if (!credential) {
+          // CONSULTA DIRETA - Bypass total do cache
+          let freshCredential = await fetchFreshCredential(searchCode);
+          
+          if (!freshCredential) {
             playError();
             setScanError(`Credencial ${searchCode} não encontrada`);
             scheduleReset(3000);
             return;
           }
 
-          await fetchRecentLogs('employee', credential.id);
+          // Para VEÍCULOS: buscar dados do proprietário (Cargo + Departamento)
+          if (freshCredential.type === 'vehicle' && freshCredential.document) {
+            const ownerData = await fetchOwnerByDocument(freshCredential.document);
+            if (ownerData) {
+              freshCredential = {
+                ...freshCredential,
+                jobTitle: ownerData.jobTitle || freshCredential.jobTitle,
+                department: ownerData.department || freshCredential.department,
+              };
+            }
+          }
 
-          // BLOQUEIO: Credencial bloqueada
-          if (credential.status === 'blocked') {
+          await fetchRecentLogs('employee', freshCredential.id);
+
+          // BLOQUEIO: Credencial bloqueada (reflexo instantâneo)
+          if (freshCredential.status === 'blocked') {
             playBlocked();
-            setScanResult({ type: 'employee', data: credential, action: 'blocked' });
+            setScanResult({ type: 'employee', data: freshCredential, action: 'blocked' });
             logAuditAction('ACCESS_SCAN', {
-              subject_type: 'employee', subject_id: credential.id,
-              credential_id: credential.credentialId,
+              subject_type: 'employee', subject_id: freshCredential.id,
+              credential_id: freshCredential.credentialId,
               result: 'DENIED', reason: 'blocked'
             });
             scheduleReset(4000);
@@ -341,12 +439,12 @@ const QRScanner = () => {
           }
 
           // TOGGLE
-          const result = await executeToggle('employee', credential.id);
+          const result = await executeToggle('employee', freshCredential.id);
 
           if (!result.success) {
             if (result.reason === 'duplicate') {
               playBlocked();
-              setScanResult({ type: 'employee', data: credential, action: 'duplicate' });
+              setScanResult({ type: 'employee', data: freshCredential, action: 'duplicate' });
               toast({ title: '⏱️ Aguarde', description: 'Bip repetido. Aguarde 10 segundos.' });
               scheduleReset(2000);
             } else {
@@ -358,13 +456,13 @@ const QRScanner = () => {
           }
 
           // Recarregar logs
-          await fetchRecentLogs('employee', credential.id);
+          await fetchRecentLogs('employee', freshCredential.id);
 
           playSuccess();
-          setScanResult({ type: 'employee', data: credential, action: result.direction });
+          setScanResult({ type: 'employee', data: freshCredential, action: result.direction });
           toast({
             title: result.direction === 'in' ? '✓ Entrada registrada!' : '✓ Saída registrada!',
-            description: `${credential.fullName} ${result.direction === 'in' ? 'entrou' : 'saiu'}.`,
+            description: `${freshCredential.fullName} ${result.direction === 'in' ? 'entrou' : 'saiu'}.`,
           });
           scheduleReset(3000);
         }
@@ -377,7 +475,7 @@ const QRScanner = () => {
     };
 
     process();
-  }, [searchCode, visitor, credential, loadingVisitor, loadingCredential]);
+  }, [searchCode]);
 
   // ============================================
   // HANDLERS

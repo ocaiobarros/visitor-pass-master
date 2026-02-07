@@ -3,13 +3,12 @@ import { Link } from 'react-router-dom';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useVisitorByPassId, useUpdateVisitorStatus } from '@/hooks/useVisitors';
 import { useCredentialByQrId, useUpdateCredentialStatus } from '@/hooks/useEmployeeCredentials';
-import { useCreateAccessLog, useSubjectAccessLogs } from '@/hooks/useAccessLogs';
 import { useScanFeedback } from '@/hooks/useScanFeedback';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { QrCode, UserCheck, UserX, AlertTriangle, CheckCircle, Ban, Car, User, Building2, Info, Camera, Maximize, Clock, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { QrCode, UserCheck, AlertTriangle, Car, User, Building2, Clock, ArrowDownLeft, ArrowUpRight, Camera, Maximize } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Visitor, EmployeeCredential, AccessLog, AccessDirection } from '@/types/visitor';
@@ -17,17 +16,134 @@ import { supabase } from '@/integrations/supabase/client';
 import CameraScannerModal from '@/components/CameraScannerModal';
 import { logAuditAction } from '@/hooks/useAuditLogs';
 
+// ============================================
+// ANTI-DUPLICATION: Cooldown tracking
+// ============================================
+const lastScanRegistry: Map<string, number> = new Map();
+const SCAN_COOLDOWN_MS = 5000; // 5 seconds cooldown between same QR scans
+
+/**
+ * Checks if a scan should be allowed based on cooldown.
+ * Returns true if scan is allowed, false if it should be rejected.
+ */
+const canProcessScan = (subjectId: string): boolean => {
+  const now = Date.now();
+  const lastScan = lastScanRegistry.get(subjectId);
+  
+  if (lastScan && (now - lastScan) < SCAN_COOLDOWN_MS) {
+    console.log(`[SCAN] Cooldown active for ${subjectId}, rejecting duplicate scan`);
+    return false;
+  }
+  
+  return true;
+};
+
+/**
+ * Registers a successful scan timestamp for cooldown tracking.
+ */
+const registerScan = (subjectId: string): void => {
+  lastScanRegistry.set(subjectId, Date.now());
+};
+
+// ============================================
+// TOGGLE LOGIC: Deterministic direction fetch
+// ============================================
+
+/**
+ * Fetches the REAL last access direction directly from the database.
+ * This ensures toggle accuracy by always consulting fresh data.
+ * Uses ORDER BY created_at DESC LIMIT 1 for deterministic results.
+ */
+const fetchLastAccessDirection = async (
+  subjectType: 'visitor' | 'employee',
+  subjectId: string
+): Promise<{ direction: AccessDirection | null; lastLogId: string | null }> => {
+  console.log(`[TOGGLE] Fetching last direction for ${subjectType}:${subjectId}`);
+  
+  const { data, error } = await supabase
+    .from('access_logs')
+    .select('id, direction, created_at')
+    .eq('subject_type', subjectType)
+    .eq('subject_id', subjectId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[TOGGLE] Error fetching last direction:', error);
+    return { direction: null, lastLogId: null };
+  }
+  
+  console.log(`[TOGGLE] Last direction result:`, data);
+  return { 
+    direction: data?.direction as AccessDirection | null,
+    lastLogId: data?.id || null
+  };
+};
+
+/**
+ * Creates an access log with the correct direction based on toggle logic.
+ * This is atomic: fetch last → calculate next → insert.
+ */
+const createAccessLogWithToggle = async (
+  subjectType: 'visitor' | 'employee',
+  subjectId: string
+): Promise<{ success: boolean; direction: AccessDirection; error?: string }> => {
+  // Step 1: Get current user
+  const { data: userData } = await supabase.auth.getUser();
+  
+  // Step 2: Fetch REAL last direction from DB
+  const { direction: lastDirection } = await fetchLastAccessDirection(subjectType, subjectId);
+  
+  // Step 3: DETERMINISTIC TOGGLE
+  // If last was 'in' → next MUST be 'out'
+  // If last was 'out' or null → next MUST be 'in'
+  const nextDirection: AccessDirection = lastDirection === 'in' ? 'out' : 'in';
+  
+  console.log(`[TOGGLE] Last: ${lastDirection || 'none'} → Next: ${nextDirection}`);
+  
+  // Step 4: Insert the new log
+  const { error } = await supabase
+    .from('access_logs')
+    .insert({
+      subject_type: subjectType,
+      subject_id: subjectId,
+      direction: nextDirection,
+      gate_id: 'GUARITA_01',
+      operator_id: userData.user?.id || null,
+    });
+
+  if (error) {
+    console.error('[TOGGLE] Insert error:', error);
+    return { success: false, direction: nextDirection, error: error.message };
+  }
+  
+  // Step 5: Register scan for cooldown
+  registerScan(subjectId);
+  
+  console.log(`[TOGGLE] Successfully registered ${nextDirection} for ${subjectId}`);
+  return { success: true, direction: nextDirection };
+};
+
+// ============================================
+// TYPES
+// ============================================
+
 type ScanResult = {
   type: 'visitor';
   data: Visitor;
   lastDirection: AccessDirection | null;
-  autoAction: 'in' | 'out' | 'blocked' | 'expired' | 'closed';
+  autoAction: 'in' | 'out' | 'blocked' | 'expired' | 'closed' | 'cooldown';
 } | {
   type: 'employee';
   data: EmployeeCredential;
   lastDirection: AccessDirection | null;
-  autoAction: 'in' | 'out' | 'blocked';
+  autoAction: 'in' | 'out' | 'blocked' | 'cooldown';
 } | null;
+
+// ============================================
+// COMPONENTS
+// ============================================
 
 const AccessLogItem = ({ log }: { log: AccessLog }) => (
   <div className="flex items-center gap-3 py-2 px-3 bg-muted/50 rounded-lg text-sm">
@@ -45,29 +161,9 @@ const AccessLogItem = ({ log }: { log: AccessLog }) => (
   </div>
 );
 
-/**
- * Fetches the REAL last access direction directly from the database.
- * This ensures toggle accuracy by always consulting fresh data.
- */
-const fetchLastAccessDirection = async (
-  subjectType: 'visitor' | 'employee',
-  subjectId: string
-): Promise<AccessDirection | null> => {
-  const { data, error } = await supabase
-    .from('access_logs')
-    .select('direction')
-    .eq('subject_type', subjectType)
-    .eq('subject_id', subjectId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    console.error('Error fetching last direction:', error);
-    return null;
-  }
-  return data?.direction as AccessDirection | null;
-};
+// ============================================
+// MAIN COMPONENT
+// ============================================
 
 const QRScanner = () => {
   const [qrCode, setQrCode] = useState('');
@@ -76,25 +172,24 @@ const QRScanner = () => {
   const [scanError, setScanError] = useState<string | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [recentLogs, setRecentLogs] = useState<AccessLog[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const autoResetTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const processingLockRef = useRef<string | null>(null);
   
   const { toast } = useToast();
   const { playSuccess, playError, playBlocked } = useScanFeedback();
   const updateVisitorStatus = useUpdateVisitorStatus();
   const updateCredentialStatus = useUpdateCredentialStatus();
-  const createAccessLog = useCreateAccessLog();
 
   // Query for visitor
-  const { data: visitor, isLoading: isLoadingVisitor } = useVisitorByPassId(searchCode.startsWith('VP-') ? searchCode : '');
+  const { data: visitor, isLoading: isLoadingVisitor } = useVisitorByPassId(
+    searchCode.startsWith('VP-') ? searchCode : ''
+  );
   
   // Query for employee credential
-  const { data: credential, isLoading: isLoadingCredential } = useCredentialByQrId(searchCode.startsWith('EC-') ? searchCode : '');
-
-  // Query for access logs of current subject
-  const { data: accessLogs = [] } = useSubjectAccessLogs(
-    scanResult?.type === 'visitor' ? 'visitor' : 'employee',
-    scanResult?.data.id || ''
+  const { data: credential, isLoading: isLoadingCredential } = useCredentialByQrId(
+    searchCode.startsWith('EC-') ? searchCode : ''
   );
 
   // Auto-focus on mount
@@ -110,6 +205,29 @@ const QRScanner = () => {
     return () => clearTimeout(timer);
   }, [scanResult, scanError]);
 
+  // Fetch recent logs for display
+  const fetchRecentLogs = async (subjectType: 'visitor' | 'employee', subjectId: string) => {
+    const { data } = await supabase
+      .from('access_logs')
+      .select('*')
+      .eq('subject_type', subjectType)
+      .eq('subject_id', subjectId)
+      .order('created_at', { ascending: false })
+      .limit(5);
+    
+    if (data) {
+      setRecentLogs(data.map(row => ({
+        id: row.id,
+        subjectType: row.subject_type,
+        subjectId: row.subject_id,
+        direction: row.direction,
+        gateId: row.gate_id,
+        operatorId: row.operator_id,
+        createdAt: new Date(row.created_at),
+      })));
+    }
+  };
+
   // Clear scan and reset for next
   const clearScan = useCallback(() => {
     if (autoResetTimerRef.current) clearTimeout(autoResetTimerRef.current);
@@ -118,6 +236,8 @@ const QRScanner = () => {
     setScanResult(null);
     setScanError(null);
     setIsProcessing(false);
+    setRecentLogs([]);
+    processingLockRef.current = null;
     inputRef.current?.focus();
   }, []);
 
@@ -127,7 +247,9 @@ const QRScanner = () => {
     autoResetTimerRef.current = setTimeout(clearScan, delay);
   }, [clearScan]);
 
-  // ZERO-CLICK AUTO-TOGGLE: Process scan and auto-register
+  // ============================================
+  // MAIN PROCESSING LOGIC
+  // ============================================
   useEffect(() => {
     if (!searchCode || isProcessing) return;
 
@@ -136,9 +258,17 @@ const QRScanner = () => {
       if (searchCode.startsWith('VP-') && isLoadingVisitor) return;
       if (searchCode.startsWith('EC-') && isLoadingCredential) return;
 
+      // Prevent double-processing with lock
+      if (processingLockRef.current === searchCode) {
+        console.log(`[SCAN] Already processing ${searchCode}, skipping`);
+        return;
+      }
+      
+      processingLockRef.current = searchCode;
       setIsProcessing(true);
 
       try {
+        // ========== VISITOR PROCESSING ==========
         if (searchCode.startsWith('VP-')) {
           if (!visitor) {
             playError();
@@ -147,14 +277,33 @@ const QRScanner = () => {
             return;
           }
 
-          // CRITICAL: Fetch REAL last direction directly from DB
-          const lastDir = await fetchLastAccessDirection('visitor', visitor.id);
-          
-          // Check status - visitor closed
+          // ANTI-DUPLICATION CHECK
+          if (!canProcessScan(visitor.id)) {
+            playBlocked();
+            setScanResult({ 
+              type: 'visitor', 
+              data: visitor, 
+              lastDirection: null, 
+              autoAction: 'cooldown' 
+            });
+            toast({
+              title: '⏱️ Aguarde',
+              description: 'Bip repetido detectado. Aguarde alguns segundos.',
+            });
+            scheduleAutoReset(2000);
+            return;
+          }
+
+          // BLOCK CHECK: Visitor closed
           if (visitor.status === 'closed') {
             playBlocked();
-            setScanResult({ type: 'visitor', data: visitor, lastDirection: lastDir, autoAction: 'closed' });
-            // Log denied access
+            await fetchRecentLogs('visitor', visitor.id);
+            setScanResult({ 
+              type: 'visitor', 
+              data: visitor, 
+              lastDirection: null, 
+              autoAction: 'closed' 
+            });
             logAuditAction('ACCESS_SCAN', {
               subject_type: 'visitor',
               subject_id: visitor.id,
@@ -165,10 +314,16 @@ const QRScanner = () => {
             return;
           }
 
-          // Check expiration
+          // BLOCK CHECK: Visitor expired
           if (new Date() > new Date(visitor.validUntil)) {
             playBlocked();
-            setScanResult({ type: 'visitor', data: visitor, lastDirection: lastDir, autoAction: 'expired' });
+            await fetchRecentLogs('visitor', visitor.id);
+            setScanResult({ 
+              type: 'visitor', 
+              data: visitor, 
+              lastDirection: null, 
+              autoAction: 'expired' 
+            });
             logAuditAction('ACCESS_SCAN', {
               subject_type: 'visitor',
               subject_id: visitor.id,
@@ -179,50 +334,40 @@ const QRScanner = () => {
             return;
           }
 
-          // TOGGLE LOGIC: last was 'in' → must register 'out', otherwise 'in'
-          const nextDirection: AccessDirection = lastDir === 'in' ? 'out' : 'in';
+          // TOGGLE: Create access log with deterministic direction
+          const result = await createAccessLogWithToggle('visitor', visitor.id);
           
-          if (nextDirection === 'in') {
-            // Entry
-            await updateVisitorStatus.mutateAsync({ id: visitor.id, status: 'inside' });
-            await createAccessLog.mutateAsync({
-              subjectType: 'visitor',
-              subjectId: visitor.id,
-              direction: 'in',
-            });
-            playSuccess();
-            setScanResult({ 
-              type: 'visitor', 
-              data: { ...visitor, status: 'inside' }, 
-              lastDirection: 'in',
-              autoAction: 'in' 
-            });
-            toast({
-              title: '✓ Entrada registrada!',
-              description: `${visitor.fullName} entrou.`,
-            });
-          } else {
-            // Exit - close the pass
-            await updateVisitorStatus.mutateAsync({ id: visitor.id, status: 'closed' });
-            await createAccessLog.mutateAsync({
-              subjectType: 'visitor',
-              subjectId: visitor.id,
-              direction: 'out',
-            });
-            playSuccess();
-            setScanResult({ 
-              type: 'visitor', 
-              data: { ...visitor, status: 'closed' }, 
-              lastDirection: 'out',
-              autoAction: 'out' 
-            });
-            toast({
-              title: '✓ Saída registrada!',
-              description: `${visitor.fullName} saiu. Passe encerrado.`,
-            });
+          if (!result.success) {
+            playError();
+            setScanError(result.error || 'Erro ao registrar acesso');
+            scheduleAutoReset(3000);
+            return;
           }
+
+          // Update visitor status based on direction
+          if (result.direction === 'in') {
+            await updateVisitorStatus.mutateAsync({ id: visitor.id, status: 'inside' });
+          } else {
+            await updateVisitorStatus.mutateAsync({ id: visitor.id, status: 'closed' });
+          }
+
+          // Fetch updated logs for display
+          await fetchRecentLogs('visitor', visitor.id);
+          
+          playSuccess();
+          setScanResult({ 
+            type: 'visitor', 
+            data: { ...visitor, status: result.direction === 'in' ? 'inside' : 'closed' }, 
+            lastDirection: result.direction,
+            autoAction: result.direction 
+          });
+          toast({
+            title: result.direction === 'in' ? '✓ Entrada registrada!' : '✓ Saída registrada!',
+            description: `${visitor.fullName} ${result.direction === 'in' ? 'entrou' : 'saiu'}.`,
+          });
           scheduleAutoReset(3000);
 
+        // ========== EMPLOYEE PROCESSING ==========
         } else if (searchCode.startsWith('EC-')) {
           if (!credential) {
             playError();
@@ -231,14 +376,33 @@ const QRScanner = () => {
             return;
           }
 
-          // CRITICAL: Fetch REAL last direction directly from DB
-          const lastDir = await fetchLastAccessDirection('employee', credential.id);
+          // ANTI-DUPLICATION CHECK
+          if (!canProcessScan(credential.id)) {
+            playBlocked();
+            setScanResult({ 
+              type: 'employee', 
+              data: credential, 
+              lastDirection: null, 
+              autoAction: 'cooldown' 
+            });
+            toast({
+              title: '⏱️ Aguarde',
+              description: 'Bip repetido detectado. Aguarde alguns segundos.',
+            });
+            scheduleAutoReset(2000);
+            return;
+          }
 
-          // Check if credential is blocked
+          // BLOCK CHECK: Credential blocked
           if (credential.status === 'blocked') {
             playBlocked();
-            setScanResult({ type: 'employee', data: credential, lastDirection: lastDir, autoAction: 'blocked' });
-            // Log denied access for audit
+            await fetchRecentLogs('employee', credential.id);
+            setScanResult({ 
+              type: 'employee', 
+              data: credential, 
+              lastDirection: null, 
+              autoAction: 'blocked' 
+            });
             logAuditAction('ACCESS_SCAN', {
               subject_type: 'employee',
               subject_id: credential.id,
@@ -250,29 +414,34 @@ const QRScanner = () => {
             return;
           }
 
-          // TOGGLE LOGIC: last was 'in' → must register 'out', otherwise 'in'
-          const nextDirection: AccessDirection = lastDir === 'in' ? 'out' : 'in';
+          // TOGGLE: Create access log with deterministic direction
+          const result = await createAccessLogWithToggle('employee', credential.id);
+          
+          if (!result.success) {
+            playError();
+            setScanError(result.error || 'Erro ao registrar acesso');
+            scheduleAutoReset(3000);
+            return;
+          }
 
-          await createAccessLog.mutateAsync({
-            subjectType: 'employee',
-            subjectId: credential.id,
-            direction: nextDirection,
-          });
+          // Fetch updated logs for display
+          await fetchRecentLogs('employee', credential.id);
           
           playSuccess();
           setScanResult({ 
             type: 'employee', 
             data: credential, 
-            lastDirection: nextDirection,
-            autoAction: nextDirection 
+            lastDirection: result.direction,
+            autoAction: result.direction 
           });
           toast({
-            title: nextDirection === 'in' ? '✓ Entrada registrada!' : '✓ Saída registrada!',
-            description: `${credential.fullName} ${nextDirection === 'in' ? 'entrou' : 'saiu'}.`,
+            title: result.direction === 'in' ? '✓ Entrada registrada!' : '✓ Saída registrada!',
+            description: `${credential.fullName} ${result.direction === 'in' ? 'entrou' : 'saiu'}.`,
           });
           scheduleAutoReset(3000);
         }
       } catch (error: any) {
+        console.error('[SCAN] Processing error:', error);
         playError();
         setScanError(error.message || 'Erro ao processar');
         scheduleAutoReset(3000);
@@ -329,7 +498,6 @@ const QRScanner = () => {
   };
 
   const isLoading = isLoadingVisitor || isLoadingCredential || isProcessing;
-  const recentLogs = accessLogs.slice(0, 5);
 
   return (
     <DashboardLayout>
@@ -421,6 +589,7 @@ const QRScanner = () => {
           <Card className={
             scanResult.autoAction === 'in' ? 'border-success/50 bg-success/5' :
             scanResult.autoAction === 'out' ? 'border-primary/50 bg-primary/5' :
+            scanResult.autoAction === 'cooldown' ? 'border-warning/50 bg-warning/5' :
             'border-destructive/50 bg-destructive/5'
           }>
             <CardContent className="pt-6">
@@ -428,6 +597,7 @@ const QRScanner = () => {
               <div className={`mb-4 p-4 rounded-lg text-center text-white font-bold text-xl ${
                 scanResult.autoAction === 'in' ? 'bg-success' :
                 scanResult.autoAction === 'out' ? 'bg-primary' :
+                scanResult.autoAction === 'cooldown' ? 'bg-warning' :
                 'bg-destructive'
               }`}>
                 {scanResult.autoAction === 'in' && '✓ ENTRADA REGISTRADA'}
@@ -435,6 +605,7 @@ const QRScanner = () => {
                 {scanResult.autoAction === 'blocked' && '✕ ACESSO NEGADO'}
                 {scanResult.autoAction === 'expired' && '✕ PASSE EXPIRADO'}
                 {scanResult.autoAction === 'closed' && '✕ PASSE JÁ UTILIZADO'}
+                {scanResult.autoAction === 'cooldown' && '⏱️ AGUARDE - BIP REPETIDO'}
               </div>
 
               <div className="flex items-start gap-4">
@@ -488,6 +659,7 @@ const QRScanner = () => {
         {scanResult?.type === 'employee' && (
           <Card className={
             scanResult.autoAction === 'blocked' ? 'border-destructive/50 bg-destructive/5' :
+            scanResult.autoAction === 'cooldown' ? 'border-warning/50 bg-warning/5' :
             scanResult.autoAction === 'in' ? 'border-success/50 bg-success/5' :
             'border-primary/50 bg-primary/5'
           }>
@@ -495,11 +667,13 @@ const QRScanner = () => {
               {/* Status Banner */}
               <div className={`mb-4 p-4 rounded-lg text-center text-white font-bold text-xl ${
                 scanResult.autoAction === 'blocked' ? 'bg-destructive' :
+                scanResult.autoAction === 'cooldown' ? 'bg-warning' :
                 scanResult.autoAction === 'in' ? 'bg-success' : 'bg-primary'
               }`}>
                 {scanResult.autoAction === 'in' && '✓ ENTRADA REGISTRADA'}
                 {scanResult.autoAction === 'out' && '✓ SAÍDA REGISTRADA'}
                 {scanResult.autoAction === 'blocked' && '✕ ACESSO BLOQUEADO'}
+                {scanResult.autoAction === 'cooldown' && '⏱️ AGUARDE - BIP REPETIDO'}
               </div>
 
               <div className="flex items-start gap-4">

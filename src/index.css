@@ -152,108 +152,103 @@
 /* ============================================= */
 /* GLOBAL PRINT STYLES - Badge/Pass Printing    */
 /* Professional Corporate Badge Layout          */
+/* NÃO ALTERA UI NORMAL - SÓ IMPRESSÃO          */
 /* ============================================= */
 @media print {
-  /* === RESET & HIDE SYSTEM UI === */
+  /* === RESET GERAL === */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
   html, body {
     margin: 0 !important;
     padding: 0 !important;
     background: white !important;
-    print-color-adjust: exact !important;
-    -webkit-print-color-adjust: exact !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 
-  /* Hide ALL system elements */
-  nav,
-  header,
-  aside,
-  footer,
-  .sidebar,
-  .no-print,
-  [data-sidebar],
-  button:not(.print-visible),
-  .print\\:hidden,
-  [role="navigation"],
-  [role="banner"],
-  [role="complementary"] {
-    display: none !important;
+  /* === OCULTAR TODO O SISTEMA === */
+  body > * {
     visibility: hidden !important;
   }
 
-  /* === PRINT AREA VISIBILITY === */
-  .print-area,
-  .print-area *,
-  #print-area,
-  #print-area *,
-  [data-print-area],
-  [data-print-area] * {
-    visibility: visible !important;
-  }
-
-  .print-area,
-  #print-area,
-  [data-print-area] {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
-    padding: 5mm !important;
-    background: white !important;
-  }
-
-  /* === STANDARD BADGE CARD (85mm x 54mm) === */
-  .print-badge-card {
-    visibility: visible !important;
-    width: 85mm !important;
-    min-height: 54mm !important;
-    max-height: 54mm !important;
-    padding: 4mm !important;
-    border: 1px solid #333 !important;
-    border-radius: 2mm !important;
-    background: white !important;
-    page-break-inside: avoid !important;
+  /* Esconder específicos */
+  nav, header, aside, footer,
+  .sidebar, .no-print, .print\\:hidden,
+  [data-sidebar], [role="navigation"],
+  [role="banner"], [role="complementary"],
+  button:not(.print-visible) {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
     overflow: hidden !important;
+  }
+
+  /* === ÁREA DE IMPRESSÃO VISÍVEL === */
+  .print-badge-card,
+  .print-badge-card *,
+  #print-area,
+  #print-area * {
+    visibility: visible !important;
+  }
+
+  /* === CARD BASE (85mm x 54mm - CR80) === */
+  .print-badge-card {
+    position: fixed !important;
+    left: 10mm !important;
+    top: 10mm !important;
+    width: 85mm !important;
+    height: 54mm !important;
+    padding: 3mm !important;
+    margin: 0 !important;
+    background: white !important;
+    border: 1px solid #000 !important;
+    border-radius: 2mm !important;
     box-sizing: border-box !important;
+    overflow: hidden !important;
+    page-break-inside: avoid !important;
+    box-shadow: none !important;
   }
 
   /* =========================================== */
-  /* EMPLOYEE BADGE - Vertical Corporate Style  */
-  /* Photo centered top, QR bottom              */
+  /* FUNCIONÁRIO - Layout Vertical Corporativo  */
+  /* Foto topo | Nome/Dept/Cargo | QR rodapé    */
   /* =========================================== */
   .print-employee-badge {
-    visibility: visible !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
+    justify-content: space-between !important;
     text-align: center !important;
-    padding: 3mm !important;
     height: 100% !important;
   }
 
   .print-employee-badge .badge-photo {
-    width: 22mm !important;
-    height: 26mm !important;
+    width: 20mm !important;
+    height: 24mm !important;
     object-fit: cover !important;
     border-radius: 2mm !important;
-    border: 1px solid #ccc !important;
-    margin-bottom: 2mm !important;
+    border: 1px solid #333 !important;
+    flex-shrink: 0 !important;
   }
 
   .print-employee-badge .badge-photo-placeholder {
-    width: 22mm !important;
-    height: 26mm !important;
-    background: #f0f0f0 !important;
+    width: 20mm !important;
+    height: 24mm !important;
+    background: #eee !important;
     border-radius: 2mm !important;
-    border: 1px solid #ccc !important;
+    border: 1px solid #333 !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    font-size: 18pt !important;
+    font-size: 16pt !important;
     font-weight: bold !important;
-    color: #666 !important;
-    margin-bottom: 2mm !important;
+    color: #333 !important;
+    flex-shrink: 0 !important;
   }
 
   .print-employee-badge .badge-info {
@@ -262,59 +257,127 @@
     flex-direction: column !important;
     align-items: center !important;
     justify-content: center !important;
-    width: 100% !important;
+    padding: 1mm 0 !important;
+    min-height: 0 !important;
   }
 
   .print-employee-badge .badge-name {
-    font-size: 11pt !important;
+    font-size: 10pt !important;
     font-weight: bold !important;
     color: #000 !important;
+    line-height: 1.1 !important;
     margin-bottom: 1mm !important;
-    line-height: 1.2 !important;
   }
 
   .print-employee-badge .badge-dept {
-    font-size: 9pt !important;
+    font-size: 8pt !important;
+    font-weight: 600 !important;
     color: #333 !important;
-    font-weight: 500 !important;
+    line-height: 1.1 !important;
   }
 
   .print-employee-badge .badge-job {
-    font-size: 8pt !important;
+    font-size: 7pt !important;
     color: #666 !important;
-    margin-bottom: 2mm !important;
+    line-height: 1.1 !important;
   }
 
   .print-employee-badge .badge-qr {
-    width: 18mm !important;
-    height: 18mm !important;
-    margin-top: auto !important;
+    flex-shrink: 0 !important;
+  }
+
+  .print-employee-badge .badge-qr svg {
+    width: 16mm !important;
+    height: 16mm !important;
   }
 
   /* =========================================== */
-  /* VISITOR BADGE - High Visibility Style      */
-  /* Yellow banner "VISITANTE" at top           */
+  /* VEÍCULO - Foco na Identificação            */
+  /* QR grande topo | Proprietário | Placa base */
   /* =========================================== */
-  .print-visitor-badge {
-    visibility: visible !important;
+  .print-vehicle-badge {
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
+    justify-content: space-between !important;
     text-align: center !important;
-    padding: 0 !important;
     height: 100% !important;
   }
 
-  .print-visitor-badge .visitor-label {
-    width: 100% !important;
-    font-size: 18pt !important;
-    font-weight: 900 !important;
+  .print-vehicle-badge .vehicle-qr {
+    flex-shrink: 0 !important;
+  }
+
+  .print-vehicle-badge .vehicle-qr svg {
+    width: 20mm !important;
+    height: 20mm !important;
+  }
+
+  .print-vehicle-badge .vehicle-owner {
+    font-size: 9pt !important;
+    font-weight: bold !important;
     color: #000 !important;
-    background: #ffd700 !important;
+    margin-top: 1mm !important;
+  }
+
+  .print-vehicle-badge .vehicle-dept {
+    font-size: 7pt !important;
+    color: #666 !important;
+  }
+
+  .print-vehicle-badge .vehicle-job {
+    font-size: 7pt !important;
+    color: #888 !important;
+  }
+
+  .print-vehicle-badge .vehicle-info-divider {
+    width: 70% !important;
+    height: 0.5mm !important;
+    background: #ccc !important;
+    margin: 1mm 0 !important;
+  }
+
+  .print-vehicle-badge .vehicle-model {
+    font-size: 8pt !important;
+    color: #333 !important;
+  }
+
+  .print-vehicle-badge .vehicle-plate {
+    font-size: 14pt !important;
+    font-weight: 900 !important;
+    font-family: 'Courier New', monospace !important;
+    color: #000 !important;
+    background: #f0f0f0 !important;
+    padding: 1.5mm 3mm !important;
+    border: 1.5px solid #000 !important;
+    border-radius: 1mm !important;
+    letter-spacing: 1px !important;
+  }
+
+  /* =========================================== */
+  /* VISITANTE - Alta Visibilidade              */
+  /* Faixa amarela VISITANTE | Dados | QR       */
+  /* =========================================== */
+  .print-visitor-badge {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    text-align: center !important;
+    height: 100% !important;
+    padding: 0 !important;
+  }
+
+  .print-visitor-badge .visitor-label {
+    width: calc(100% + 6mm) !important;
+    margin: -3mm -3mm 0 -3mm !important;
     padding: 2mm 0 !important;
-    margin: 0 !important;
+    background: #ffd700 !important;
+    color: #000 !important;
+    font-size: 14pt !important;
+    font-weight: 900 !important;
     letter-spacing: 2px !important;
-    border-bottom: 2px solid #000 !important;
+    border-bottom: 1.5px solid #000 !important;
+    flex-shrink: 0 !important;
   }
 
   .print-visitor-badge .visitor-content {
@@ -327,122 +390,40 @@
   }
 
   .print-visitor-badge .visitor-name {
-    font-size: 12pt !important;
-    font-weight: bold !important;
-    color: #000 !important;
-    margin: 2mm 0 1mm !important;
-    line-height: 1.2 !important;
-  }
-
-  .print-visitor-badge .visitor-company {
-    font-size: 9pt !important;
-    color: #333 !important;
-    margin-bottom: 1mm !important;
-  }
-
-  .print-visitor-badge .visitor-destination {
-    font-size: 8pt !important;
-    color: #666 !important;
-    font-style: italic !important;
-  }
-
-  .print-visitor-badge .visitor-qr {
-    width: 20mm !important;
-    height: 20mm !important;
-    margin-top: 2mm !important;
-  }
-
-  .print-visitor-badge .visitor-validity {
-    font-size: 7pt !important;
-    color: #999 !important;
-    margin-top: 1mm !important;
-  }
-
-  /* =========================================== */
-  /* VEHICLE BADGE - License Plate Focus        */
-  /* Large plate number, QR prominent           */
-  /* =========================================== */
-  .print-vehicle-badge {
-    visibility: visible !important;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    text-align: center !important;
-    padding: 3mm !important;
-    height: 100% !important;
-  }
-
-  .print-vehicle-badge .vehicle-qr {
-    width: 22mm !important;
-    height: 22mm !important;
-    margin-bottom: 2mm !important;
-  }
-
-  .print-vehicle-badge .vehicle-owner {
     font-size: 10pt !important;
     font-weight: bold !important;
     color: #000 !important;
     margin-bottom: 1mm !important;
   }
 
-  .print-vehicle-badge .vehicle-dept {
+  .print-visitor-badge .visitor-company {
     font-size: 8pt !important;
-    color: #666 !important;
-    margin-bottom: 1mm !important;
+    color: #333 !important;
   }
 
-  .print-vehicle-badge .vehicle-job {
-    font-size: 8pt !important;
-    color: #888 !important;
+  .print-visitor-badge .visitor-destination {
+    font-size: 7pt !important;
+    color: #666 !important;
+    font-style: italic !important;
     margin-bottom: 2mm !important;
   }
 
-  .print-vehicle-badge .vehicle-info-divider {
-    width: 80% !important;
-    height: 1px !important;
-    background: #ccc !important;
-    margin: 2mm 0 !important;
+  .print-visitor-badge .visitor-qr svg {
+    width: 18mm !important;
+    height: 18mm !important;
   }
 
-  .print-vehicle-badge .vehicle-model {
-    font-size: 9pt !important;
-    color: #333 !important;
-    margin-bottom: 1mm !important;
+  .print-visitor-badge .visitor-validity {
+    font-size: 6pt !important;
+    color: #999 !important;
+    margin-top: 1mm !important;
   }
 
-  .print-vehicle-badge .vehicle-plate {
-    font-size: 16pt !important;
-    font-weight: 900 !important;
-    font-family: 'Courier New', monospace !important;
-    color: #000 !important;
-    background: #f5f5f5 !important;
-    padding: 2mm 4mm !important;
-    border: 2px solid #000 !important;
-    border-radius: 1mm !important;
-    letter-spacing: 1px !important;
-    margin-top: auto !important;
-  }
-
-  /* === FULL PAGE VISITOR PASS === */
-  .print-visitor-pass {
-    visibility: visible !important;
-    width: 100% !important;
-    max-width: 180mm !important;
-    margin: 0 auto !important;
-    padding: 10mm !important;
-  }
-
-  /* === UTILITY CLASSES === */
+  /* === UTILITÁRIOS === */
   .print-hide {
     display: none !important;
   }
 
-  .print-show {
-    display: block !important;
-    visibility: visible !important;
-  }
-
-  /* Hide scrollbars */
   ::-webkit-scrollbar {
     display: none !important;
   }

@@ -55,7 +55,8 @@ const VisitorPass = () => {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 no-print">
+      {/* Screen UI - Hidden on print */}
+      <div className="space-y-6 print:hidden">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate('/visitors')}>
             <ArrowLeft className="w-5 h-5" />
@@ -71,10 +72,8 @@ const VisitorPass = () => {
             </Button>
           </div>
         </div>
-      </div>
 
-      {/* Printable Pass */}
-      <div ref={printRef} className="print-area">
+        {/* Screen Preview - Full detailed pass */}
         <Card className="max-w-2xl mx-auto p-8 bg-card">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-border pb-6 mb-6">
@@ -192,6 +191,38 @@ const VisitorPass = () => {
             <p className="text-xs text-muted-foreground">GUARDA OPERACIONAL - Sistema de Controle de Acesso</p>
           </div>
         </Card>
+      </div>
+
+      {/* ========================================= */}
+      {/* PRINT-ONLY: Visitor Badge (Card Size)   */}
+      {/* Yellow "VISITANTE" banner at top        */}
+      {/* ========================================= */}
+      <div className="hidden print:block print-badge-card print-visitor-badge" id="print-area" ref={printRef}>
+        {/* High-visibility VISITANTE banner */}
+        <div className="visitor-label">VISITANTE</div>
+
+        <div className="visitor-content">
+          {/* Visitor Name */}
+          <div className="visitor-name">{visitor.fullName}</div>
+          
+          {/* Company */}
+          <div className="visitor-company">{visitor.company || '-'}</div>
+          
+          {/* Destination */}
+          <div className="visitor-destination">
+            Destino: {visitor.visitToName}
+          </div>
+
+          {/* QR Code */}
+          <div className="visitor-qr">
+            <QRCodeSVG value={visitor.passId} size={75} level="H" />
+          </div>
+
+          {/* Validity */}
+          <div className="visitor-validity">
+            Válido: {format(new Date(visitor.validFrom), 'dd/MM HH:mm')} - {format(new Date(visitor.validUntil), 'dd/MM HH:mm')}
+          </div>
+        </div>
       </div>
     </DashboardLayout>
   );

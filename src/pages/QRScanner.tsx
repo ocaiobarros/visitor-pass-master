@@ -4,7 +4,6 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { useVisitorByPassId, useUpdateVisitorStatus } from '@/hooks/useVisitors';
 import { useCredentialByQrId, useUpdateCredentialStatus } from '@/hooks/useEmployeeCredentials';
 import { useCreateAccessLog, useSubjectAccessLogs } from '@/hooks/useAccessLogs';
-import { useLastAccessDirection } from '@/hooks/useLastAccessDirection';
 import { useScanFeedback } from '@/hooks/useScanFeedback';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +13,9 @@ import { QrCode, UserCheck, UserX, AlertTriangle, CheckCircle, Ban, Car, User, B
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Visitor, EmployeeCredential, AccessLog, AccessDirection } from '@/types/visitor';
+import { supabase } from '@/integrations/supabase/client';
 import CameraScannerModal from '@/components/CameraScannerModal';
+import { logAuditAction } from '@/hooks/useAuditLogs';
 
 type ScanResult = {
   type: 'visitor';
@@ -44,6 +45,30 @@ const AccessLogItem = ({ log }: { log: AccessLog }) => (
   </div>
 );
 
+/**
+ * Fetches the REAL last access direction directly from the database.
+ * This ensures toggle accuracy by always consulting fresh data.
+ */
+const fetchLastAccessDirection = async (
+  subjectType: 'visitor' | 'employee',
+  subjectId: string
+): Promise<AccessDirection | null> => {
+  const { data, error } = await supabase
+    .from('access_logs')
+    .select('direction')
+    .eq('subject_type', subjectType)
+    .eq('subject_id', subjectId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching last direction:', error);
+    return null;
+  }
+  return data?.direction as AccessDirection | null;
+};
+
 const QRScanner = () => {
   const [qrCode, setQrCode] = useState('');
   const [searchCode, setSearchCode] = useState('');
@@ -65,10 +90,6 @@ const QRScanner = () => {
   
   // Query for employee credential
   const { data: credential, isLoading: isLoadingCredential } = useCredentialByQrId(searchCode.startsWith('EC-') ? searchCode : '');
-
-  // Get last access direction for toggle logic
-  const visitorLastDir = useLastAccessDirection('visitor', visitor?.id || '');
-  const employeeLastDir = useLastAccessDirection('employee', credential?.id || '');
 
   // Query for access logs of current subject
   const { data: accessLogs = [] } = useSubjectAccessLogs(
@@ -114,8 +135,6 @@ const QRScanner = () => {
       // Wait for data to load
       if (searchCode.startsWith('VP-') && isLoadingVisitor) return;
       if (searchCode.startsWith('EC-') && isLoadingCredential) return;
-      if (searchCode.startsWith('VP-') && visitor && visitorLastDir.isLoading) return;
-      if (searchCode.startsWith('EC-') && credential && employeeLastDir.isLoading) return;
 
       setIsProcessing(true);
 
@@ -128,24 +147,39 @@ const QRScanner = () => {
             return;
           }
 
-          const lastDir = visitorLastDir.data;
+          // CRITICAL: Fetch REAL last direction directly from DB
+          const lastDir = await fetchLastAccessDirection('visitor', visitor.id);
           
-          // Check status
+          // Check status - visitor closed
           if (visitor.status === 'closed') {
             playBlocked();
             setScanResult({ type: 'visitor', data: visitor, lastDirection: lastDir, autoAction: 'closed' });
+            // Log denied access
+            logAuditAction('ACCESS_SCAN', {
+              subject_type: 'visitor',
+              subject_id: visitor.id,
+              result: 'DENIED',
+              reason: 'closed',
+            });
             scheduleAutoReset(4000);
             return;
           }
 
+          // Check expiration
           if (new Date() > new Date(visitor.validUntil)) {
             playBlocked();
             setScanResult({ type: 'visitor', data: visitor, lastDirection: lastDir, autoAction: 'expired' });
+            logAuditAction('ACCESS_SCAN', {
+              subject_type: 'visitor',
+              subject_id: visitor.id,
+              result: 'DENIED',
+              reason: 'expired',
+            });
             scheduleAutoReset(4000);
             return;
           }
 
-          // Toggle logic: last was 'in' → register 'out', else register 'in'
+          // TOGGLE LOGIC: last was 'in' → must register 'out', otherwise 'in'
           const nextDirection: AccessDirection = lastDir === 'in' ? 'out' : 'in';
           
           if (nextDirection === 'in') {
@@ -197,16 +231,26 @@ const QRScanner = () => {
             return;
           }
 
-          const lastDir = employeeLastDir.data;
+          // CRITICAL: Fetch REAL last direction directly from DB
+          const lastDir = await fetchLastAccessDirection('employee', credential.id);
 
+          // Check if credential is blocked
           if (credential.status === 'blocked') {
             playBlocked();
             setScanResult({ type: 'employee', data: credential, lastDirection: lastDir, autoAction: 'blocked' });
+            // Log denied access for audit
+            logAuditAction('ACCESS_SCAN', {
+              subject_type: 'employee',
+              subject_id: credential.id,
+              credential_id: credential.credentialId,
+              result: 'DENIED',
+              reason: 'blocked',
+            });
             scheduleAutoReset(4000);
             return;
           }
 
-          // Toggle logic
+          // TOGGLE LOGIC: last was 'in' → must register 'out', otherwise 'in'
           const nextDirection: AccessDirection = lastDir === 'in' ? 'out' : 'in';
 
           await createAccessLog.mutateAsync({
@@ -236,7 +280,7 @@ const QRScanner = () => {
     };
 
     processAutoToggle();
-  }, [searchCode, visitor, credential, isLoadingVisitor, isLoadingCredential, visitorLastDir.data, visitorLastDir.isLoading, employeeLastDir.data, employeeLastDir.isLoading, isProcessing]);
+  }, [searchCode, visitor, credential, isLoadingVisitor, isLoadingCredential, isProcessing]);
 
   const handleScan = () => {
     if (!qrCode.trim()) {

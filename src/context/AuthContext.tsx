@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { User, AppRole } from '@/types/visitor';
 import type { User as SupabaseUser, Session } from '@supabase/supabase-js';
 import { useQueryClient } from '@tanstack/react-query';
+import { logAuditAction } from '@/hooks/useAuditLogs';
 
 interface AuthContextType {
   user: User | null;
@@ -187,11 +188,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
+        // Log failed login attempt
+        logAuditAction('LOGIN_FAILED', {
+          email,
+          error: error.message,
+          timestamp: new Date().toISOString(),
+        });
         return { success: false, error: error.message };
       }
+      // Log successful login
+      logAuditAction('LOGIN', {
+        email,
+        user_id: data.user?.id,
+        timestamp: new Date().toISOString(),
+      });
       return { success: true };
     } catch (error) {
       console.error('Login error:', error);
+      logAuditAction('LOGIN_FAILED', {
+        email,
+        error: 'Unknown error',
+        timestamp: new Date().toISOString(),
+      });
       return { success: false, error: 'Erro ao fazer login' };
     }
   };
@@ -218,6 +236,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = async () => {
     try {
+      // Log logout BEFORE clearing session (while we still have user info)
+      if (user) {
+        logAuditAction('LOGOUT', {
+          user_id: user.id,
+          email: user.email,
+          timestamp: new Date().toISOString(),
+        });
+      }
       clearUserData();
       await supabase.auth.signOut();
       setUser(null);

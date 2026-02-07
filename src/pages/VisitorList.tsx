@@ -1,17 +1,33 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import DashboardLayout from '@/components/DashboardLayout';
-import { useVisitors } from '@/hooks/useVisitors';
+import { useVisitors, useUpdateVisitorStatus } from '@/hooks/useVisitors';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Users, Search, Eye, Printer, Filter, Loader2 } from 'lucide-react';
+import { Users, Search, Eye, Printer, Filter, Loader2, Ban } from 'lucide-react';
 import { format } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/context/AuthContext';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 const VisitorList = () => {
   const { data: visitors = [], isLoading } = useVisitors();
+  const updateStatus = useUpdateVisitorStatus();
+  const { isAdminOrRh } = useAuth();
+  const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
@@ -25,6 +41,19 @@ const VisitorList = () => {
 
     return matchesSearch && matchesStatus;
   });
+
+  const handleClosePass = async (id: string, name: string) => {
+    try {
+      await updateStatus.mutateAsync({ id, status: 'closed' });
+      toast({
+        title: 'Passe encerrado',
+        description: `O passe de ${name} foi encerrado. O QR Code não funcionará mais.`,
+        variant: 'destructive',
+      });
+    } catch (error) {
+      // Error handled by hook
+    }
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -146,6 +175,34 @@ const VisitorList = () => {
                                 <Printer className="h-4 w-4" />
                               </Button>
                             </Link>
+                            
+                            {isAdminOrRh && visitor.status !== 'closed' && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="destructive" size="icon">
+                                    <Ban className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Encerrar passe?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      O passe de {visitor.fullName} será encerrado permanentemente. 
+                                      O QR Code exibirá "ACESSO NEGADO" no scanner.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => handleClosePass(visitor.id, visitor.fullName)}
+                                      className="bg-destructive hover:bg-destructive/90"
+                                    >
+                                      Encerrar Passe
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>

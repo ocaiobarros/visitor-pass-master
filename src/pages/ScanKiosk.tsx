@@ -453,7 +453,7 @@ const ScanKiosk = () => {
         </div>
       )}
 
-      {/* Header com botão voltar - SEMPRE VISÍVEL */}
+      {/* Header com botão voltar - SEMPRE VISÍVEL (fullscreen ou não) */}
       <header
         className="fixed left-4 right-4 z-50 flex justify-between items-center print:hidden"
         style={{ top: 'calc(1rem + env(safe-area-inset-top))' }}
@@ -462,8 +462,12 @@ const ScanKiosk = () => {
           <BrandLogo size="sm" />
         </div>
 
-        {/* Botão Voltar - SEMPRE visível */}
-        <Button variant="outline" onClick={handleExit} className="gap-2 bg-background/90 shadow-lg border border-border">
+        {/* Botão Voltar - SEMPRE visível, independente de fullscreen */}
+        <Button 
+          variant="default" 
+          onClick={handleExit} 
+          className="gap-2 shadow-lg"
+        >
           <ArrowLeft className="w-4 h-4" />
           Voltar ao Sistema
         </Button>

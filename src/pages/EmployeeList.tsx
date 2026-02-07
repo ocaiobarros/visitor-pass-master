@@ -1,21 +1,35 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import DashboardLayout from '@/components/DashboardLayout';
-import { useEmployeeCredentials } from '@/hooks/useEmployeeCredentials';
+import { useEmployeeCredentials, useUpdateCredentialStatus } from '@/hooks/useEmployeeCredentials';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Users, UserPlus, Search, Eye, Building2 } from 'lucide-react';
+import { Users, UserPlus, Search, Eye, Building2, Ban, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 const EmployeeList = () => {
   const navigate = useNavigate();
   const { data: credentials = [], isLoading } = useEmployeeCredentials();
+  const updateStatus = useUpdateCredentialStatus();
   const { isAdminOrRh } = useAuth();
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
 
   // Filter only personal (employee) credentials
@@ -26,6 +40,20 @@ const EmployeeList = () => {
     employee.document.includes(searchTerm) ||
     employee.jobTitle?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const handleToggleStatus = async (id: string, currentStatus: string, name: string) => {
+    const newStatus = currentStatus === 'allowed' ? 'blocked' : 'allowed';
+    try {
+      await updateStatus.mutateAsync({ id, status: newStatus });
+      toast({
+        title: newStatus === 'blocked' ? 'Acesso bloqueado' : 'Acesso liberado',
+        description: `${name} foi ${newStatus === 'blocked' ? 'bloqueado' : 'liberado'}.`,
+        variant: newStatus === 'blocked' ? 'destructive' : 'default',
+      });
+    } catch (error) {
+      // Error handled by hook
+    }
+  };
 
   return (
     <DashboardLayout pageTitle="Funcionários">
@@ -114,16 +142,64 @@ const EmployeeList = () => {
                         {format(employee.createdAt, 'dd/MM/yyyy', { locale: ptBR })}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          asChild
-                        >
-                          <Link to={`/credential/${employee.id}`}>
-                            <Eye className="w-4 h-4 mr-1" />
-                            Ver Crachá
-                          </Link>
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            asChild
+                          >
+                            <Link to={`/credential/${employee.id}`}>
+                              <Eye className="w-4 h-4 mr-1" />
+                              Crachá
+                            </Link>
+                          </Button>
+                          
+                          {isAdminOrRh && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant={employee.status === 'allowed' ? 'destructive' : 'default'}
+                                  size="sm"
+                                  className="gap-1"
+                                >
+                                  {employee.status === 'allowed' ? (
+                                    <>
+                                      <Ban className="w-4 h-4" />
+                                      Bloquear
+                                    </>
+                                  ) : (
+                                    <>
+                                      <CheckCircle className="w-4 h-4" />
+                                      Liberar
+                                    </>
+                                  )}
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>
+                                    {employee.status === 'allowed' ? 'Bloquear acesso?' : 'Liberar acesso?'}
+                                  </AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    {employee.status === 'allowed' 
+                                      ? `O funcionário ${employee.fullName} terá seu acesso bloqueado. O scanner exibirá "ACESSO NEGADO" para este QR Code.`
+                                      : `O funcionário ${employee.fullName} terá seu acesso liberado novamente.`
+                                    }
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleToggleStatus(employee.id, employee.status, employee.fullName)}
+                                    className={employee.status === 'allowed' ? 'bg-destructive hover:bg-destructive/90' : ''}
+                                  >
+                                    {employee.status === 'allowed' ? 'Bloquear' : 'Liberar'}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

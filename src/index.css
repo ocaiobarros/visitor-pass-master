@@ -198,7 +198,7 @@
   }
 
   /* Esconde qualquer UI marcada como print:hidden */
-  .print\\:hidden {
+  .print\:hidden {
     display: none !important;
     visibility: hidden !important;
   }
@@ -209,7 +209,7 @@
   .credential-pass-page {
     background: #ffffff !important;
     margin: 0 !important;
-    padding: 0 !important; /* remove a margem externa que estava “cortando” no A4 */
+    padding: 0 !important;
     width: 100% !important;
     min-height: 100vh !important;
 
@@ -222,14 +222,11 @@
     display: block !important;
     visibility: visible !important;
 
-    /* centralizado sem posicionamento absoluto */
     margin: 12mm 0 0 0 !important;
 
-    /* tamanho fixo (não estica no A4) */
     width: 85mm !important;
     max-width: none !important;
 
-    /* borda clara para papel/PDF */
     border: 1px solid #e2e8f0 !important;
     box-shadow: none !important;
   }
@@ -238,25 +235,9 @@
     object-fit: cover !important;
   }
 
-  /* QR grande no rodapé (mantém padding original do card) */
   .credential-card .credential-qr svg {
     width: 34mm !important;
     height: 34mm !important;
-  }
-
-  /* =================================================================== */
-  /* VisitorPass e outros badges legacy (mantém suporte sem “absolute”)   */
-  /* =================================================================== */
-  .hidden.print\\:block,
-  .print\\:block {
-    display: block !important;
-    visibility: visible !important;
-    position: static !important;
-  }
-
-  #print-area {
-    display: block !important;
-    visibility: visible !important;
   }
 
   /* Na página de credenciais, não use o #print-area legado (evita duplicar no print) */
@@ -264,12 +245,38 @@
     display: none !important;
   }
 
+  /* =================================================================== */
+  /* VisitorPass: Impressão WYSIWYG (cópia exata da tela)                  */
+  /* =================================================================== */
+  .hidden.print\:block,
+  .print\:block {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+  }
+
+  #print-area {
+    display: flex !important;
+    visibility: visible !important;
+    justify-content: center !important;
+    padding-top: 10mm !important;
+  }
+
+  /* Visitor Pass - layout completo idêntico à tela */
+  #print-area > div {
+    width: 180mm !important;
+    max-width: none !important;
+    padding: 8mm !important;
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: none !important;
+  }
+
   .print-badge-card {
     display: block !important;
     visibility: visible !important;
     position: static !important;
 
-    /* centralizado via fluxo normal + container flex do layout */
     margin: 12mm 0 0 0 !important;
 
     background: #ffffff !important;
@@ -383,12 +390,10 @@
     visibility: visible !important;
   }
 
-  /* Remove scrollbars na impressão */
   ::-webkit-scrollbar {
     display: none !important;
   }
 
-  /* Garante que cores de fundo apareçam */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;

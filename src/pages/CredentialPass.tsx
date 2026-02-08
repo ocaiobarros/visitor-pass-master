@@ -77,10 +77,15 @@ const CredentialPass = () => {
       <Card className={`max-w-md mx-auto shadow-xl credential-card ${badgeVariantClass}`}>
         <CardContent className="pt-6">
           <div className="flex flex-col items-center text-center space-y-4">
-            {/* Photo/Icon */}
+            {/* Photo/Icon - fixed dimensions with aspect-ratio for sharpness */}
             <div className="w-32 h-40 rounded-xl overflow-hidden border-2 border-border bg-muted flex items-center justify-center">
               {credential.photoUrl ? (
-                <img src={credential.photoUrl} alt={credential.fullName} className="w-full h-full object-cover" />
+                <img 
+                  src={credential.photoUrl} 
+                  alt={credential.fullName} 
+                  className="w-full h-full object-cover"
+                  style={{ aspectRatio: '4/5' }}
+                />
               ) : isVehicle ? (
                 <Car className="w-16 h-16 text-muted-foreground" />
               ) : (

@@ -189,7 +189,7 @@ const DashboardLayout = ({ children, pageTitle }: DashboardLayoutProps) => {
       </aside>
 
       {/* Mobile Header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-card border-b border-border">
+      <div className="lg:hidden print:hidden fixed top-0 left-0 right-0 z-50 bg-card border-b border-border">
         <div className="flex items-center justify-between p-4">
           <BrandLogo size="sm" showName={true} />
           <Button variant="ghost" size="icon" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>

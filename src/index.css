@@ -255,21 +255,22 @@
     position: static !important;
   }
 
-  #print-area {
-    display: flex !important;
-    visibility: visible !important;
-    justify-content: center !important;
-    padding-top: 10mm !important;
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
   }
 
-  /* Visitor Pass - layout completo idêntico à tela */
-  #print-area > div {
+  /* O #print-area agora é o próprio Card da tela (WYSIWYG real) */
+  #print-area {
+    display: block !important;
+    visibility: visible !important;
     width: 180mm !important;
-    max-width: none !important;
-    padding: 8mm !important;
-    background: #ffffff !important;
-    border: 1px solid #e2e8f0 !important;
-    box-shadow: none !important;
+    max-width: 180mm !important;
+    margin: 12mm auto 0 auto !important;
+  }
+
+  #print-area img {
+    object-fit: cover !important;
   }
 
   .print-badge-card {

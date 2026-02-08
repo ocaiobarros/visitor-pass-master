@@ -164,27 +164,29 @@ export const logAuditAction = async (
  * Determina a URL base da API considerando ambiente local e produção.
  */
 function getApiUrl(): string {
-  // Em produção (Docker), usar URL relativa ou configurada
+  // Verificar se há variável de ambiente configurada
+  const envApiUrl = import.meta.env.VITE_API_URL;
+  if (envApiUrl) {
+    return envApiUrl;
+  }
+
+  // Em produção (Docker), usar Kong Gateway na porta 8000
   if (typeof window !== 'undefined') {
-    // Se estamos em localhost:80 ou similar, usar porta 8000 para API
     const origin = window.location.origin;
     
-    // Verificar se há variável de ambiente
-    const envApiUrl = import.meta.env.VITE_API_URL;
-    if (envApiUrl) {
-      return envApiUrl;
-    }
-    
-    // Self-hosted: assumir Kong na porta 8000
-    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+    try {
       const url = new URL(origin);
+      
+      // Self-hosted: SEMPRE usar porta 8000 para API (Kong Gateway)
+      // O frontend roda na porta 80 (Nginx), API está no Kong (8000)
       url.port = '8000';
+      
       return url.origin;
+    } catch {
+      // Fallback se URL parsing falhar
+      const host = window.location.hostname;
+      return `http://${host}:8000`;
     }
-    
-    // Produção: usar mesmo host com subpath /api ou porta diferente
-    // Tentar detectar se há Kong configurado
-    return origin.replace(':80', ':8000').replace(':443', ':8000');
   }
   
   return 'http://localhost:8000';

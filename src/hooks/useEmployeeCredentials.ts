@@ -77,7 +77,24 @@ export const useCredentialByQrId = (credentialId: string) => {
       
       if (error) throw error;
       if (!data) return null;
-      return mapDbToCredential(data);
+      
+      const credential = mapDbToCredential(data);
+      
+      // Para veículos: buscar a foto do funcionário dono (mesmo CPF/documento)
+      if (credential.type === 'vehicle' && !credential.photoUrl && credential.document) {
+        const { data: ownerData } = await supabase
+          .from('employee_credentials')
+          .select('photo_url')
+          .eq('document', credential.document)
+          .eq('type', 'personal')
+          .maybeSingle();
+        
+        if (ownerData?.photo_url) {
+          credential.photoUrl = ownerData.photo_url;
+        }
+      }
+      
+      return credential;
     },
     enabled: !!credentialId && credentialId.startsWith('EC-'),
   });

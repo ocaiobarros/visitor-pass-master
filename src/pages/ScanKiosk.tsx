@@ -269,14 +269,17 @@ const ScanKiosk = () => {
 
         {/* Main content */}
         <div ref={printRef} className="flex flex-col md:flex-row items-center gap-8 md:gap-12 mt-16 print:mt-0 print:flex-col print:text-black">
-          {/* Photo - Para veículos mostra a foto do dono (via photoUrl) */}
-          <div className="w-40 h-40 md:w-56 md:h-56 rounded-2xl flex items-center justify-center overflow-hidden border-4 bg-white/90 border-white/50 print:w-32 print:h-32 print:border-gray-300">
+          {/* Photo - Para veículos mostra a foto do dono (via photoUrl buscado pelo hook) */}
+          <div 
+            className="w-40 h-40 md:w-56 md:h-56 rounded-2xl flex items-center justify-center overflow-hidden border-4 bg-white/90 border-white/50 print:w-32 print:h-32 print:border-gray-300"
+            style={{ aspectRatio: '1/1' }}
+          >
             {scanResult.data.photoUrl ? (
               <img 
                 src={scanResult.data.photoUrl} 
                 alt={scanResult.data.fullName} 
-                className="w-full h-full object-cover"
-                style={{ aspectRatio: '1/1' }}
+                className="w-full h-full"
+                style={{ objectFit: 'cover', aspectRatio: '1/1' }}
               />
             ) : isVehicle ? (
               <Car className="w-24 h-24 text-foreground print:text-gray-700" />

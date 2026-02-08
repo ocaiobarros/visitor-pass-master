@@ -128,6 +128,7 @@ const EmployeeList = () => {
                             src={employee.photoUrl || undefined}
                             alt={employee.fullName}
                             className="object-cover"
+                            style={{ aspectRatio: '1/1' }}
                           />
                           <AvatarFallback className="bg-primary/10 text-primary font-semibold">
                             {employee.fullName.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}

@@ -118,6 +118,9 @@ const CredentialPass = () => {
       {/* EMPLOYEE BADGE - Vertical Corporate */}
       {!isVehicle && (
         <div className="hidden print:block print-badge-card print-employee-badge" id="print-area">
+          {/* Header */}
+          <div className="badge-header">{branding.name}</div>
+          
           {/* Photo */}
           {credential.photoUrl ? (
             <img src={credential.photoUrl} alt={credential.fullName} className="badge-photo" />
@@ -130,36 +133,38 @@ const CredentialPass = () => {
           {/* Info */}
           <div className="badge-info">
             <div className="badge-name">{credential.fullName}</div>
-            <div className="badge-dept">{credential.department?.name || branding.name}</div>
+            <div className="badge-dept">{credential.department?.name || ''}</div>
             <div className="badge-job">{credential.jobTitle || ''}</div>
           </div>
 
           {/* QR Code */}
           <div className="badge-qr">
             <QRCodeSVG value={credential.credentialId} size={70} level="H" />
+            <div className="badge-id">{credential.credentialId}</div>
           </div>
         </div>
       )}
 
-      {/* VEHICLE BADGE - Plate Focus */}
+      {/* VEHICLE BADGE - Horizontal Plate Focus */}
       {isVehicle && (
         <div className="hidden print:block print-badge-card print-vehicle-badge" id="print-area">
-          {/* QR Code prominent at top */}
-          <div className="vehicle-qr">
-            <QRCodeSVG value={credential.credentialId} size={85} level="H" />
+          {/* QR Section */}
+          <div className="vehicle-qr-section">
+            <div className="vehicle-qr">
+              <QRCodeSVG value={credential.credentialId} size={85} level="H" />
+            </div>
+            <div className="vehicle-qr-label">{credential.credentialId}</div>
           </div>
 
-          {/* Owner Info */}
-          <div className="vehicle-owner">{credential.fullName}</div>
-          <div className="vehicle-dept">{credential.department?.name || ''}</div>
-          <div className="vehicle-job">{credential.jobTitle || ''}</div>
-
-          {/* Divider */}
-          <div className="vehicle-info-divider"></div>
-
-          {/* Vehicle Data */}
-          <div className="vehicle-model">{credential.vehicleMakeModel}</div>
-          <div className="vehicle-plate">{credential.vehiclePlate}</div>
+          {/* Info Section */}
+          <div className="vehicle-info-section">
+            <div className="vehicle-owner">{credential.fullName}</div>
+            <div className="vehicle-dept">{credential.department?.name || ''}</div>
+            <div className="vehicle-job">{credential.jobTitle || ''}</div>
+            <div className="vehicle-divider"></div>
+            <div className="vehicle-model">{credential.vehicleMakeModel}</div>
+            <div className="vehicle-plate">{credential.vehiclePlate}</div>
+          </div>
         </div>
       )}
     </div>

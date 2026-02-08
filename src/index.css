@@ -174,21 +174,28 @@
     font-family: 'Inter', Arial, sans-serif !important;
   }
 
-  /* === OCULTAR TODA A INTERFACE === */
-  body > * {
-    visibility: hidden !important;
-    position: absolute !important;
-    left: -9999px !important;
-  }
-
+  /* === OCULTAR ELEMENTOS DE INTERFACE === */
   nav, header, aside, footer,
-  .sidebar, .no-print, .print\\:hidden,
+  .sidebar, .no-print,
   [data-sidebar], [role="navigation"],
   [role="banner"], [role="complementary"],
-  button:not(.print-visible),
   .toaster, .toast {
     display: none !important;
     visibility: hidden !important;
+  }
+
+  /* === ESCONDER preview card da tela === */
+  .print\\:hidden {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* === MOSTRAR área de impressão === */
+  .hidden.print\\:block,
+  .print\\:block {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
   }
 
   /* === ÁREA DE IMPRESSÃO VISÍVEL === */
@@ -196,25 +203,29 @@
   .print-badge-card *,
   #print-area,
   #print-area * {
+    display: block !important;
     visibility: visible !important;
     position: static !important;
     left: auto !important;
+    overflow: visible !important;
   }
 
   /* === CARD BASE CR80 (85mm x 54mm) === */
   .print-badge-card {
     position: fixed !important;
-    left: 10mm !important;
-    top: 10mm !important;
+    left: 50% !important;
+    top: 15mm !important;
+    transform: translateX(-50%) !important;
     width: 85mm !important;
-    height: 54mm !important;
+    height: auto !important;
+    min-height: 54mm !important;
     padding: 4mm !important;
     margin: 0 !important;
     background: #ffffff !important;
     border: 0.5mm solid #000000 !important;
     border-radius: 3mm !important;
     box-sizing: border-box !important;
-    overflow: hidden !important;
+    overflow: visible !important;
     page-break-inside: avoid !important;
     box-shadow: none !important;
   }

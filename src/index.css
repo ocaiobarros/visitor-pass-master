@@ -267,10 +267,98 @@
     width: 180mm !important;
     max-width: 180mm !important;
     margin: 12mm auto 0 auto !important;
+    background: #ffffff !important;
   }
 
   #print-area img {
     object-fit: cover !important;
+  }
+
+  /* ========================================= */
+  /* FORÇAR CORES NA IMPRESSÃO (WYSIWYG)      */
+  /* ========================================= */
+  #print-area,
+  #print-area * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* Fundo verde do ícone do escudo */
+  #print-area .bg-primary {
+    background-color: hsl(123, 46%, 34%) !important;
+  }
+
+  /* Texto verde primário */
+  #print-area .text-primary {
+    color: hsl(123, 46%, 34%) !important;
+  }
+
+  #print-area .text-primary-foreground {
+    color: #ffffff !important;
+  }
+
+  /* Texto cinza muted */
+  #print-area .text-muted-foreground {
+    color: hsl(0, 0%, 40%) !important;
+  }
+
+  /* Texto preto foreground */
+  #print-area .text-foreground {
+    color: hsl(0, 0%, 20%) !important;
+  }
+
+  /* Caixas de sucesso (entrada permitida) */
+  #print-area .bg-success\/10 {
+    background-color: rgba(46, 125, 50, 0.1) !important;
+  }
+
+  #print-area .border-success\/20 {
+    border-color: rgba(46, 125, 50, 0.2) !important;
+  }
+
+  #print-area .text-success {
+    color: hsl(140, 60%, 31%) !important;
+  }
+
+  /* Caixas de destructive (saída até) */
+  #print-area .bg-destructive\/10 {
+    background-color: rgba(220, 53, 69, 0.1) !important;
+  }
+
+  #print-area .border-destructive\/20 {
+    border-color: rgba(220, 53, 69, 0.2) !important;
+  }
+
+  #print-area .text-destructive {
+    color: hsl(0, 84%, 60%) !important;
+  }
+
+  /* Caixas de warning (observação) */
+  #print-area .bg-warning\/10 {
+    background-color: rgba(255, 193, 7, 0.1) !important;
+  }
+
+  #print-area .border-warning\/20 {
+    border-color: rgba(255, 193, 7, 0.2) !important;
+  }
+
+  #print-area .text-warning {
+    color: hsl(38, 92%, 50%) !important;
+  }
+
+  /* Fundo muted (instruções de segurança) */
+  #print-area .bg-muted\/50 {
+    background-color: rgba(245, 245, 245, 0.5) !important;
+  }
+
+  #print-area .bg-muted {
+    background-color: hsl(0, 0%, 95%) !important;
+  }
+
+  /* Bordas */
+  #print-area .border-border {
+    border-color: hsl(0, 0%, 88%) !important;
   }
 
   .print-badge-card {

@@ -161,12 +161,21 @@
     margin: 0;
   }
 
-  /* === AJUSTE DE CORES/IMAGENS PARA IMPRESSÃO === */
-  * {
+  /* === FORÇAR CORES/FUNDOS NA IMPRESSÃO === */
+  /* IMPORTANTE: O usuário DEVE habilitar "Gráficos de fundo" / "Background graphics" */
+  /* nas configurações de impressão do navegador para as cores aparecerem */
+  *,
+  *::before,
+  *::after {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     color-adjust: exact !important;
     box-sizing: border-box !important;
+  }
+
+  html {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   html,

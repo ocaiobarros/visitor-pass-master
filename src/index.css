@@ -156,7 +156,12 @@
 /* Tamanho CR80: 85.6mm x 53.98mm              */
 /* ============================================= */
 @media print {
-  /* === RESET GERAL FORÇADO === */
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  /* === AJUSTE DE CORES/IMAGENS PARA IMPRESSÃO === */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
@@ -164,33 +169,84 @@
     box-sizing: border-box !important;
   }
 
-  html, body {
+  html,
+  body {
     margin: 0 !important;
     padding: 0 !important;
-    background: white !important;
     width: 100% !important;
-    height: auto !important;
+    height: 100% !important;
     overflow: visible !important;
+    background: #ffffff !important;
     font-family: 'Inter', Arial, sans-serif !important;
   }
 
   /* === OCULTAR ELEMENTOS DE INTERFACE === */
-  nav, header, aside, footer,
-  .sidebar, .no-print,
-  [data-sidebar], [role="navigation"],
-  [role="banner"], [role="complementary"],
-  .toaster, .toast {
+  nav,
+  header,
+  aside,
+  footer,
+  .sidebar,
+  .no-print,
+  [data-sidebar],
+  [role='navigation'],
+  [role='banner'],
+  [role='complementary'],
+  .toaster,
+  .toast {
     display: none !important;
     visibility: hidden !important;
   }
 
-  /* === ESCONDER preview card da tela === */
+  /* Esconde qualquer UI marcada como print:hidden */
   .print\\:hidden {
     display: none !important;
     visibility: hidden !important;
   }
 
-  /* === MOSTRAR área de impressão === */
+  /* =================================================================== */
+  /* CREDENCIAIS (Funcionário / Veículo): imprimir IGUAL à visualização   */
+  /* =================================================================== */
+  .credential-pass-page {
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important; /* remove a margem externa que estava “cortando” no A4 */
+    width: 100% !important;
+    min-height: 100vh !important;
+
+    display: flex !important;
+    justify-content: center !important;
+    align-items: flex-start !important;
+  }
+
+  .credential-card {
+    display: block !important;
+    visibility: visible !important;
+
+    /* centralizado sem posicionamento absoluto */
+    margin: 12mm 0 0 0 !important;
+
+    /* tamanho fixo (não estica no A4) */
+    width: 85mm !important;
+    max-width: none !important;
+
+    /* borda clara para papel/PDF */
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: none !important;
+  }
+
+  .credential-card img {
+    object-fit: cover !important;
+  }
+
+  /* QR grande no rodapé (mantém padding original do card) */
+  .credential-card .credential-qr svg {
+    width: 34mm !important;
+    height: 34mm !important;
+  }
+
+  /* =================================================================== */
+  /* VisitorPass e outros badges legacy (mantém suporte sem “absolute”)   */
+  /* =================================================================== */
   .hidden.print\\:block,
   .print\\:block {
     display: block !important;
@@ -198,238 +254,31 @@
     position: static !important;
   }
 
-  /* === ÁREA DE IMPRESSÃO VISÍVEL === */
-  .print-badge-card,
-  .print-badge-card *,
-  #print-area,
-  #print-area * {
+  #print-area {
+    display: block !important;
+    visibility: visible !important;
+  }
+
+  /* Na página de credenciais, não use o #print-area legado (evita duplicar no print) */
+  .credential-pass-page #print-area {
+    display: none !important;
+  }
+
+  .print-badge-card {
     display: block !important;
     visibility: visible !important;
     position: static !important;
-    left: auto !important;
-    overflow: visible !important;
-  }
 
-  /* === CARD BASE CR80 (85mm x 54mm) === */
-  .print-badge-card {
-    position: fixed !important;
-    left: 50% !important;
-    top: 15mm !important;
-    transform: translateX(-50%) !important;
-    width: 85mm !important;
-    height: auto !important;
-    min-height: 54mm !important;
-    padding: 4mm !important;
-    margin: 0 !important;
+    /* centralizado via fluxo normal + container flex do layout */
+    margin: 12mm 0 0 0 !important;
+
     background: #ffffff !important;
-    border: 0.5mm solid #000000 !important;
+    border: 1px solid #e2e8f0 !important;
     border-radius: 3mm !important;
-    box-sizing: border-box !important;
+    box-shadow: none !important;
+
     overflow: visible !important;
     page-break-inside: avoid !important;
-    box-shadow: none !important;
-  }
-
-  /* =========================================== */
-  /* FUNCIONÁRIO - Layout VERTICAL Corporativo  */
-  /* Foto topo | Nome/Dept/Cargo | QR rodapé    */
-  /* Dimensão: 54mm x 85mm (vertical)           */
-  /* =========================================== */
-  .print-employee-badge {
-    width: 54mm !important;
-    height: 85mm !important;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: flex-start !important;
-    text-align: center !important;
-    padding: 3mm !important;
-    gap: 2mm !important;
-  }
-
-  .print-employee-badge .badge-header {
-    width: 100% !important;
-    padding: 1.5mm 0 !important;
-    background: #1a5f2a !important;
-    color: #ffffff !important;
-    font-size: 7pt !important;
-    font-weight: 700 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.5mm !important;
-    border-radius: 1.5mm !important;
-    margin-bottom: 2mm !important;
-  }
-
-  .print-employee-badge .badge-photo {
-    width: 22mm !important;
-    height: 28mm !important;
-    object-fit: cover !important;
-    border-radius: 2mm !important;
-    border: 0.5mm solid #333333 !important;
-    flex-shrink: 0 !important;
-  }
-
-  .print-employee-badge .badge-photo-placeholder {
-    width: 22mm !important;
-    height: 28mm !important;
-    background: #eeeeee !important;
-    border-radius: 2mm !important;
-    border: 0.5mm solid #333333 !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    font-size: 18pt !important;
-    font-weight: 700 !important;
-    color: #333333 !important;
-    flex-shrink: 0 !important;
-  }
-
-  .print-employee-badge .badge-info {
-    flex: 1 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 1mm 0 !important;
-    width: 100% !important;
-    min-height: 0 !important;
-  }
-
-  .print-employee-badge .badge-name {
-    font-size: 10pt !important;
-    font-weight: 700 !important;
-    color: #000000 !important;
-    line-height: 1.2 !important;
-    margin-bottom: 1mm !important;
-    max-width: 48mm !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-  }
-
-  .print-employee-badge .badge-dept {
-    font-size: 8pt !important;
-    font-weight: 600 !important;
-    color: #333333 !important;
-    line-height: 1.1 !important;
-    margin-bottom: 0.5mm !important;
-  }
-
-  .print-employee-badge .badge-job {
-    font-size: 7pt !important;
-    color: #666666 !important;
-    line-height: 1.1 !important;
-    font-style: italic !important;
-  }
-
-  .print-employee-badge .badge-qr {
-    flex-shrink: 0 !important;
-    margin-top: auto !important;
-    padding-top: 2mm !important;
-  }
-
-  .print-employee-badge .badge-qr svg {
-    width: 18mm !important;
-    height: 18mm !important;
-  }
-
-  .print-employee-badge .badge-id {
-    font-size: 5pt !important;
-    color: #999999 !important;
-    font-family: 'Courier New', monospace !important;
-    margin-top: 1mm !important;
-  }
-
-  /* =========================================== */
-  /* VEÍCULO - Layout HORIZONTAL                */
-  /* QR grande esquerda | Dados | Placa base    */
-  /* Dimensão: 85mm x 54mm (horizontal)         */
-  /* =========================================== */
-  .print-vehicle-badge {
-    width: 85mm !important;
-    height: 54mm !important;
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: stretch !important;
-    justify-content: flex-start !important;
-    padding: 3mm !important;
-    gap: 3mm !important;
-  }
-
-  .print-vehicle-badge .vehicle-qr-section {
-    flex-shrink: 0 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 2mm !important;
-    background: #f5f5f5 !important;
-    border-radius: 2mm !important;
-  }
-
-  .print-vehicle-badge .vehicle-qr svg {
-    width: 28mm !important;
-    height: 28mm !important;
-  }
-
-  .print-vehicle-badge .vehicle-qr-label {
-    font-size: 5pt !important;
-    color: #666666 !important;
-    margin-top: 1mm !important;
-    font-family: 'Courier New', monospace !important;
-  }
-
-  .print-vehicle-badge .vehicle-info-section {
-    flex: 1 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: space-between !important;
-    min-width: 0 !important;
-  }
-
-  .print-vehicle-badge .vehicle-owner {
-    font-size: 9pt !important;
-    font-weight: 700 !important;
-    color: #000000 !important;
-    line-height: 1.2 !important;
-    margin-bottom: 1mm !important;
-  }
-
-  .print-vehicle-badge .vehicle-dept {
-    font-size: 7pt !important;
-    color: #333333 !important;
-    font-weight: 600 !important;
-  }
-
-  .print-vehicle-badge .vehicle-job {
-    font-size: 6pt !important;
-    color: #666666 !important;
-    font-style: italic !important;
-  }
-
-  .print-vehicle-badge .vehicle-divider {
-    width: 100% !important;
-    height: 0.3mm !important;
-    background: #cccccc !important;
-    margin: 2mm 0 !important;
-  }
-
-  .print-vehicle-badge .vehicle-model {
-    font-size: 7pt !important;
-    color: #444444 !important;
-  }
-
-  .print-vehicle-badge .vehicle-plate {
-    font-size: 16pt !important;
-    font-weight: 900 !important;
-    font-family: 'Courier New', monospace !important;
-    color: #000000 !important;
-    background: #f0f0f0 !important;
-    padding: 2mm 4mm !important;
-    border: 0.8mm solid #000000 !important;
-    border-radius: 1.5mm !important;
-    letter-spacing: 1mm !important;
-    text-align: center !important;
-    margin-top: auto !important;
   }
 
   /* =========================================== */

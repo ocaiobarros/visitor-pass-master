@@ -124,7 +124,11 @@ const EmployeeList = () => {
                     <TableRow key={employee.id}>
                       <TableCell>
                         <Avatar className="h-10 w-10">
-                          <AvatarImage src={employee.photoUrl || undefined} alt={employee.fullName} />
+                          <AvatarImage
+                            src={employee.photoUrl || undefined}
+                            alt={employee.fullName}
+                            className="object-cover"
+                          />
                           <AvatarFallback className="bg-primary/10 text-primary font-semibold">
                             {employee.fullName.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
                           </AvatarFallback>

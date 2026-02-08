@@ -51,9 +51,10 @@ const CredentialPass = () => {
   }
 
   const isVehicle = credential.type === 'vehicle';
+  const badgeVariantClass = isVehicle ? 'vehicle-badge' : 'employee-badge';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-background p-4">
+    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-background p-4 credential-pass-page">
       {/* Print-hidden header */}
       <div className="max-w-2xl mx-auto mb-6 flex justify-between items-center print:hidden">
         <Button variant="ghost" onClick={handleBack}>
@@ -72,8 +73,8 @@ const CredentialPass = () => {
         </Button>
       </div>
 
-      {/* Screen Preview Card - visible only on screen */}
-      <Card className="max-w-md mx-auto shadow-xl print:hidden">
+      {/* Preview Card (tela e impressão) */}
+      <Card className={`max-w-md mx-auto shadow-xl credential-card ${badgeVariantClass}`}>
         <CardContent className="pt-6">
           <div className="flex flex-col items-center text-center space-y-4">
             {/* Photo/Icon */}
@@ -103,7 +104,7 @@ const CredentialPass = () => {
             )}
 
             {/* QR Code */}
-            <div className="bg-white p-4 rounded-xl border">
+            <div className="bg-white p-4 rounded-xl border credential-qr">
               <QRCodeSVG value={credential.credentialId} size={120} level="H" />
               <p className="text-xs font-mono text-muted-foreground mt-2">{credential.credentialId}</p>
             </div>

@@ -250,6 +250,13 @@ const QRScanner = () => {
       visitToType: data.visit_to_type,
       visitToName: data.visit_to_name,
       gateObs: data.gate_obs,
+      companyReason: data.company_reason || '',
+      accessType: data.access_type || 'pedestrian',
+      vehiclePassId: data.vehicle_pass_id,
+      vehiclePlate: data.vehicle_plate,
+      vehicleBrand: data.vehicle_brand,
+      vehicleModel: data.vehicle_model,
+      vehicleColor: data.vehicle_color,
       validFrom: new Date(data.valid_from),
       validUntil: new Date(data.valid_until),
       status: data.status,
@@ -324,7 +331,6 @@ const QRScanner = () => {
       try {
         // =============== VISITANTE ===============
         if (searchCode.startsWith('VP-')) {
-          // CONSULTA DIRETA - Bypass total do cache
           const freshVisitor = await fetchFreshVisitor(searchCode);
           
           if (!freshVisitor) {
@@ -336,31 +342,22 @@ const QRScanner = () => {
 
           await fetchRecentLogs('visitor', freshVisitor.id);
 
-          // BLOQUEIO: Passe fechado (reflexo instantâneo)
           if (freshVisitor.status === 'closed') {
             playBlocked();
             setScanResult({ type: 'visitor', data: freshVisitor, action: 'closed' });
-            logAuditAction('ACCESS_SCAN', {
-              subject_type: 'visitor', subject_id: freshVisitor.id,
-              result: 'DENIED', reason: 'closed'
-            });
+            logAuditAction('ACCESS_SCAN', { subject_type: 'visitor', subject_id: freshVisitor.id, result: 'DENIED', reason: 'closed' });
             scheduleReset(4000);
             return;
           }
 
-          // BLOQUEIO: Passe expirado
           if (new Date() > new Date(freshVisitor.validUntil)) {
             playBlocked();
             setScanResult({ type: 'visitor', data: freshVisitor, action: 'expired' });
-            logAuditAction('ACCESS_SCAN', {
-              subject_type: 'visitor', subject_id: freshVisitor.id,
-              result: 'DENIED', reason: 'expired'
-            });
+            logAuditAction('ACCESS_SCAN', { subject_type: 'visitor', subject_id: freshVisitor.id, result: 'DENIED', reason: 'expired' });
             scheduleReset(4000);
             return;
           }
 
-          // TOGGLE
           const result = await executeToggle('visitor', freshVisitor.id);
 
           if (!result.success) {
@@ -377,14 +374,12 @@ const QRScanner = () => {
             return;
           }
 
-          // Atualizar status do visitante
           if (result.direction === 'in') {
             await updateVisitorStatus.mutateAsync({ id: freshVisitor.id, status: 'inside' });
           } else {
             await updateVisitorStatus.mutateAsync({ id: freshVisitor.id, status: 'closed' });
           }
 
-          // Recarregar logs para exibição
           await fetchRecentLogs('visitor', freshVisitor.id);
 
           playSuccess();
@@ -399,7 +394,115 @@ const QRScanner = () => {
           });
           scheduleReset(3000);
 
-        // =============== COLABORADOR ===============
+        // =============== VEÍCULO VISITANTE (VV-) ===============
+        } else if (searchCode.startsWith('VV-')) {
+          // Buscar visitante pelo vehicle_pass_id
+          const { data: vData, error: vError } = await supabase
+            .from('visitors')
+            .select('*')
+            .eq('vehicle_pass_id', searchCode)
+            .maybeSingle();
+
+          if (vError || !vData) {
+            playError();
+            setScanError(`Veículo ${searchCode} não encontrado`);
+            scheduleReset(3000);
+            return;
+          }
+
+          const freshVisitor: Visitor = {
+            id: vData.id,
+            passId: vData.pass_id,
+            fullName: vData.full_name,
+            document: vData.document,
+            company: vData.company,
+            phone: vData.phone,
+            photoUrl: vData.photo_url,
+            visitToType: vData.visit_to_type,
+            visitToName: vData.visit_to_name,
+            gateObs: vData.gate_obs,
+            companyReason: vData.company_reason || '',
+            accessType: vData.access_type || 'pedestrian',
+            vehiclePassId: vData.vehicle_pass_id,
+            vehiclePlate: vData.vehicle_plate,
+            vehicleBrand: vData.vehicle_brand,
+            vehicleModel: vData.vehicle_model,
+            vehicleColor: vData.vehicle_color,
+            validFrom: new Date(vData.valid_from),
+            validUntil: new Date(vData.valid_until),
+            status: vData.status,
+            createdBy: vData.created_by,
+            createdAt: new Date(vData.created_at),
+            updatedAt: new Date(vData.updated_at),
+          };
+
+          // Use vehicle_pass_id as unique subject for independent vehicle tracking
+          const vehicleSubjectId = vData.id + '-vehicle';
+
+          await fetchRecentLogs('visitor', freshVisitor.id);
+
+          if (freshVisitor.status === 'closed') {
+            playBlocked();
+            setScanResult({ type: 'visitor', data: freshVisitor, action: 'closed' });
+            scheduleReset(4000);
+            return;
+          }
+
+          if (new Date() > new Date(freshVisitor.validUntil)) {
+            playBlocked();
+            setScanResult({ type: 'visitor', data: freshVisitor, action: 'expired' });
+            scheduleReset(4000);
+            return;
+          }
+
+          // Independent toggle for the vehicle - we use a separate subject_id
+          // by appending '-vehicle' to distinguish from the personal QR
+          const { data: lastVLog } = await supabase
+            .from('access_logs')
+            .select('id, direction, created_at')
+            .eq('subject_type', 'visitor')
+            .eq('gate_id', 'VEICULO_' + searchCode)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          const now = Date.now();
+          if (lastVLog) {
+            const elapsed = now - new Date(lastVLog.created_at).getTime();
+            if (elapsed < ANTI_DUP_WINDOW_MS) {
+              playBlocked();
+              setScanResult({ type: 'visitor', data: freshVisitor, action: 'duplicate' });
+              toast({ title: '⏱️ Aguarde', description: 'Bip repetido. Aguarde 10 segundos.' });
+              scheduleReset(2000);
+              return;
+            }
+          }
+
+          const nextDir: AccessDirection = lastVLog?.direction === 'in' ? 'out' : 'in';
+          const { data: user } = await supabase.auth.getUser();
+
+          const { error: insErr } = await supabase.from('access_logs').insert({
+            subject_type: 'visitor',
+            subject_id: freshVisitor.id,
+            direction: nextDir,
+            gate_id: 'VEICULO_' + searchCode,
+            operator_id: user.user?.id || null,
+          });
+
+          if (insErr) {
+            playError();
+            setScanError(insErr.message);
+            scheduleReset(3000);
+            return;
+          }
+
+          playSuccess();
+          setScanResult({ type: 'visitor', data: freshVisitor, action: nextDir });
+          toast({
+            title: nextDir === 'in' ? '✓ Veículo: Entrada registrada!' : '✓ Veículo: Saída registrada!',
+            description: `${freshVisitor.vehiclePlate} - ${freshVisitor.fullName}`,
+          });
+          scheduleReset(3000);
         } else if (searchCode.startsWith('EC-')) {
           // CONSULTA DIRETA - Bypass total do cache
           let freshCredential = await fetchFreshCredential(searchCode);
@@ -490,9 +593,9 @@ const QRScanner = () => {
 
     const code = qrCode.toUpperCase().trim();
     
-    if (!code.startsWith('VP-') && !code.startsWith('EC-')) {
+    if (!code.startsWith('VP-') && !code.startsWith('EC-') && !code.startsWith('VV-')) {
       playError();
-      setScanError('Código inválido. Use VP-XXXXXXXX ou EC-XXXXXXXX.');
+      setScanError('Código inválido. Use VP-, VV- ou EC-XXXXXXXX.');
       setQrCode('');
       scheduleReset(3000);
       return;
@@ -506,7 +609,7 @@ const QRScanner = () => {
     const normalized = code.toUpperCase().trim();
     clearScan();
     
-    if (normalized.startsWith('VP-') || normalized.startsWith('EC-')) {
+    if (normalized.startsWith('VP-') || normalized.startsWith('EC-') || normalized.startsWith('VV-')) {
       setSearchCode(normalized);
     } else {
       playError();
@@ -560,7 +663,7 @@ const QRScanner = () => {
             <div className="flex gap-2 sm:gap-4">
               <Input
                 ref={inputRef}
-                placeholder="VP-XXXXXXXX ou EC-XXXXXXXX"
+                placeholder="VP- / VV- / EC-XXXXXXXX"
                 value={qrCode}
                 onChange={(e) => setQrCode(e.target.value.toUpperCase())}
                 className="font-mono text-lg"
@@ -635,7 +738,21 @@ const QRScanner = () => {
                 </div>
                 <div className="flex-1">
                   <h3 className="text-2xl font-bold">{scanResult.data.fullName}</h3>
-                  <p className="text-muted-foreground">{scanResult.data.company || 'Visitante'}</p>
+                  <p className="text-muted-foreground">{scanResult.data.companyReason || scanResult.data.company || 'Visitante'}</p>
+                  
+                  {/* Vehicle info if present */}
+                  {scanResult.data.vehiclePlate && (
+                    <div className="mt-2 p-3 rounded-lg bg-muted">
+                      <div className="flex items-center gap-2">
+                        <Car className="w-5 h-5 text-primary" />
+                        <p className="text-lg font-mono font-bold">{scanResult.data.vehiclePlate}</p>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {scanResult.data.vehicleBrand} {scanResult.data.vehicleModel} - {scanResult.data.vehicleColor}
+                      </p>
+                    </div>
+                  )}
+
                   <div className="mt-4 p-3 rounded-lg bg-primary/10 border border-primary/20">
                     <p className="text-lg">
                       <span className="font-medium">DESTINO:</span>{' '}

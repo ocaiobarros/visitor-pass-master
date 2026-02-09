@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card';
 import { QRCodeSVG } from 'qrcode.react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Printer, ArrowLeft, Shield, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
+import { Printer, ArrowLeft, Shield, AlertTriangle, CheckCircle, Loader2, Car } from 'lucide-react';
 
 const VisitorPass = () => {
   const { id } = useParams<{ id: string }>();
@@ -40,17 +40,14 @@ const VisitorPass = () => {
           <AlertTriangle className="w-16 h-16 text-warning mb-4" />
           <h2 className="text-2xl font-bold text-foreground">Visitante não encontrado</h2>
           <p className="text-muted-foreground mt-2">O passe solicitado não existe ou foi removido.</p>
-          <Button onClick={() => navigate('/visitors')} className="mt-6">
-            Voltar para Lista
-          </Button>
+          <Button onClick={() => navigate('/visitors')} className="mt-6">Voltar para Lista</Button>
         </div>
       </DashboardLayout>
     );
   }
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const handlePrint = () => window.print();
+  const isDriver = visitor.accessType === 'driver' && visitor.vehiclePassId;
 
   return (
     <DashboardLayout>
@@ -62,7 +59,7 @@ const VisitorPass = () => {
           </Button>
           <div>
             <h1 className="text-3xl font-bold text-foreground">Passe do Visitante</h1>
-            <p className="text-muted-foreground">ID: {visitor.passId}</p>
+            <p className="text-muted-foreground">ID: {visitor.passId}{isDriver ? ` / ${visitor.vehiclePassId}` : ''}</p>
           </div>
           <div className="ml-auto">
             <Button onClick={handlePrint} className="gap-2">
@@ -72,7 +69,6 @@ const VisitorPass = () => {
           </div>
         </div>
 
-        {/* Preview (tela + impressão): imprimir exatamente como aparece na tela */}
         <Card id="print-area" className="max-w-2xl mx-auto p-8 bg-card">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-border pb-6 mb-6">
@@ -91,18 +87,19 @@ const VisitorPass = () => {
             </div>
           </div>
 
-          {/* Main Content */}
+          {/* ===== BLOCO PESSOAL ===== */}
+          {isDriver && (
+            <div className="mb-2 p-2 rounded-lg bg-primary/10 border border-primary/20 text-center">
+              <p className="font-bold text-primary text-sm">IDENTIFICAÇÃO PESSOAL</p>
+            </div>
+          )}
+
           <div className="grid grid-cols-3 gap-6">
             {/* Photo & QR */}
             <div className="space-y-4">
               <div className="w-full aspect-square rounded-xl bg-muted border border-border flex items-center justify-center overflow-hidden">
                 {visitor.photoUrl ? (
-                  <img
-                    src={visitor.photoUrl}
-                    alt={visitor.fullName}
-                    className="w-full h-full object-cover"
-                    style={{ aspectRatio: '1/1' }}
-                  />
+                  <img src={visitor.photoUrl} alt={visitor.fullName} className="w-full h-full object-cover" style={{ aspectRatio: '1/1' }} />
                 ) : (
                   <div className="text-6xl font-bold text-muted-foreground">{visitor.fullName.charAt(0)}</div>
                 )}
@@ -124,8 +121,8 @@ const VisitorPass = () => {
                   <p className="font-medium text-foreground">{visitor.document}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Empresa</p>
-                  <p className="font-medium text-foreground">{visitor.company || '-'}</p>
+                  <p className="text-sm text-muted-foreground">Empresa/Motivo</p>
+                  <p className="font-medium text-foreground">{visitor.companyReason || visitor.company || '-'}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -162,6 +159,49 @@ const VisitorPass = () => {
               </div>
             </div>
           </div>
+
+          {/* ===== BLOCO VEICULAR (apenas para motorista) ===== */}
+          {isDriver && (
+            <>
+              <div className="my-6 border-t-2 border-dashed border-border" />
+              <div className="mb-2 p-2 rounded-lg bg-primary/10 border border-primary/20 text-center">
+                <p className="font-bold text-primary text-sm">IDENTIFICAÇÃO VEICULAR</p>
+              </div>
+              <div className="grid grid-cols-3 gap-6">
+                <div className="space-y-4">
+                  <div className="bg-white p-4 rounded-xl border border-border flex items-center justify-center">
+                    <QRCodeSVG value={visitor.vehiclePassId!} size={120} level="H" />
+                  </div>
+                  <p className="text-center font-mono text-sm font-bold text-primary">{visitor.vehiclePassId}</p>
+                </div>
+                <div className="col-span-2 space-y-4">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Car className="w-8 h-8 text-primary" />
+                    <p className="text-2xl font-mono font-bold text-foreground">{visitor.vehiclePlate}</p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Marca</p>
+                      <p className="font-medium text-foreground">{visitor.vehicleBrand || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Modelo</p>
+                      <p className="font-medium text-foreground">{visitor.vehicleModel || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Cor</p>
+                      <p className="font-medium text-foreground">{visitor.vehicleColor || '-'}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Proprietário</p>
+                    <p className="font-bold text-foreground">{visitor.fullName}</p>
+                    <p className="text-sm text-muted-foreground">{visitor.document}</p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Safety Guidelines */}
           <div className="mt-8 p-4 rounded-xl bg-muted/50 border border-border">

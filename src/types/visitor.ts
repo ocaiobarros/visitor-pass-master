@@ -5,6 +5,7 @@ export type CredentialStatus = 'allowed' | 'blocked';
 export type AccessDirection = 'in' | 'out';
 export type SubjectType = 'visitor' | 'employee';
 export type VisitToType = 'setor' | 'pessoa';
+export type VisitorAccessType = 'pedestrian' | 'driver';
 
 export interface User {
   id: string;
@@ -29,6 +30,13 @@ export interface Visitor {
   visitToType: VisitToType;
   visitToName: string;
   gateObs?: string;
+  companyReason: string;
+  accessType: VisitorAccessType;
+  vehiclePassId?: string;
+  vehiclePlate?: string;
+  vehicleBrand?: string;
+  vehicleModel?: string;
+  vehicleColor?: string;
   validFrom: Date;
   validUntil: Date;
   status: VisitorStatus;

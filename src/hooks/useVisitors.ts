@@ -12,6 +12,12 @@ interface CreateVisitorData {
   visitToType: VisitToType;
   visitToName: string;
   gateObs?: string;
+  companyReason: string;
+  accessType: 'pedestrian' | 'driver';
+  vehiclePlate?: string;
+  vehicleBrand?: string;
+  vehicleModel?: string;
+  vehicleColor?: string;
   validFrom: Date;
   validUntil: Date;
 }
@@ -27,6 +33,13 @@ const mapDbToVisitor = (row: any): Visitor => ({
   visitToType: row.visit_to_type,
   visitToName: row.visit_to_name,
   gateObs: row.gate_obs,
+  companyReason: row.company_reason || '',
+  accessType: row.access_type || 'pedestrian',
+  vehiclePassId: row.vehicle_pass_id,
+  vehiclePlate: row.vehicle_plate,
+  vehicleBrand: row.vehicle_brand,
+  vehicleModel: row.vehicle_model,
+  vehicleColor: row.vehicle_color,
   validFrom: new Date(row.valid_from),
   validUntil: new Date(row.valid_until),
   status: row.status,
@@ -109,6 +122,12 @@ export const useCreateVisitor = () => {
           visit_to_type: data.visitToType,
           visit_to_name: data.visitToName,
           gate_obs: data.gateObs || null,
+          company_reason: data.companyReason,
+          access_type: data.accessType,
+          vehicle_plate: data.vehiclePlate || null,
+          vehicle_brand: data.vehicleBrand || null,
+          vehicle_model: data.vehicleModel || null,
+          vehicle_color: data.vehicleColor || null,
           valid_from: data.validFrom.toISOString(),
           valid_until: data.validUntil.toISOString(),
           created_by: user.user?.id || null,

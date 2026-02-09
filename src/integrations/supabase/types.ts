@@ -207,7 +207,9 @@ export type Database = {
       }
       visitors: {
         Row: {
+          access_type: Database["public"]["Enums"]["visitor_access_type"]
           company: string | null
+          company_reason: string
           created_at: string
           created_by: string | null
           document: string
@@ -221,11 +223,18 @@ export type Database = {
           updated_at: string
           valid_from: string
           valid_until: string
+          vehicle_brand: string | null
+          vehicle_color: string | null
+          vehicle_model: string | null
+          vehicle_pass_id: string | null
+          vehicle_plate: string | null
           visit_to_name: string
           visit_to_type: Database["public"]["Enums"]["visit_to_type"]
         }
         Insert: {
+          access_type?: Database["public"]["Enums"]["visitor_access_type"]
           company?: string | null
+          company_reason?: string
           created_at?: string
           created_by?: string | null
           document: string
@@ -239,11 +248,18 @@ export type Database = {
           updated_at?: string
           valid_from: string
           valid_until: string
+          vehicle_brand?: string | null
+          vehicle_color?: string | null
+          vehicle_model?: string | null
+          vehicle_pass_id?: string | null
+          vehicle_plate?: string | null
           visit_to_name: string
           visit_to_type?: Database["public"]["Enums"]["visit_to_type"]
         }
         Update: {
+          access_type?: Database["public"]["Enums"]["visitor_access_type"]
           company?: string | null
+          company_reason?: string
           created_at?: string
           created_by?: string | null
           document?: string
@@ -257,6 +273,11 @@ export type Database = {
           updated_at?: string
           valid_from?: string
           valid_until?: string
+          vehicle_brand?: string | null
+          vehicle_color?: string | null
+          vehicle_model?: string | null
+          vehicle_pass_id?: string | null
+          vehicle_plate?: string | null
           visit_to_name?: string
           visit_to_type?: Database["public"]["Enums"]["visit_to_type"]
         }
@@ -303,6 +324,7 @@ export type Database = {
       credential_type: "personal" | "vehicle"
       subject_type: "visitor" | "employee"
       visit_to_type: "setor" | "pessoa"
+      visitor_access_type: "pedestrian" | "driver"
       visitor_status: "pending" | "inside" | "outside" | "closed"
     }
     CompositeTypes: {
@@ -461,6 +483,7 @@ export const Constants = {
       credential_type: ["personal", "vehicle"],
       subject_type: ["visitor", "employee"],
       visit_to_type: ["setor", "pessoa"],
+      visitor_access_type: ["pedestrian", "driver"],
       visitor_status: ["pending", "inside", "outside", "closed"],
     },
   },

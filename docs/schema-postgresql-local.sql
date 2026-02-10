@@ -1,39 +1,34 @@
 -- ============================================================
 -- GUARDA OPERACIONAL - Schema SQL para PostgreSQL 15/16 Local
--- Gerado em: 2026-02-05
+-- Gerado em: 2026-02-10
 -- Compatível com: PostgreSQL 15/16 padrão (sem extensões Supabase)
 -- NOTA: Não depende de auth.* - usa funções locais para JWT claims
 -- ============================================================
 
 -- ============================================================
--- PARTE 0: SCHEMAS E ROLES NECESSÁRIOS PARA GOTRUE
--- ============================================================
--- O GoTrue (Supabase Auth) requer o schema 'auth' para criar
--- suas tabelas de migração e gerenciamento de usuários.
+-- PARTE 0: SCHEMAS, EXTENSÕES E ROLES
 -- ============================================================
 
--- Criar schema auth para o GoTrue
+-- Garantir que os schemas existam ANTES de qualquer tabela
+CREATE SCHEMA IF NOT EXISTS public;
 CREATE SCHEMA IF NOT EXISTS auth;
+
+-- Extensões necessárias
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS "pgcrypto" SCHEMA public;
 
 -- Criar roles necessárias para PostgREST/GoTrue
 DO $$
 BEGIN
-  -- Role anon (usuários não autenticados)
   IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'anon') THEN
     CREATE ROLE anon NOLOGIN NOINHERIT;
   END IF;
-  
-  -- Role authenticated (usuários autenticados)
   IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'authenticated') THEN
     CREATE ROLE authenticated NOLOGIN NOINHERIT;
   END IF;
-  
-  -- Role service_role (acesso administrativo)
   IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'service_role') THEN
     CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS;
   END IF;
-  
-  -- Role authenticator (PostgREST connection role)
   IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'authenticator') THEN
     CREATE ROLE authenticator NOINHERIT LOGIN;
   END IF;
@@ -45,66 +40,90 @@ GRANT anon TO authenticator;
 GRANT authenticated TO authenticator;
 GRANT service_role TO authenticator;
 
--- Conceder permissões no schema auth
+-- Permissões no schema auth (GoTrue precisa de acesso total)
 GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
+GRANT ALL ON SCHEMA auth TO postgres;
 GRANT ALL ON SCHEMA auth TO service_role;
 
--- Conceder permissões no schema public
+-- Permissões no schema public
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
 GRANT ALL ON ALL ROUTINES IN SCHEMA public TO service_role;
 
+-- Permissões default para futuras tabelas no schema auth
+ALTER DEFAULT PRIVILEGES IN SCHEMA auth GRANT ALL ON TABLES TO postgres;
+ALTER DEFAULT PRIVILEGES IN SCHEMA auth GRANT ALL ON SEQUENCES TO postgres;
+ALTER DEFAULT PRIVILEGES IN SCHEMA auth GRANT ALL ON ROUTINES TO postgres;
+
 -- ============================================================
 -- PARTE 1: TIPOS ENUM
 -- ============================================================
 
-CREATE TYPE public.access_direction AS ENUM ('in', 'out');
-CREATE TYPE public.app_role AS ENUM ('admin', 'rh', 'security');
-CREATE TYPE public.credential_status AS ENUM ('allowed', 'blocked');
-CREATE TYPE public.credential_type AS ENUM ('personal', 'vehicle');
-CREATE TYPE public.subject_type AS ENUM ('visitor', 'employee');
-CREATE TYPE public.visit_to_type AS ENUM ('setor', 'pessoa');
-CREATE TYPE public.visitor_status AS ENUM ('pending', 'inside', 'outside', 'closed');
-CREATE TYPE public.visitor_access_type AS ENUM ('pedestrian', 'driver');
-CREATE TYPE public.audit_action_type AS ENUM (
-  'LOGIN',
-  'LOGOUT',
-  'LOGIN_FAILED',
-  'USER_CREATE',
-  'USER_UPDATE',
-  'USER_DELETE',
-  'USER_DEACTIVATE',
-  'USER_ACTIVATE',
-  'PASSWORD_RESET',
-  'PASSWORD_CHANGE',
-  'ROLE_UPDATE',
-  'CONFIG_UPDATE',
-  'VISITOR_CREATE',
-  'VISITOR_UPDATE',
-  'VISITOR_DELETE',
-  'EMPLOYEE_CREATE',
-  'EMPLOYEE_UPDATE',
-  'EMPLOYEE_DELETE',
-  'DEPARTMENT_CREATE',
-  'DEPARTMENT_DELETE',
-  'BACKUP_EXPORT',
-  'ACCESS_SCAN'
-);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'access_direction') THEN
+    CREATE TYPE public.access_direction AS ENUM ('in', 'out');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'app_role') THEN
+    CREATE TYPE public.app_role AS ENUM ('admin', 'rh', 'security');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'credential_status') THEN
+    CREATE TYPE public.credential_status AS ENUM ('allowed', 'blocked');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'credential_type') THEN
+    CREATE TYPE public.credential_type AS ENUM ('personal', 'vehicle');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'subject_type') THEN
+    CREATE TYPE public.subject_type AS ENUM ('visitor', 'employee');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'visit_to_type') THEN
+    CREATE TYPE public.visit_to_type AS ENUM ('setor', 'pessoa');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'visitor_status') THEN
+    CREATE TYPE public.visitor_status AS ENUM ('pending', 'inside', 'outside', 'closed');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'visitor_access_type') THEN
+    CREATE TYPE public.visitor_access_type AS ENUM ('pedestrian', 'driver');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'audit_action_type') THEN
+    CREATE TYPE public.audit_action_type AS ENUM (
+      'LOGIN',
+      'LOGOUT',
+      'LOGIN_FAILED',
+      'USER_CREATE',
+      'USER_UPDATE',
+      'USER_DELETE',
+      'USER_DEACTIVATE',
+      'USER_ACTIVATE',
+      'PASSWORD_RESET',
+      'PASSWORD_CHANGE',
+      'ROLE_UPDATE',
+      'CONFIG_UPDATE',
+      'VISITOR_CREATE',
+      'VISITOR_UPDATE',
+      'VISITOR_DELETE',
+      'EMPLOYEE_CREATE',
+      'EMPLOYEE_UPDATE',
+      'EMPLOYEE_DELETE',
+      'DEPARTMENT_CREATE',
+      'DEPARTMENT_DELETE',
+      'BACKUP_EXPORT',
+      'ACCESS_SCAN'
+    );
+  END IF;
+END $$;
 
 -- ============================================================
 -- PARTE 2: TABELAS
 -- ============================================================
 
--- Tabela de departamentos
-CREATE TABLE public.departments (
+CREATE TABLE IF NOT EXISTS public.departments (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
 
--- Tabela de perfis de usuário
-CREATE TABLE public.profiles (
+CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID NOT NULL UNIQUE,
   full_name TEXT NOT NULL,
@@ -114,8 +133,7 @@ CREATE TABLE public.profiles (
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
 
--- Tabela de roles de usuário
-CREATE TABLE public.user_roles (
+CREATE TABLE IF NOT EXISTS public.user_roles (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID NOT NULL,
   role public.app_role NOT NULL DEFAULT 'security',
@@ -123,8 +141,7 @@ CREATE TABLE public.user_roles (
   UNIQUE (user_id, role)
 );
 
--- Tabela de visitantes
-CREATE TABLE public.visitors (
+CREATE TABLE IF NOT EXISTS public.visitors (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   pass_id TEXT NOT NULL UNIQUE,
   full_name TEXT NOT NULL,
@@ -150,8 +167,7 @@ CREATE TABLE public.visitors (
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
 
--- Tabela de credenciais de colaboradores
-CREATE TABLE public.employee_credentials (
+CREATE TABLE IF NOT EXISTS public.employee_credentials (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   credential_id TEXT NOT NULL UNIQUE,
   type public.credential_type NOT NULL,
@@ -168,8 +184,7 @@ CREATE TABLE public.employee_credentials (
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
 
--- Tabela de logs de acesso
-CREATE TABLE public.access_logs (
+CREATE TABLE IF NOT EXISTS public.access_logs (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   subject_type public.subject_type NOT NULL,
   subject_id UUID NOT NULL,
@@ -179,8 +194,7 @@ CREATE TABLE public.access_logs (
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
 
--- Tabela de logs de auditoria
-CREATE TABLE public.audit_logs (
+CREATE TABLE IF NOT EXISTS public.audit_logs (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
   user_id UUID,
@@ -191,23 +205,22 @@ CREATE TABLE public.audit_logs (
   user_agent TEXT
 );
 
--- Índices
-CREATE INDEX idx_visitors_pass_id ON public.visitors(pass_id);
-CREATE INDEX idx_visitors_status ON public.visitors(status);
-CREATE INDEX idx_visitors_valid_until ON public.visitors(valid_until);
-CREATE INDEX idx_employee_credentials_credential_id ON public.employee_credentials(credential_id);
-CREATE INDEX idx_employee_credentials_status ON public.employee_credentials(status);
-CREATE INDEX idx_access_logs_created_at ON public.access_logs(created_at DESC);
-CREATE INDEX idx_access_logs_subject ON public.access_logs(subject_type, subject_id);
-CREATE INDEX idx_audit_logs_created_at ON public.audit_logs(created_at DESC);
-CREATE INDEX idx_audit_logs_user_id ON public.audit_logs(user_id);
-CREATE INDEX idx_audit_logs_action_type ON public.audit_logs(action_type);
+-- Índices (IF NOT EXISTS para idempotência)
+CREATE INDEX IF NOT EXISTS idx_visitors_pass_id ON public.visitors(pass_id);
+CREATE INDEX IF NOT EXISTS idx_visitors_status ON public.visitors(status);
+CREATE INDEX IF NOT EXISTS idx_visitors_valid_until ON public.visitors(valid_until);
+CREATE INDEX IF NOT EXISTS idx_employee_credentials_credential_id ON public.employee_credentials(credential_id);
+CREATE INDEX IF NOT EXISTS idx_employee_credentials_status ON public.employee_credentials(status);
+CREATE INDEX IF NOT EXISTS idx_access_logs_created_at ON public.access_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_access_logs_subject ON public.access_logs(subject_type, subject_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON public.audit_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON public.audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action_type ON public.audit_logs(action_type);
 
 -- ============================================================
 -- PARTE 3: FUNÇÕES UTILITÁRIAS
 -- ============================================================
 
--- Função para atualizar updated_at automaticamente
 CREATE OR REPLACE FUNCTION public.update_updated_at()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -219,7 +232,6 @@ BEGIN
 END;
 $$;
 
--- Função para gerar ID de passe de visitante
 CREATE OR REPLACE FUNCTION public.generate_visitor_pass_id()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -231,7 +243,6 @@ BEGIN
 END;
 $$;
 
--- Função para gerar ID de credencial de colaborador
 CREATE OR REPLACE FUNCTION public.generate_credential_id()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -243,7 +254,6 @@ BEGIN
 END;
 $$;
 
--- Função para gerar vehicle_pass_id para visitantes condutores
 CREATE OR REPLACE FUNCTION public.generate_visitor_vehicle_pass_id()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -266,14 +276,7 @@ $$;
 -- ============================================================
 -- PARTE 4: FUNÇÕES DE AUTORIZAÇÃO (independentes de auth.*)
 -- ============================================================
--- Essas funções leem JWT claims do PostgREST/GoTrue sem depender
--- do schema auth existir no momento do init do Postgres.
--- ============================================================
 
--- Obtém o user_id do JWT (equivalente a auth.uid())
--- Compatível com variações do PostgREST:
---  - request.jwt.claim.sub
---  - request.jwt.claims (JSON)
 CREATE OR REPLACE FUNCTION public.current_user_id()
 RETURNS uuid
 LANGUAGE sql
@@ -285,10 +288,6 @@ AS $$
   );
 $$;
 
--- Obtém a role do JWT (equivalente a auth.role())
--- Compatível com variações do PostgREST:
---  - request.jwt.claim.role
---  - request.jwt.claims (JSON)
 CREATE OR REPLACE FUNCTION public.current_user_role()
 RETURNS text
 LANGUAGE sql
@@ -300,7 +299,6 @@ AS $$
   );
 $$;
 
--- Função para verificar se usuário tem role
 CREATE OR REPLACE FUNCTION public.has_role(check_role app_role)
 RETURNS boolean
 LANGUAGE plpgsql
@@ -316,7 +314,6 @@ BEGIN
 END;
 $$;
 
--- Função para verificar se é admin ou RH
 CREATE OR REPLACE FUNCTION public.is_admin_or_rh()
 RETURNS boolean
 LANGUAGE plpgsql
@@ -336,38 +333,40 @@ $$;
 -- PARTE 5: TRIGGERS
 -- ============================================================
 
--- Trigger para updated_at em visitors
+-- Drop triggers first to avoid duplicates on re-run
+DROP TRIGGER IF EXISTS update_visitors_updated_at ON public.visitors;
+DROP TRIGGER IF EXISTS update_employee_credentials_updated_at ON public.employee_credentials;
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
+DROP TRIGGER IF EXISTS generate_visitor_pass_id_trigger ON public.visitors;
+DROP TRIGGER IF EXISTS generate_visitor_vehicle_pass_id_trigger ON public.visitors;
+DROP TRIGGER IF EXISTS generate_credential_id_trigger ON public.employee_credentials;
+
 CREATE TRIGGER update_visitors_updated_at
   BEFORE UPDATE ON public.visitors
   FOR EACH ROW
   EXECUTE FUNCTION public.update_updated_at();
 
--- Trigger para updated_at em employee_credentials
 CREATE TRIGGER update_employee_credentials_updated_at
   BEFORE UPDATE ON public.employee_credentials
   FOR EACH ROW
   EXECUTE FUNCTION public.update_updated_at();
 
--- Trigger para updated_at em profiles
 CREATE TRIGGER update_profiles_updated_at
   BEFORE UPDATE ON public.profiles
   FOR EACH ROW
   EXECUTE FUNCTION public.update_updated_at();
 
--- Trigger para gerar pass_id automaticamente
 CREATE TRIGGER generate_visitor_pass_id_trigger
   BEFORE INSERT ON public.visitors
   FOR EACH ROW
   WHEN (NEW.pass_id IS NULL)
   EXECUTE FUNCTION public.generate_visitor_pass_id();
 
--- Trigger para gerar vehicle_pass_id automaticamente
 CREATE TRIGGER generate_visitor_vehicle_pass_id_trigger
   BEFORE INSERT ON public.visitors
   FOR EACH ROW
   EXECUTE FUNCTION public.generate_visitor_vehicle_pass_id();
 
--- Trigger para gerar credential_id automaticamente
 CREATE TRIGGER generate_credential_id_trigger
   BEFORE INSERT ON public.employee_credentials
   FOR EACH ROW
@@ -378,27 +377,17 @@ CREATE TRIGGER generate_credential_id_trigger
 -- PARTE 6: DADOS INICIAIS
 -- ============================================================
 
--- Departamentos padrão
-INSERT INTO public.departments (name) VALUES
-  ('TI'),
-  ('RH'),
-  ('Financeiro'),
-  ('Comercial'),
-  ('Operações'),
-  ('Logística'),
-  ('Administrativo'),
-  ('Produção'),
-  ('Manutenção'),
-  ('Segurança');
+INSERT INTO public.departments (name)
+SELECT name FROM (VALUES
+  ('TI'), ('RH'), ('Financeiro'), ('Comercial'), ('Operações'),
+  ('Logística'), ('Administrativo'), ('Produção'), ('Manutenção'), ('Segurança')
+) AS v(name)
+WHERE NOT EXISTS (SELECT 1 FROM public.departments LIMIT 1);
 
 -- ============================================================
 -- PARTE 7: ROW LEVEL SECURITY (RLS)
 -- ============================================================
--- Usa public.current_user_id() ao invés de auth.uid()
--- para não depender do schema auth existir no init.
--- ============================================================
 
--- Habilitar RLS em todas as tabelas
 ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
@@ -408,119 +397,83 @@ ALTER TABLE public.access_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- Políticas para departments
-CREATE POLICY "Departamentos visíveis para autenticados"
-  ON public.departments FOR SELECT
-  TO authenticated
-  USING (true);
-
-CREATE POLICY "Admin gerencia departamentos"
-  ON public.departments FOR ALL
-  TO authenticated
-  USING (has_role('admin'));
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Departamentos visíveis para autenticados" ON public.departments;
+  DROP POLICY IF EXISTS "Admin gerencia departamentos" ON public.departments;
+  CREATE POLICY "Departamentos visíveis para autenticados" ON public.departments FOR SELECT TO authenticated USING (true);
+  CREATE POLICY "Admin gerencia departamentos" ON public.departments FOR ALL TO authenticated USING (has_role('admin'));
+END $$;
 
 -- Políticas para profiles
-CREATE POLICY "Profiles visíveis para autenticados"
-  ON public.profiles FOR SELECT
-  TO authenticated
-  USING (true);
-
-CREATE POLICY "Usuários editam próprio perfil"
-  ON public.profiles FOR UPDATE
-  TO authenticated
-  USING (user_id = public.current_user_id());
-
--- Service role pode inserir profiles (para admin-api)
-CREATE POLICY "Service role insere profiles"
-  ON public.profiles FOR INSERT
-  TO service_role
-  WITH CHECK (true);
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Profiles visíveis para autenticados" ON public.profiles;
+  DROP POLICY IF EXISTS "Usuários editam próprio perfil" ON public.profiles;
+  DROP POLICY IF EXISTS "Service role insere profiles" ON public.profiles;
+  CREATE POLICY "Profiles visíveis para autenticados" ON public.profiles FOR SELECT TO authenticated USING (true);
+  CREATE POLICY "Usuários editam próprio perfil" ON public.profiles FOR UPDATE TO authenticated USING (user_id = public.current_user_id());
+  CREATE POLICY "Service role insere profiles" ON public.profiles FOR INSERT TO service_role WITH CHECK (true);
+END $$;
 
 -- Políticas para user_roles
-CREATE POLICY "Roles visíveis para autenticados"
-  ON public.user_roles FOR SELECT
-  TO authenticated
-  USING (true);
-
-CREATE POLICY "Admin gerencia roles"
-  ON public.user_roles FOR ALL
-  TO authenticated
-  USING (has_role('admin'));
-
--- Service role pode inserir roles (para admin-api)
-CREATE POLICY "Service role insere roles"
-  ON public.user_roles FOR INSERT
-  TO service_role
-  WITH CHECK (true);
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Roles visíveis para autenticados" ON public.user_roles;
+  DROP POLICY IF EXISTS "Admin gerencia roles" ON public.user_roles;
+  DROP POLICY IF EXISTS "Service role insere roles" ON public.user_roles;
+  CREATE POLICY "Roles visíveis para autenticados" ON public.user_roles FOR SELECT TO authenticated USING (true);
+  CREATE POLICY "Admin gerencia roles" ON public.user_roles FOR ALL TO authenticated USING (has_role('admin'));
+  CREATE POLICY "Service role insere roles" ON public.user_roles FOR INSERT TO service_role WITH CHECK (true);
+END $$;
 
 -- Políticas para visitors
-CREATE POLICY "Visitantes visíveis para autenticados"
-  ON public.visitors FOR SELECT
-  TO authenticated
-  USING (true);
-
-CREATE POLICY "RH/Admin criam visitantes"
-  ON public.visitors FOR INSERT
-  TO authenticated
-  WITH CHECK (is_admin_or_rh());
-
-CREATE POLICY "RH/Admin editam visitantes"
-  ON public.visitors FOR UPDATE
-  TO authenticated
-  USING (is_admin_or_rh());
-
-CREATE POLICY "Security atualiza status visitante"
-  ON public.visitors FOR UPDATE
-  TO authenticated
-  USING (has_role('security'));
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Visitantes visíveis para autenticados" ON public.visitors;
+  DROP POLICY IF EXISTS "RH/Admin criam visitantes" ON public.visitors;
+  DROP POLICY IF EXISTS "RH/Admin editam visitantes" ON public.visitors;
+  DROP POLICY IF EXISTS "Security atualiza status visitante" ON public.visitors;
+  CREATE POLICY "Visitantes visíveis para autenticados" ON public.visitors FOR SELECT TO authenticated USING (true);
+  CREATE POLICY "RH/Admin criam visitantes" ON public.visitors FOR INSERT TO authenticated WITH CHECK (is_admin_or_rh());
+  CREATE POLICY "RH/Admin editam visitantes" ON public.visitors FOR UPDATE TO authenticated USING (is_admin_or_rh());
+  CREATE POLICY "Security atualiza status visitante" ON public.visitors FOR UPDATE TO authenticated USING (has_role('security'));
+END $$;
 
 -- Políticas para employee_credentials
-CREATE POLICY "Credenciais visíveis para autenticados"
-  ON public.employee_credentials FOR SELECT
-  TO authenticated
-  USING (true);
-
-CREATE POLICY "RH/Admin criam credenciais"
-  ON public.employee_credentials FOR INSERT
-  TO authenticated
-  WITH CHECK (is_admin_or_rh());
-
-CREATE POLICY "RH/Admin editam credenciais"
-  ON public.employee_credentials FOR UPDATE
-  TO authenticated
-  USING (is_admin_or_rh());
-
-CREATE POLICY "RH/Admin deletam credenciais"
-  ON public.employee_credentials FOR DELETE
-  TO authenticated
-  USING (is_admin_or_rh());
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Credenciais visíveis para autenticados" ON public.employee_credentials;
+  DROP POLICY IF EXISTS "RH/Admin criam credenciais" ON public.employee_credentials;
+  DROP POLICY IF EXISTS "RH/Admin editam credenciais" ON public.employee_credentials;
+  DROP POLICY IF EXISTS "RH/Admin deletam credenciais" ON public.employee_credentials;
+  CREATE POLICY "Credenciais visíveis para autenticados" ON public.employee_credentials FOR SELECT TO authenticated USING (true);
+  CREATE POLICY "RH/Admin criam credenciais" ON public.employee_credentials FOR INSERT TO authenticated WITH CHECK (is_admin_or_rh());
+  CREATE POLICY "RH/Admin editam credenciais" ON public.employee_credentials FOR UPDATE TO authenticated USING (is_admin_or_rh());
+  CREATE POLICY "RH/Admin deletam credenciais" ON public.employee_credentials FOR DELETE TO authenticated USING (is_admin_or_rh());
+END $$;
 
 -- Políticas para access_logs
-CREATE POLICY "Logs visíveis para autenticados"
-  ON public.access_logs FOR SELECT
-  TO authenticated
-  USING (true);
-
-CREATE POLICY "Autenticados criam logs"
-  ON public.access_logs FOR INSERT
-  TO authenticated
-  WITH CHECK (public.current_user_id() IS NOT NULL);
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Logs visíveis para autenticados" ON public.access_logs;
+  DROP POLICY IF EXISTS "Autenticados criam logs" ON public.access_logs;
+  CREATE POLICY "Logs visíveis para autenticados" ON public.access_logs FOR SELECT TO authenticated USING (true);
+  CREATE POLICY "Autenticados criam logs" ON public.access_logs FOR INSERT TO authenticated WITH CHECK (public.current_user_id() IS NOT NULL);
+END $$;
 
 -- Políticas para audit_logs
-CREATE POLICY "Audit logs visíveis para admin"
-  ON public.audit_logs FOR SELECT
-  TO authenticated
-  USING (has_role('admin'));
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Audit logs visíveis para admin" ON public.audit_logs;
+  DROP POLICY IF EXISTS "Autenticados inserem audit logs" ON public.audit_logs;
+  DROP POLICY IF EXISTS "Service role insere audit logs" ON public.audit_logs;
+  CREATE POLICY "Audit logs visíveis para admin" ON public.audit_logs FOR SELECT TO authenticated USING (has_role('admin'));
+  CREATE POLICY "Autenticados inserem audit logs" ON public.audit_logs FOR INSERT TO authenticated WITH CHECK (true);
+  CREATE POLICY "Service role insere audit logs" ON public.audit_logs FOR INSERT TO service_role WITH CHECK (true);
+END $$;
 
-CREATE POLICY "Autenticados inserem audit logs"
-  ON public.audit_logs FOR INSERT
-  TO authenticated
-  WITH CHECK (true);
+-- ============================================================
+-- PERMISSÕES FINAIS: Garantir acesso às tabelas criadas
+-- ============================================================
 
--- Service role pode inserir audit logs (para admin-api)
-CREATE POLICY "Service role insere audit logs"
-  ON public.audit_logs FOR INSERT
-  TO service_role
-  WITH CHECK (true);
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated, service_role;
 
 -- ============================================================
 -- FIM DO SCRIPT

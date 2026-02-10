@@ -66,6 +66,7 @@ CREATE TYPE public.credential_type AS ENUM ('personal', 'vehicle');
 CREATE TYPE public.subject_type AS ENUM ('visitor', 'employee');
 CREATE TYPE public.visit_to_type AS ENUM ('setor', 'pessoa');
 CREATE TYPE public.visitor_status AS ENUM ('pending', 'inside', 'outside', 'closed');
+CREATE TYPE public.visitor_access_type AS ENUM ('pedestrian', 'driver');
 CREATE TYPE public.audit_action_type AS ENUM (
   'LOGIN',
   'LOGOUT',
@@ -134,6 +135,13 @@ CREATE TABLE public.visitors (
   visit_to_type public.visit_to_type NOT NULL DEFAULT 'setor',
   visit_to_name TEXT NOT NULL,
   gate_obs TEXT,
+  company_reason TEXT NOT NULL DEFAULT '',
+  access_type public.visitor_access_type NOT NULL DEFAULT 'pedestrian',
+  vehicle_pass_id TEXT,
+  vehicle_plate TEXT,
+  vehicle_brand TEXT,
+  vehicle_model TEXT,
+  vehicle_color TEXT,
   valid_from TIMESTAMP WITH TIME ZONE NOT NULL,
   valid_until TIMESTAMP WITH TIME ZONE NOT NULL,
   status public.visitor_status NOT NULL DEFAULT 'pending',
@@ -235,6 +243,26 @@ BEGIN
 END;
 $$;
 
+-- Função para gerar vehicle_pass_id para visitantes condutores
+CREATE OR REPLACE FUNCTION public.generate_visitor_vehicle_pass_id()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path TO 'public'
+AS $$
+BEGIN
+  IF NEW.access_type = 'driver' THEN
+    NEW.vehicle_pass_id := 'VV-' || upper(substring(md5(random()::text) from 1 for 8));
+  ELSE
+    NEW.vehicle_pass_id := NULL;
+    NEW.vehicle_plate := NULL;
+    NEW.vehicle_brand := NULL;
+    NEW.vehicle_model := NULL;
+    NEW.vehicle_color := NULL;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
 -- ============================================================
 -- PARTE 4: FUNÇÕES DE AUTORIZAÇÃO (independentes de auth.*)
 -- ============================================================
@@ -332,6 +360,12 @@ CREATE TRIGGER generate_visitor_pass_id_trigger
   FOR EACH ROW
   WHEN (NEW.pass_id IS NULL)
   EXECUTE FUNCTION public.generate_visitor_pass_id();
+
+-- Trigger para gerar vehicle_pass_id automaticamente
+CREATE TRIGGER generate_visitor_vehicle_pass_id_trigger
+  BEFORE INSERT ON public.visitors
+  FOR EACH ROW
+  EXECUTE FUNCTION public.generate_visitor_vehicle_pass_id();
 
 -- Trigger para gerar credential_id automaticamente
 CREATE TRIGGER generate_credential_id_trigger

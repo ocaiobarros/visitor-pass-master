@@ -425,6 +425,26 @@ app.use((err, req, res, next) => {
 // Usa ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME do .env
 // Não crasha o sistema se falhar.
 // ==========================================
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const waitForAuthReady = async (maxRetries = 30, delayMs = 2000) => {
+  for (let i = 1; i <= maxRetries; i++) {
+    try {
+      const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1 });
+      if (!error) {
+        logger.info(`GoTrue pronto após ${i} tentativa(s)`);
+        return true;
+      }
+      logger.warn(`GoTrue não pronto (tentativa ${i}/${maxRetries}): ${error.message}`);
+    } catch (e) {
+      logger.warn(`GoTrue não acessível (tentativa ${i}/${maxRetries}): ${e.message}`);
+    }
+    await sleep(delayMs);
+  }
+  logger.error('GoTrue não ficou pronto após todas as tentativas');
+  return false;
+};
+
 const ensureInitialAdmin = async () => {
   const adminEmail = process.env.ADMIN_EMAIL;
   const adminPassword = process.env.ADMIN_PASSWORD;
@@ -432,6 +452,13 @@ const ensureInitialAdmin = async () => {
 
   if (!adminEmail || !adminPassword) {
     logger.warn('Bootstrap admin ignorado (ADMIN_EMAIL/ADMIN_PASSWORD não definidos)');
+    return;
+  }
+
+  // Aguardar GoTrue estar pronto (migrations concluídas)
+  const authReady = await waitForAuthReady();
+  if (!authReady) {
+    logger.error('Bootstrap admin abortado: GoTrue não está pronto');
     return;
   }
 
@@ -465,7 +492,6 @@ const ensureInitialAdmin = async () => {
     });
 
     if (createError) {
-      // Se já existir, buscar pelo listUsers
       const msg = (createError.message || '').toLowerCase();
       if (msg.includes('already') || msg.includes('exists') || msg.includes('registered')) {
         const { data: listed, error: listError } = await supabaseAdmin.auth.admin.listUsers({
@@ -544,7 +570,7 @@ app.listen(PORT, '0.0.0.0', () => {
     logDir: process.env.LOG_DIR || '/var/log/visitor-pass',
   });
 
-  // Rodar bootstrap em background
+  // Rodar bootstrap em background (com retry para aguardar GoTrue)
   ensureInitialAdmin().catch((e) => logger.logError('Bootstrap admin: falha', e));
 });
 

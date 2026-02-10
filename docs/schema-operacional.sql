@@ -25,6 +25,7 @@ DO $$ BEGIN CREATE TYPE public.credential_status AS ENUM ('allowed', 'blocked');
 DO $$ BEGIN CREATE TYPE public.credential_type AS ENUM ('personal', 'vehicle'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN CREATE TYPE public.visitor_status AS ENUM ('pending', 'inside', 'outside', 'closed'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN CREATE TYPE public.visit_to_type AS ENUM ('setor', 'pessoa'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE public.visitor_access_type AS ENUM ('pedestrian', 'driver'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN CREATE TYPE public.audit_action_type AS ENUM (
     'LOGIN', 'LOGOUT', 'LOGIN_FAILED',
     'USER_CREATE', 'USER_UPDATE', 'USER_DELETE',
@@ -115,6 +116,13 @@ CREATE TABLE IF NOT EXISTS public.visitors (
     visit_to_type public.visit_to_type NOT NULL DEFAULT 'setor',
     visit_to_name TEXT NOT NULL,
     gate_obs TEXT,
+    company_reason TEXT NOT NULL DEFAULT '',
+    access_type public.visitor_access_type NOT NULL DEFAULT 'pedestrian',
+    vehicle_pass_id TEXT,
+    vehicle_plate TEXT,
+    vehicle_brand TEXT,
+    vehicle_model TEXT,
+    vehicle_color TEXT,
     valid_from TIMESTAMPTZ NOT NULL,
     valid_until TIMESTAMPTZ NOT NULL,
     status public.visitor_status NOT NULL DEFAULT 'pending',
@@ -253,6 +261,65 @@ DROP TRIGGER IF EXISTS audit_profile_status ON public.profiles;
 CREATE TRIGGER audit_profile_status
     AFTER UPDATE OF is_active ON public.profiles
     FOR EACH ROW EXECUTE FUNCTION public.audit_profile_status_change();
+
+-- ============================================================
+-- 11b. TRIGGERS: Geração automática de IDs (pass_id e vehicle_pass_id)
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.generate_visitor_pass_id()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  NEW.pass_id := 'VP-' || upper(substring(md5(random()::text) from 1 for 8));
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS set_visitor_pass_id ON public.visitors;
+CREATE TRIGGER set_visitor_pass_id
+    BEFORE INSERT ON public.visitors
+    FOR EACH ROW EXECUTE FUNCTION public.generate_visitor_pass_id();
+
+CREATE OR REPLACE FUNCTION public.generate_visitor_vehicle_pass_id()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  IF NEW.access_type = 'driver' THEN
+    NEW.vehicle_pass_id := 'VV-' || upper(substring(md5(random()::text) from 1 for 8));
+  ELSE
+    NEW.vehicle_pass_id := NULL;
+    NEW.vehicle_plate := NULL;
+    NEW.vehicle_brand := NULL;
+    NEW.vehicle_model := NULL;
+    NEW.vehicle_color := NULL;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS set_visitor_vehicle_pass_id ON public.visitors;
+CREATE TRIGGER set_visitor_vehicle_pass_id
+    BEFORE INSERT ON public.visitors
+    FOR EACH ROW EXECUTE FUNCTION public.generate_visitor_vehicle_pass_id();
+
+CREATE OR REPLACE FUNCTION public.generate_credential_id()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  NEW.credential_id := 'EC-' || upper(substring(md5(random()::text) from 1 for 8));
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS set_credential_id ON public.employee_credentials;
+CREATE TRIGGER set_credential_id
+    BEFORE INSERT ON public.employee_credentials
+    FOR EACH ROW EXECUTE FUNCTION public.generate_credential_id();
 
 -- ============================================================
 -- 12. DESABILITAR RLS (Ambiente Local Dev)

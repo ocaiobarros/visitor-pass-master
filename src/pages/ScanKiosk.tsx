@@ -165,6 +165,9 @@ const ScanKiosk = () => {
           if (vehicleVisitor.status === 'closed') {
             status = 'blocked';
             playBlocked();
+          } else if (new Date() < new Date(vehicleVisitor.validFrom)) {
+            status = 'blocked';
+            playBlocked();
           } else if (new Date() > new Date(vehicleVisitor.validUntil)) {
             status = 'expired';
             playBlocked();

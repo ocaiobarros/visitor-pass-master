@@ -350,6 +350,15 @@ const QRScanner = () => {
             return;
           }
 
+          if (new Date() < new Date(freshVisitor.validFrom)) {
+            playBlocked();
+            setScanResult({ type: 'visitor', data: freshVisitor, action: 'blocked' });
+            logAuditAction('ACCESS_SCAN', { subject_type: 'visitor', subject_id: freshVisitor.id, result: 'DENIED', reason: 'not_yet_valid' });
+            toast({ title: '🚫 Passe ainda não válido', description: `Válido a partir de ${format(new Date(freshVisitor.validFrom), 'dd/MM/yyyy HH:mm')}`, variant: 'destructive' });
+            scheduleReset(4000);
+            return;
+          }
+
           if (new Date() > new Date(freshVisitor.validUntil)) {
             playBlocked();
             setScanResult({ type: 'visitor', data: freshVisitor, action: 'expired' });

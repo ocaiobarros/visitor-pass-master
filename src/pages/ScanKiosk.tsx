@@ -129,6 +129,9 @@ const ScanKiosk = () => {
           if (visitor.status === 'closed') {
             status = 'blocked';
             playBlocked();
+          } else if (new Date() < new Date(visitor.validFrom)) {
+            status = 'blocked';
+            playBlocked();
           } else if (new Date() > new Date(visitor.validUntil)) {
             status = 'expired';
             playBlocked();
@@ -160,6 +163,9 @@ const ScanKiosk = () => {
           let status: 'allowed' | 'blocked' | 'expired' = 'allowed';
           
           if (vehicleVisitor.status === 'closed') {
+            status = 'blocked';
+            playBlocked();
+          } else if (new Date() < new Date(vehicleVisitor.validFrom)) {
             status = 'blocked';
             playBlocked();
           } else if (new Date() > new Date(vehicleVisitor.validUntil)) {

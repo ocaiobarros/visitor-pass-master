@@ -254,7 +254,7 @@ const ScanKiosk = () => {
     window.print();
   };
 
-  const isLoading = isLoadingVisitor || isLoadingCredential;
+  const isLoading = isLoadingVisitor || isLoadingVehicleVisitor || isLoadingCredential;
 
   // ==================== RESULT SCREENS ====================
   

@@ -49,7 +49,7 @@ const ScanKiosk = () => {
   const { data: visitor, isLoading: isLoadingVisitor } = useVisitorByPassId(
     searchCode.startsWith('VP-') ? searchCode : ''
   );
-  const { data: vehicleVisitor, isLoading: isLoadingVehicleVisitor } = useVisitorByPassId(
+  const { data: vehicleVisitor, isLoading: isLoadingVehicleVisitor } = useVisitorByVehiclePassId(
     searchCode.startsWith('VV-') ? searchCode : ''
   );
   const { data: credential, isLoading: isLoadingCredential } = useCredentialByQrId(

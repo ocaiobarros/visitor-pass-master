@@ -45,9 +45,12 @@ const ScanKiosk = () => {
   const updateVisitorStatus = useUpdateVisitorStatus();
   const createAccessLog = useCreateAccessLog();
 
-  // Queries
+  // Queries — VP- = visitor pass, VV- = visitor vehicle pass
   const { data: visitor, isLoading: isLoadingVisitor } = useVisitorByPassId(
     searchCode.startsWith('VP-') ? searchCode : ''
+  );
+  const { data: vehicleVisitor, isLoading: isLoadingVehicleVisitor } = useVisitorByPassId(
+    searchCode.startsWith('VV-') ? searchCode : ''
   );
   const { data: credential, isLoading: isLoadingCredential } = useCredentialByQrId(
     searchCode.startsWith('EC-') ? searchCode : ''

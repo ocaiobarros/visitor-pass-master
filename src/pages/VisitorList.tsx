@@ -35,6 +35,7 @@ const VisitorList = () => {
     const matchesSearch =
       visitor.fullName.toLowerCase().includes(search.toLowerCase()) ||
       (visitor.company?.toLowerCase().includes(search.toLowerCase()) || false) ||
+      (visitor.companyReason?.toLowerCase().includes(search.toLowerCase()) || false) ||
       visitor.passId.toLowerCase().includes(search.toLowerCase());
 
     const matchesStatus = statusFilter === 'all' || visitor.status === statusFilter;

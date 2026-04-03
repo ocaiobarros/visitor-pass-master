@@ -99,6 +99,24 @@ export const useVisitorByPassId = (passId: string) => {
   });
 };
 
+export const useVisitorByVehiclePassId = (vehiclePassId: string) => {
+  return useQuery({
+    queryKey: ['visitor', 'vehiclePassId', vehiclePassId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('visitors')
+        .select('*')
+        .eq('vehicle_pass_id', vehiclePassId)
+        .maybeSingle();
+      
+      if (error) throw error;
+      if (!data) return null;
+      return mapDbToVisitor(data);
+    },
+    enabled: !!vehiclePassId && vehiclePassId.startsWith('VV-'),
+  });
+};
+
 export const useCreateVisitor = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();

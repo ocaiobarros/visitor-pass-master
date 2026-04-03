@@ -35,6 +35,7 @@ const VisitorList = () => {
     const matchesSearch =
       visitor.fullName.toLowerCase().includes(search.toLowerCase()) ||
       (visitor.company?.toLowerCase().includes(search.toLowerCase()) || false) ||
+      (visitor.companyReason?.toLowerCase().includes(search.toLowerCase()) || false) ||
       visitor.passId.toLowerCase().includes(search.toLowerCase());
 
     const matchesStatus = statusFilter === 'all' || visitor.status === statusFilter;
@@ -150,7 +151,7 @@ const VisitorList = () => {
                       <TableRow key={visitor.id}>
                         <TableCell className="font-mono text-sm">{visitor.passId}</TableCell>
                         <TableCell className="font-medium">{visitor.fullName}</TableCell>
-                        <TableCell>{visitor.company || '-'}</TableCell>
+                        <TableCell>{visitor.company || visitor.companyReason || '-'}</TableCell>
                         <TableCell>
                           <span className="text-xs">
                             {visitor.visitToType === 'setor' ? '📍' : '👤'} {visitor.visitToName}

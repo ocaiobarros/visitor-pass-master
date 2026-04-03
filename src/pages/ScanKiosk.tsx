@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useVisitorByPassId, useUpdateVisitorStatus } from '@/hooks/useVisitors';
+import { useVisitorByPassId, useUpdateVisitorStatus, useVisitorByVehiclePassId } from '@/hooks/useVisitors';
 import { useCredentialByQrId } from '@/hooks/useEmployeeCredentials';
 import { useCreateAccessLog } from '@/hooks/useAccessLogs';
 import { useScanFeedback } from '@/hooks/useScanFeedback';

@@ -154,6 +154,38 @@ const ScanKiosk = () => {
           setScanResult({ type: 'error', code: searchCode });
           scheduleReset(3000);
         }
+      } else if (searchCode.startsWith('VV-')) {
+        // Vehicle visitor QR
+        if (vehicleVisitor) {
+          let status: 'allowed' | 'blocked' | 'expired' = 'allowed';
+          
+          if (vehicleVisitor.status === 'closed') {
+            status = 'blocked';
+            playBlocked();
+          } else if (new Date() > new Date(vehicleVisitor.validUntil)) {
+            status = 'expired';
+            playBlocked();
+          } else {
+            status = 'allowed';
+            playSuccess();
+            
+            if (vehicleVisitor.status !== 'inside') {
+              await updateVisitorStatus.mutateAsync({ id: vehicleVisitor.id, status: 'inside' });
+              await createAccessLog.mutateAsync({
+                subjectType: 'visitor',
+                subjectId: vehicleVisitor.id,
+                direction: 'in',
+              });
+            }
+          }
+          
+          setScanResult({ type: 'visitor', data: vehicleVisitor, status });
+          scheduleReset(status === 'allowed' ? 3000 : 4000);
+        } else if (!isLoadingVehicleVisitor) {
+          playError();
+          setScanResult({ type: 'error', code: searchCode });
+          scheduleReset(3000);
+        }
       } else if (searchCode.startsWith('EC-')) {
         if (credential) {
           if (credential.status === 'blocked') {
@@ -179,7 +211,7 @@ const ScanKiosk = () => {
     }, 200);
 
     return () => clearTimeout(timer);
-  }, [searchCode, visitor, credential, isLoadingVisitor, isLoadingCredential, playSuccess, playError, playBlocked, scheduleReset, updateVisitorStatus, createAccessLog]);
+  }, [searchCode, visitor, vehicleVisitor, credential, isLoadingVisitor, isLoadingVehicleVisitor, isLoadingCredential, playSuccess, playError, playBlocked, scheduleReset, updateVisitorStatus, createAccessLog]);
 
   // Handle scan input
   const handleKeyDown = (e: React.KeyboardEvent) => {

@@ -219,7 +219,7 @@ const ScanKiosk = () => {
       e.preventDefault();
       const code = qrCode.toUpperCase().trim();
       
-      if (code.startsWith('VP-') || code.startsWith('EC-')) {
+      if (code.startsWith('VP-') || code.startsWith('VV-') || code.startsWith('EC-')) {
         setSearchCode(code);
       } else {
         playError();

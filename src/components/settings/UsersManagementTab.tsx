@@ -435,7 +435,7 @@ const UsersManagementTab = () => {
                       <div className="flex gap-1">
                         {u.roles.map((role: AppRole) => (
                           <Badge key={role} className={roleColors[role]}>
-                            {role.toUpperCase()}
+                            {roleLabels[role] || role.toUpperCase()}
                           </Badge>
                         ))}
                       </div>

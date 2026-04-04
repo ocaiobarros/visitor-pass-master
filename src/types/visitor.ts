@@ -19,12 +19,18 @@ export interface Department {
   name: string;
 }
 
+export interface Company {
+  id: string;
+  name: string;
+}
+
 export interface Visitor {
   id: string;
   passId: string;
   fullName: string;
   document: string;
-  company?: string;
+  companyId?: string;
+  companyName?: string;
   phone?: string;
   photoUrl?: string;
   visitToType: VisitToType;

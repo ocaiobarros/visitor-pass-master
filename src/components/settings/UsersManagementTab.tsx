@@ -278,8 +278,14 @@ const UsersManagementTab = () => {
 
   const roleColors: Record<AppRole, string> = {
     admin: 'bg-destructive text-destructive-foreground',
-    rh: 'bg-primary text-primary-foreground',
+    operador_acesso: 'bg-primary text-primary-foreground',
     security: 'bg-muted text-muted-foreground',
+  };
+
+  const roleLabels: Record<AppRole, string> = {
+    admin: 'Admin',
+    operador_acesso: 'Operador de Acesso',
+    security: 'Segurança',
   };
 
   return (
@@ -355,7 +361,7 @@ const UsersManagementTab = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="admin">Admin (acesso total)</SelectItem>
-                      <SelectItem value="rh">RH (cadastros)</SelectItem>
+                      <SelectItem value="operador_acesso">Operador de Acesso (cadastros)</SelectItem>
                       <SelectItem value="security">Segurança (scanner)</SelectItem>
                     </SelectContent>
                   </Select>
@@ -429,7 +435,7 @@ const UsersManagementTab = () => {
                       <div className="flex gap-1">
                         {u.roles.map((role: AppRole) => (
                           <Badge key={role} className={roleColors[role]}>
-                            {role.toUpperCase()}
+                            {roleLabels[role] || role.toUpperCase()}
                           </Badge>
                         ))}
                       </div>
@@ -447,7 +453,7 @@ const UsersManagementTab = () => {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="rh">RH</SelectItem>
+                          <SelectItem value="operador_acesso">Operador de Acesso</SelectItem>
                           <SelectItem value="security">Segurança</SelectItem>
                         </SelectContent>
                       </Select>

@@ -177,8 +177,8 @@ const DashboardLayout = ({ children, pageTitle }: DashboardLayoutProps) => {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{user?.fullName || 'Usuário'}</p>
-              <p className="text-xs text-sidebar-foreground/70 truncate capitalize">
-                {user?.roles?.[0] || 'Segurança'}
+              <p className="text-xs text-sidebar-foreground/70 truncate">
+                {user?.roles?.[0] === 'operador_acesso' ? 'Operador de Acesso' : user?.roles?.[0] === 'admin' ? 'Admin' : user?.roles?.[0] === 'security' ? 'Segurança' : 'Segurança'}
               </p>
             </div>
             <Button variant="ghost" size="icon" onClick={handleLogout} className="text-sidebar-foreground/70 hover:text-sidebar-foreground">

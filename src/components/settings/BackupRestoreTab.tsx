@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 
 const TABLES_TO_EXPORT = [
+  'companies',
   'departments',
   'profiles',
   'user_roles',

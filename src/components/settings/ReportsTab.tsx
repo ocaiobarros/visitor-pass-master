@@ -76,7 +76,7 @@ const ReportsTab = () => {
         case 'visitors': {
           const { data, error, count } = await supabase
             .from('visitors')
-            .select('*', { count: 'exact' })
+            .select('*, companies(name)', { count: 'exact' })
             .gte('created_at', startDateTime)
             .lte('created_at', endDateTime)
             .order('created_at', { ascending: false })

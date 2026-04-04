@@ -34,7 +34,7 @@ const VisitorList = () => {
   const filteredVisitors = visitors.filter((visitor) => {
     const matchesSearch =
       visitor.fullName.toLowerCase().includes(search.toLowerCase()) ||
-      (visitor.company?.toLowerCase().includes(search.toLowerCase()) || false) ||
+      (visitor.companyName?.toLowerCase().includes(search.toLowerCase()) || false) ||
       (visitor.companyReason?.toLowerCase().includes(search.toLowerCase()) || false) ||
       visitor.passId.toLowerCase().includes(search.toLowerCase());
 
@@ -140,6 +140,7 @@ const VisitorList = () => {
                       <TableHead>ID Passe</TableHead>
                       <TableHead>Nome</TableHead>
                       <TableHead>Empresa</TableHead>
+                      <TableHead>Motivo</TableHead>
                       <TableHead>Destino</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Validade</TableHead>
@@ -151,7 +152,8 @@ const VisitorList = () => {
                       <TableRow key={visitor.id}>
                         <TableCell className="font-mono text-sm">{visitor.passId}</TableCell>
                         <TableCell className="font-medium">{visitor.fullName}</TableCell>
-                        <TableCell>{visitor.company || visitor.companyReason || '-'}</TableCell>
+                        <TableCell>{visitor.companyName || '-'}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{visitor.companyReason || '-'}</TableCell>
                         <TableCell>
                           <span className="text-xs">
                             {visitor.visitToType === 'setor' ? '📍' : '👤'} {visitor.visitToName}

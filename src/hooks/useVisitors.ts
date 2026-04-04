@@ -6,7 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 interface CreateVisitorData {
   fullName: string;
   document: string;
-  company?: string;
+  companyId?: string;
   phone?: string;
   photoUrl?: string;
   visitToType: VisitToType;
@@ -27,7 +27,8 @@ const mapDbToVisitor = (row: any): Visitor => ({
   passId: row.pass_id,
   fullName: row.full_name,
   document: row.document,
-  company: row.company,
+  companyId: row.company_id,
+  companyName: row.companies?.name || null,
   phone: row.phone,
   photoUrl: row.photo_url,
   visitToType: row.visit_to_type,
@@ -48,14 +49,15 @@ const mapDbToVisitor = (row: any): Visitor => ({
   updatedAt: new Date(row.updated_at),
 });
 
-export const useVisitors = () => {
+export const useVisitors = (limit = 200) => {
   return useQuery({
-    queryKey: ['visitors'],
+    queryKey: ['visitors', limit],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('visitors')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select('*, companies(name)')
+        .order('created_at', { ascending: false })
+        .limit(limit);
       
       if (error) throw error;
       return (data || []).map(mapDbToVisitor);
@@ -69,7 +71,7 @@ export const useVisitor = (id: string) => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('visitors')
-        .select('*')
+        .select('*, companies(name)')
         .eq('id', id)
         .maybeSingle();
       
@@ -87,7 +89,7 @@ export const useVisitorByPassId = (passId: string) => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('visitors')
-        .select('*')
+        .select('*, companies(name)')
         .eq('pass_id', passId)
         .maybeSingle();
       
@@ -105,7 +107,7 @@ export const useVisitorByVehiclePassId = (vehiclePassId: string) => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('visitors')
-        .select('*')
+        .select('*, companies(name)')
         .eq('vehicle_pass_id', vehiclePassId)
         .maybeSingle();
       
@@ -125,7 +127,6 @@ export const useCreateVisitor = () => {
     mutationFn: async (data: CreateVisitorData) => {
       const { data: user } = await supabase.auth.getUser();
       
-      // Generate a temporary pass_id - the trigger will replace it
       const tempPassId = 'VP-' + Math.random().toString(36).substring(2, 10).toUpperCase();
       
       const { data: visitor, error } = await supabase
@@ -134,7 +135,7 @@ export const useCreateVisitor = () => {
           pass_id: tempPassId,
           full_name: data.fullName,
           document: data.document,
-          company: data.company || null,
+          company_id: data.companyId || null,
           phone: data.phone || null,
           photo_url: data.photoUrl || null,
           visit_to_type: data.visitToType,
@@ -150,7 +151,7 @@ export const useCreateVisitor = () => {
           valid_until: data.validUntil.toISOString(),
           created_by: user.user?.id || null,
         })
-        .select()
+        .select('*, companies(name)')
         .single();
       
       if (error) throw error;
@@ -183,7 +184,7 @@ export const useUpdateVisitorStatus = () => {
         .from('visitors')
         .update({ status })
         .eq('id', id)
-        .select()
+        .select('*, companies(name)')
         .single();
       
       if (error) throw error;

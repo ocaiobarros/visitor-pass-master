@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useDepartments } from '@/hooks/useDepartments';
+import { useCompanies, useCreateCompany } from '@/hooks/useCompanies';
 import { useCreateVisitor } from '@/hooks/useVisitors';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -11,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { UserPlus, Building2, User, Phone, Calendar, FileText, Camera, IdCard, Car } from 'lucide-react';
+import { UserPlus, Building2, User, Phone, Calendar, FileText, Camera, IdCard, Car, Plus } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { VisitToType, VisitorAccessType } from '@/types/visitor';
@@ -21,6 +22,8 @@ import { useToast } from '@/hooks/use-toast';
 const RegisterVisitor = () => {
   const navigate = useNavigate();
   const { data: departments = [] } = useDepartments();
+  const { data: companies = [] } = useCompanies();
+  const createCompany = useCreateCompany();
   const createVisitor = useCreateVisitor();
   const { isAdminOrRh } = useAuth();
   const { toast } = useToast();
@@ -28,7 +31,7 @@ const RegisterVisitor = () => {
   const [formData, setFormData] = useState({
     fullName: '',
     document: '',
-    company: '',
+    companyId: '',
     phone: '',
     companyReason: '',
     accessType: 'pedestrian' as VisitorAccessType,
@@ -40,6 +43,8 @@ const RegisterVisitor = () => {
     vehicleModel: '',
     vehicleColor: '',
   });
+  const [newCompanyName, setNewCompanyName] = useState('');
+  const [showNewCompany, setShowNewCompany] = useState(false);
   const [validFrom, setValidFrom] = useState<Date>(new Date());
   const [validUntil, setValidUntil] = useState<Date>(new Date(Date.now() + 4 * 60 * 60 * 1000));
   const [photoUrl, setPhotoUrl] = useState<string | undefined>();
@@ -57,6 +62,19 @@ const RegisterVisitor = () => {
 
   const isDriver = formData.accessType === 'driver';
 
+  const handleAddCompany = async () => {
+    if (!newCompanyName.trim()) return;
+    try {
+      const company = await createCompany.mutateAsync(newCompanyName);
+      setFormData({ ...formData, companyId: company.id });
+      setNewCompanyName('');
+      setShowNewCompany(false);
+      toast({ title: 'Empresa cadastrada!', description: `${company.name} adicionada com sucesso.` });
+    } catch {
+      // Error handled by hook
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -71,7 +89,7 @@ const RegisterVisitor = () => {
     }
 
     if (!formData.companyReason.trim()) {
-      toast({ title: 'Campo obrigatório', description: 'Informe a Empresa/Motivo.', variant: 'destructive' });
+      toast({ title: 'Campo obrigatório', description: 'Informe o Motivo da Visita.', variant: 'destructive' });
       return;
     }
 
@@ -83,7 +101,7 @@ const RegisterVisitor = () => {
     createVisitor.mutate({
       fullName: formData.fullName,
       document: formData.document,
-      company: formData.company || undefined,
+      companyId: formData.companyId || undefined,
       phone: formData.phone || undefined,
       photoUrl,
       visitToType: formData.visitToType,
@@ -167,15 +185,54 @@ const RegisterVisitor = () => {
                 </div>
               </div>
 
-              {/* Company Reason (required) & Phone */}
+              {/* Company (FK) & Reason */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="companyReason">Empresa/Motivo *</Label>
+                  <Label>Empresa</Label>
+                  {showNewCompany ? (
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Nome da nova empresa"
+                        value={newCompanyName}
+                        onChange={(e) => setNewCompanyName(e.target.value)}
+                      />
+                      <Button type="button" size="sm" onClick={handleAddCompany} disabled={createCompany.isPending}>
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                      <Button type="button" size="sm" variant="ghost" onClick={() => setShowNewCompany(false)}>
+                        ✕
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Select value={formData.companyId} onValueChange={(value) => setFormData({ ...formData, companyId: value })}>
+                        <SelectTrigger className="flex-1">
+                          <SelectValue placeholder="Selecione a empresa" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhuma</SelectItem>
+                          {companies.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button type="button" size="icon" variant="outline" onClick={() => setShowNewCompany(true)} title="Cadastrar nova empresa">
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="companyReason">Motivo da Visita *</Label>
                   <div className="relative">
                     <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input id="companyReason" placeholder="Ex: Manutenção predial" value={formData.companyReason} onChange={(e) => setFormData({ ...formData, companyReason: e.target.value })} className="pl-10" required />
                   </div>
                 </div>
+              </div>
+
+              {/* Phone */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="phone">Telefone</Label>
                   <div className="relative">

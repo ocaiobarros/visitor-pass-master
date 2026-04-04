@@ -122,7 +122,7 @@ const VisitorPass = () => {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Empresa/Motivo</p>
-                  <p className="font-medium text-foreground">{visitor.companyReason || visitor.company || '-'}</p>
+                  <p className="font-medium text-foreground">{visitor.companyName || visitor.companyReason || '-'}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">

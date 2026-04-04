@@ -244,7 +244,8 @@ const QRScanner = () => {
       passId: data.pass_id,
       fullName: data.full_name,
       document: data.document,
-      company: data.company,
+      companyId: data.company_id,
+      companyName: null,
       phone: data.phone,
       photoUrl: data.photo_url,
       visitToType: data.visit_to_type,
@@ -424,7 +425,8 @@ const QRScanner = () => {
             passId: vData.pass_id,
             fullName: vData.full_name,
             document: vData.document,
-            company: vData.company,
+            companyId: vData.company_id,
+            companyName: null,
             phone: vData.phone,
             photoUrl: vData.photo_url,
             visitToType: vData.visit_to_type,
@@ -755,7 +757,7 @@ const QRScanner = () => {
                 </div>
                 <div className="flex-1">
                   <h3 className="text-2xl font-bold">{scanResult.data.fullName}</h3>
-                  <p className="text-muted-foreground">{scanResult.data.companyReason || scanResult.data.company || 'Visitante'}</p>
+                  <p className="text-muted-foreground">{scanResult.data.companyReason || scanResult.data.companyName || 'Visitante'}</p>
                   
                   {/* Vehicle info if present */}
                   {scanResult.data.vehiclePlate && (

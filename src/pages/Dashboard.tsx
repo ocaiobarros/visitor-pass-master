@@ -1,9 +1,6 @@
-import { useVisitors } from '@/hooks/useVisitors';
 import { useAccessLogs } from '@/hooks/useAccessLogs';
 import { useAuditLogs } from '@/hooks/useAuditLogs';
-import { useEmployeeCredentials } from '@/hooks/useEmployeeCredentials';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { useDashboardStats, useRecentVisitors, useVisitorsInside } from '@/hooks/useDashboardStats';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, UserCheck, UserX, Clock, TrendingUp, CalendarDays, Loader2 } from 'lucide-react';
@@ -15,37 +12,13 @@ import CriticalEventsList from '@/components/dashboard/CriticalEventsList';
 import TodayStats from '@/components/dashboard/TodayStats';
 
 const Dashboard = () => {
-  const { data: visitors = [], isLoading } = useVisitors();
-  const { data: accessLogs = [] } = useAccessLogs(500); // Get more logs for chart
+  const { data: stats, isLoading: isLoadingStats } = useDashboardStats();
+  const { data: recentVisitors = [], isLoading: isLoadingRecent } = useRecentVisitors(5);
+  const { data: insideVisitors = [], isLoading: isLoadingInside } = useVisitorsInside(5);
+  const { data: accessLogs = [] } = useAccessLogs(500);
   const { data: auditData, isLoading: isLoadingAudit } = useAuditLogs({}, 50, 0);
-  const { data: employees = [] } = useEmployeeCredentials();
-  
-  // Get total users count
-  const { data: usersData } = useQuery({
-    queryKey: ['users-count'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id', { count: 'exact' });
-      if (error) throw error;
-      return data?.length || 0;
-    },
-  });
 
-  const stats = {
-    total: visitors.length,
-    inside: visitors.filter((v) => v.status === 'inside').length,
-    outside: visitors.filter((v) => v.status === 'outside' || v.status === 'closed').length,
-    pending: visitors.filter((v) => v.status === 'pending').length,
-  };
-
-  const recentVisitors = [...visitors]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 5);
-
-  const insideVisitors = visitors.filter((v) => v.status === 'inside');
-
-  if (isLoading) {
+  if (isLoadingStats) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center py-20">
@@ -54,6 +27,12 @@ const Dashboard = () => {
       </DashboardLayout>
     );
   }
+
+  const s = stats || {
+    total_visitors: 0, visitors_inside: 0, visitors_outside: 0, visitors_pending: 0,
+    entries_today: 0, exits_today: 0, total_access_today: 0, employees_active: 0,
+    total_users: 0, entries_yesterday: 0, avg_per_hour: 0,
+  };
 
   return (
     <DashboardLayout>
@@ -66,7 +45,7 @@ const Dashboard = () => {
           </p>
         </div>
 
-        {/* Today Stats */}
+        {/* Today Stats — server-side aggregated */}
         <TodayStats 
           accessLogs={accessLogs.map(log => ({
             id: log.id,
@@ -76,13 +55,13 @@ const Dashboard = () => {
           }))} 
         />
 
-        {/* Status Widgets */}
+        {/* Status Widgets — server-side stats */}
         <StatusWidgets
-          totalUsers={usersData || 0}
+          totalUsers={s.total_users}
           activeGates={1}
           totalGates={1}
-          visitorsInside={stats.inside}
-          employeesActive={employees.filter(e => e.status === 'allowed').length}
+          visitorsInside={s.visitors_inside}
+          employeesActive={s.employees_active}
         />
 
         {/* Activity Chart */}
@@ -103,14 +82,14 @@ const Dashboard = () => {
           />
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats Cards — server-side aggregated */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="card-stats">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Total de Visitantes</p>
-                  <p className="text-3xl font-bold text-foreground">{stats.total}</p>
+                  <p className="text-3xl font-bold text-foreground">{s.total_visitors}</p>
                 </div>
                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
                   <Users className="w-6 h-6 text-primary" />
@@ -124,7 +103,7 @@ const Dashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Dentro da Empresa</p>
-                  <p className="text-3xl font-bold text-success">{stats.inside}</p>
+                  <p className="text-3xl font-bold text-success">{s.visitors_inside}</p>
                 </div>
                 <div className="w-12 h-12 rounded-xl bg-success/10 flex items-center justify-center">
                   <UserCheck className="w-6 h-6 text-success" />
@@ -138,7 +117,7 @@ const Dashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Saídas/Encerrados</p>
-                  <p className="text-3xl font-bold text-foreground">{stats.outside}</p>
+                  <p className="text-3xl font-bold text-foreground">{s.visitors_outside}</p>
                 </div>
                 <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
                   <UserX className="w-6 h-6 text-muted-foreground" />
@@ -152,7 +131,7 @@ const Dashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Aguardando Entrada</p>
-                  <p className="text-3xl font-bold text-warning">{stats.pending}</p>
+                  <p className="text-3xl font-bold text-warning">{s.visitors_pending}</p>
                 </div>
                 <div className="w-12 h-12 rounded-xl bg-warning/10 flex items-center justify-center">
                   <Clock className="w-6 h-6 text-warning" />
@@ -162,7 +141,7 @@ const Dashboard = () => {
           </Card>
         </div>
 
-        {/* Two Columns */}
+        {/* Two Columns — server-side JOINs */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Currently Inside */}
           <Card>
@@ -173,20 +152,22 @@ const Dashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {insideVisitors.length === 0 ? (
+              {isLoadingInside ? (
+                <p className="text-muted-foreground text-center py-8">Carregando...</p>
+              ) : insideVisitors.length === 0 ? (
                 <p className="text-muted-foreground text-center py-8">Nenhum visitante dentro da empresa</p>
               ) : (
                 <div className="space-y-3">
-                  {insideVisitors.slice(0, 5).map((visitor) => (
+                  {insideVisitors.map((visitor) => (
                     <div key={visitor.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <span className="text-sm font-medium text-primary">{visitor.fullName.charAt(0)}</span>
+                          <span className="text-sm font-medium text-primary">{visitor.full_name.charAt(0)}</span>
                         </div>
                         <div>
-                          <p className="font-medium text-sm">{visitor.fullName}</p>
+                          <p className="font-medium text-sm">{visitor.full_name}</p>
                           <p className="text-xs text-muted-foreground">
-                            {visitor.visitToType === 'setor' ? '📍' : '👤'} {visitor.visitToName}
+                            {visitor.visit_to_type === 'setor' ? '📍' : '👤'} {visitor.visit_to_name}
                           </p>
                         </div>
                       </div>
@@ -209,7 +190,9 @@ const Dashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {recentVisitors.length === 0 ? (
+              {isLoadingRecent ? (
+                <p className="text-muted-foreground text-center py-8">Carregando...</p>
+              ) : recentVisitors.length === 0 ? (
                 <p className="text-muted-foreground text-center py-8">Nenhum visitante registrado</p>
               ) : (
                 <div className="space-y-3">
@@ -217,11 +200,11 @@ const Dashboard = () => {
                     <div key={visitor.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
-                          <span className="text-sm font-medium">{visitor.fullName.charAt(0)}</span>
+                          <span className="text-sm font-medium">{visitor.full_name.charAt(0)}</span>
                         </div>
                         <div>
-                          <p className="font-medium text-sm">{visitor.fullName}</p>
-                          <p className="text-xs text-muted-foreground">{visitor.company || 'Sem empresa'}</p>
+                          <p className="font-medium text-sm">{visitor.full_name}</p>
+                          <p className="text-xs text-muted-foreground">{visitor.company_name || visitor.company_reason || 'Sem empresa'}</p>
                         </div>
                       </div>
                       <div className="text-right">
@@ -245,7 +228,7 @@ const Dashboard = () => {
                             : 'Encerrado'}
                         </span>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {format(new Date(visitor.createdAt), 'dd/MM HH:mm')}
+                          {format(new Date(visitor.created_at), 'dd/MM HH:mm')}
                         </p>
                       </div>
                     </div>

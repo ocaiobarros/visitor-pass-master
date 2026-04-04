@@ -176,7 +176,7 @@ const ScanKiosk = () => {
     const { data, error } = await supabase
       .from('visitors')
       .select('*, companies(name)')
-      .eq(field, value)
+      .eq(field as any, value)
       .maybeSingle();
     if (error || !data) return null;
     return mapDbToVisitor({ ...data, company_name: (data as any).companies?.name });

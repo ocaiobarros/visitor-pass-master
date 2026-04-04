@@ -278,8 +278,14 @@ const UsersManagementTab = () => {
 
   const roleColors: Record<AppRole, string> = {
     admin: 'bg-destructive text-destructive-foreground',
-    rh: 'bg-primary text-primary-foreground',
+    operador_acesso: 'bg-primary text-primary-foreground',
     security: 'bg-muted text-muted-foreground',
+  };
+
+  const roleLabels: Record<AppRole, string> = {
+    admin: 'Admin',
+    operador_acesso: 'Operador de Acesso',
+    security: 'Segurança',
   };
 
   return (

@@ -25,7 +25,7 @@ import { ptBR } from 'date-fns/locale';
 
 const PAGE_SIZE = 25;
 
-type ReportType = 'access' | 'visitors' | 'employees' | 'audit';
+type ReportType = 'access_summary' | 'visitors_by_company' | 'visitors' | 'employees' | 'audit';
 
 interface ReportFilters {
   startDate: string;
@@ -41,39 +41,34 @@ const ReportsTab = () => {
   const [filters, setFilters] = useState<ReportFilters>({
     startDate: format(subDays(new Date(), 7), 'yyyy-MM-dd'),
     endDate: format(new Date(), 'yyyy-MM-dd'),
-    reportType: 'access',
+    reportType: 'access_summary',
   });
 
-  // Fetch report data based on type
   const { data, isLoading } = useQuery({
     queryKey: ['reports', filters, page],
     queryFn: async () => {
-      const startDateTime = startOfDay(new Date(filters.startDate)).toISOString();
-      const endDateTime = endOfDay(new Date(filters.endDate)).toISOString();
-
       switch (filters.reportType) {
-        case 'access': {
-          let query = supabase
-            .from('access_logs')
-            .select('*', { count: 'exact' })
-            .gte('created_at', startDateTime)
-            .lte('created_at', endDateTime)
-            .order('created_at', { ascending: false })
-            .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-
-          if (filters.subjectType) {
-            query = query.eq('subject_type', filters.subjectType as 'visitor' | 'employee');
-          }
-          if (filters.direction) {
-            query = query.eq('direction', filters.direction as 'in' | 'out');
-          }
-
-          const { data, error, count } = await query;
+        case 'access_summary': {
+          const { data, error } = await supabase.rpc('report_access_summary', {
+            p_start: filters.startDate,
+            p_end: filters.endDate,
+          });
           if (error) throw error;
-          return { data, count: count || 0, type: 'access' as const };
+          return { data: data || [], count: (data || []).length, type: 'access_summary' as const };
+        }
+
+        case 'visitors_by_company': {
+          const { data, error } = await supabase.rpc('report_visitors_by_company', {
+            p_start: filters.startDate,
+            p_end: filters.endDate,
+          });
+          if (error) throw error;
+          return { data: data || [], count: (data || []).length, type: 'visitors_by_company' as const };
         }
 
         case 'visitors': {
+          const startDateTime = startOfDay(new Date(filters.startDate)).toISOString();
+          const endDateTime = endOfDay(new Date(filters.endDate)).toISOString();
           const { data, error, count } = await supabase
             .from('visitors')
             .select('*, companies(name)', { count: 'exact' })
@@ -81,12 +76,13 @@ const ReportsTab = () => {
             .lte('created_at', endDateTime)
             .order('created_at', { ascending: false })
             .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-
           if (error) throw error;
           return { data, count: count || 0, type: 'visitors' as const };
         }
 
         case 'employees': {
+          const startDateTime = startOfDay(new Date(filters.startDate)).toISOString();
+          const endDateTime = endOfDay(new Date(filters.endDate)).toISOString();
           const { data, error, count } = await supabase
             .from('employee_credentials')
             .select('*', { count: 'exact' })
@@ -94,12 +90,13 @@ const ReportsTab = () => {
             .lte('created_at', endDateTime)
             .order('created_at', { ascending: false })
             .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-
           if (error) throw error;
           return { data, count: count || 0, type: 'employees' as const };
         }
 
         case 'audit': {
+          const startDateTime = startOfDay(new Date(filters.startDate)).toISOString();
+          const endDateTime = endOfDay(new Date(filters.endDate)).toISOString();
           const { data, error, count } = await supabase
             .from('audit_logs')
             .select('*', { count: 'exact' })
@@ -107,18 +104,18 @@ const ReportsTab = () => {
             .lte('created_at', endDateTime)
             .order('created_at', { ascending: false })
             .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-
           if (error) throw error;
           return { data, count: count || 0, type: 'audit' as const };
         }
 
         default:
-          return { data: [], count: 0, type: 'access' as const };
+          return { data: [], count: 0, type: 'access_summary' as const };
       }
     },
   });
 
-  const totalPages = Math.ceil((data?.count || 0) / PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil((data?.count || 0) / PAGE_SIZE));
+  const isAggregated = filters.reportType === 'access_summary' || filters.reportType === 'visitors_by_company';
 
   const handleApplyFilters = () => {
     setPage(0);
@@ -126,68 +123,45 @@ const ReportsTab = () => {
 
   const exportToCSV = () => {
     if (!data?.data?.length) {
-      toast({
-        title: 'Nenhum dado para exportar',
-        description: 'Aplique filtros e aguarde os dados serem carregados.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Nenhum dado para exportar', variant: 'destructive' });
       return;
     }
 
     let headers: string[] = [];
     let rows: string[] = [];
 
-    switch (filters.reportType) {
-      case 'access':
-        headers = ['Data/Hora', 'Tipo', 'Direção', 'Portão', 'Subject ID'];
-        rows = (data.data as any[]).map((log) =>
-          [
-            format(new Date(log.created_at), 'dd/MM/yyyy HH:mm:ss'),
-            log.subject_type,
-            log.direction,
-            log.gate_id,
-            log.subject_id,
-          ].join(',')
+    switch (data.type) {
+      case 'access_summary':
+        headers = ['Data', 'Entradas', 'Saídas', 'Visitantes Únicos', 'Colaboradores Únicos'];
+        rows = (data.data as any[]).map(r =>
+          [r.day, r.total_entries, r.total_exits, r.unique_visitors, r.unique_employees].join(',')
         );
         break;
-
+      case 'visitors_by_company':
+        headers = ['Empresa', 'Total Visitantes', 'Dentro', 'Encerrados'];
+        rows = (data.data as any[]).map(r =>
+          [`"${r.company_name}"`, r.total_visitors, r.visitors_inside, r.visitors_closed].join(',')
+        );
+        break;
       case 'visitors':
-        headers = ['Data/Hora', 'Nome', 'Documento', 'Empresa', 'Destino', 'Status'];
-        rows = (data.data as any[]).map((v) =>
-          [
-            format(new Date(v.created_at), 'dd/MM/yyyy HH:mm:ss'),
-            v.full_name,
-            v.document,
-            v.companies?.name || v.company_reason || '-',
-            v.visit_to_name,
-            v.status,
-          ].join(',')
+        headers = ['Data', 'Nome', 'Documento', 'Empresa', 'Destino', 'Status'];
+        rows = (data.data as any[]).map(v =>
+          [format(new Date(v.created_at), 'dd/MM/yyyy HH:mm'), v.full_name, v.document,
+           v.companies?.name || v.company_reason || '-', v.visit_to_name, v.status].join(',')
         );
         break;
-
       case 'employees':
-        headers = ['Data/Hora', 'Nome', 'Documento', 'Cargo', 'Tipo', 'Status'];
-        rows = (data.data as any[]).map((e) =>
-          [
-            format(new Date(e.created_at), 'dd/MM/yyyy HH:mm:ss'),
-            e.full_name,
-            e.document,
-            e.job_title || '-',
-            e.type,
-            e.status,
-          ].join(',')
+        headers = ['Data', 'Nome', 'Documento', 'Cargo', 'Tipo', 'Status'];
+        rows = (data.data as any[]).map(e =>
+          [format(new Date(e.created_at), 'dd/MM/yyyy HH:mm'), e.full_name, e.document,
+           e.job_title || '-', e.type, e.status].join(',')
         );
         break;
-
       case 'audit':
-        headers = ['Data/Hora', 'Usuário', 'Ação', 'Detalhes'];
-        rows = (data.data as any[]).map((log) =>
-          [
-            format(new Date(log.created_at), 'dd/MM/yyyy HH:mm:ss'),
-            log.user_email || 'Sistema',
-            log.action_type,
-            JSON.stringify(log.details || {}).replace(/,/g, ';'),
-          ].join(',')
+        headers = ['Data', 'Usuário', 'Ação', 'Detalhes'];
+        rows = (data.data as any[]).map(log =>
+          [format(new Date(log.created_at), 'dd/MM/yyyy HH:mm'), log.user_email || 'Sistema',
+           log.action_type, JSON.stringify(log.details || {}).replace(/,/g, ';')].join(',')
         );
         break;
     }
@@ -202,51 +176,62 @@ const ReportsTab = () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-
-    toast({
-      title: 'Relatório exportado!',
-      description: 'O arquivo CSV foi baixado com sucesso.',
-    });
+    toast({ title: 'Relatório exportado!', description: 'O arquivo CSV foi baixado com sucesso.' });
   };
 
   const renderTable = () => {
-    if (isLoading) {
-      return <p className="text-muted-foreground text-center py-8">Carregando...</p>;
-    }
+    if (isLoading) return <p className="text-muted-foreground text-center py-8">Carregando...</p>;
+    if (!data?.data?.length) return <p className="text-muted-foreground text-center py-8">Nenhum registro encontrado</p>;
 
-    if (!data?.data?.length) {
-      return <p className="text-muted-foreground text-center py-8">Nenhum registro encontrado</p>;
-    }
-
-    switch (filters.reportType) {
-      case 'access':
+    switch (data.type) {
+      case 'access_summary':
         return (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Data/Hora</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Direção</TableHead>
-                <TableHead>Portão</TableHead>
+                <TableHead>Data</TableHead>
+                <TableHead>Entradas</TableHead>
+                <TableHead>Saídas</TableHead>
+                <TableHead>Visitantes Únicos</TableHead>
+                <TableHead>Colaboradores Únicos</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(data.data as any[]).map((log) => (
-                <TableRow key={log.id}>
-                  <TableCell className="text-sm">
-                    {format(new Date(log.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+              {(data.data as any[]).map((row, i) => (
+                <TableRow key={i}>
+                  <TableCell className="font-medium">{format(new Date(row.day), 'dd/MM/yyyy', { locale: ptBR })}</TableCell>
+                  <TableCell>
+                    <Badge className="bg-success text-success-foreground">{row.total_entries}</Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={log.subject_type === 'visitor' ? 'secondary' : 'outline'}>
-                      {log.subject_type === 'visitor' ? 'Visitante' : 'Colaborador'}
-                    </Badge>
+                    <Badge className="bg-muted text-muted-foreground">{row.total_exits}</Badge>
                   </TableCell>
-                  <TableCell>
-                    <Badge className={log.direction === 'in' ? 'bg-success text-success-foreground' : 'bg-muted text-muted-foreground'}>
-                      {log.direction === 'in' ? '↓ ENTRADA' : '↑ SAÍDA'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="font-mono text-sm">{log.gate_id}</TableCell>
+                  <TableCell>{row.unique_visitors}</TableCell>
+                  <TableCell>{row.unique_employees}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        );
+
+      case 'visitors_by_company':
+        return (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Empresa</TableHead>
+                <TableHead>Total Visitantes</TableHead>
+                <TableHead>Dentro</TableHead>
+                <TableHead>Encerrados</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(data.data as any[]).map((row, i) => (
+                <TableRow key={i}>
+                  <TableCell className="font-medium">{row.company_name}</TableCell>
+                  <TableCell><Badge variant="outline">{row.total_visitors}</Badge></TableCell>
+                  <TableCell><Badge className="bg-success text-success-foreground">{row.visitors_inside}</Badge></TableCell>
+                  <TableCell><Badge variant="secondary">{row.visitors_closed}</Badge></TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -268,17 +253,11 @@ const ReportsTab = () => {
             <TableBody>
               {(data.data as any[]).map((v) => (
                 <TableRow key={v.id}>
-                  <TableCell className="text-sm">
-                    {format(new Date(v.created_at), 'dd/MM/yyyy', { locale: ptBR })}
-                  </TableCell>
+                  <TableCell className="text-sm">{format(new Date(v.created_at), 'dd/MM/yyyy', { locale: ptBR })}</TableCell>
                   <TableCell className="font-medium">{v.full_name}</TableCell>
                   <TableCell>{v.companies?.name || v.company_reason || '-'}</TableCell>
                   <TableCell>{v.visit_to_name}</TableCell>
-                  <TableCell>
-                    <Badge variant={v.status === 'inside' ? 'default' : 'secondary'}>
-                      {v.status}
-                    </Badge>
-                  </TableCell>
+                  <TableCell><Badge variant={v.status === 'inside' ? 'default' : 'secondary'}>{v.status}</Badge></TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -300,21 +279,11 @@ const ReportsTab = () => {
             <TableBody>
               {(data.data as any[]).map((e) => (
                 <TableRow key={e.id}>
-                  <TableCell className="text-sm">
-                    {format(new Date(e.created_at), 'dd/MM/yyyy', { locale: ptBR })}
-                  </TableCell>
+                  <TableCell className="text-sm">{format(new Date(e.created_at), 'dd/MM/yyyy', { locale: ptBR })}</TableCell>
                   <TableCell className="font-medium">{e.full_name}</TableCell>
                   <TableCell>{e.document}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {e.type === 'personal' ? 'Pessoal' : 'Veículo'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={e.status === 'allowed' ? 'default' : 'destructive'}>
-                      {e.status === 'allowed' ? 'Liberado' : 'Bloqueado'}
-                    </Badge>
-                  </TableCell>
+                  <TableCell><Badge variant="outline">{e.type === 'personal' ? 'Pessoal' : 'Veículo'}</Badge></TableCell>
+                  <TableCell><Badge variant={e.status === 'allowed' ? 'default' : 'destructive'}>{e.status === 'allowed' ? 'Liberado' : 'Bloqueado'}</Badge></TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -339,9 +308,7 @@ const ReportsTab = () => {
                     {format(new Date(log.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                   </TableCell>
                   <TableCell>{log.user_email || 'Sistema'}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{log.action_type}</Badge>
-                  </TableCell>
+                  <TableCell><Badge variant="outline">{log.action_type}</Badge></TableCell>
                   <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
                     {Object.keys(log.details || {}).length > 0 ? JSON.stringify(log.details) : '-'}
                   </TableCell>
@@ -366,7 +333,7 @@ const ReportsTab = () => {
               Relatórios Personalizados
             </CardTitle>
             <CardDescription>
-              Gere relatórios detalhados com filtros avançados para análise e conformidade
+              Relatórios com agregação server-side para análise e conformidade
             </CardDescription>
           </div>
           <Button onClick={exportToCSV} variant="outline" className="gap-2">
@@ -377,7 +344,7 @@ const ReportsTab = () => {
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 p-4 rounded-lg bg-muted/50">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4 rounded-lg bg-muted/50">
           <div className="space-y-2">
             <Label className="flex items-center gap-1">
               <FileText className="w-3 h-3" />
@@ -385,16 +352,17 @@ const ReportsTab = () => {
             </Label>
             <Select
               value={filters.reportType}
-              onValueChange={(v) => setFilters({ ...filters, reportType: v as ReportType })}
+              onValueChange={(v) => { setFilters({ ...filters, reportType: v as ReportType }); setPage(0); }}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="access">Logs de Acesso</SelectItem>
-                <SelectItem value="visitors">Visitantes</SelectItem>
-                <SelectItem value="employees">Colaboradores</SelectItem>
-                <SelectItem value="audit">Auditoria</SelectItem>
+                <SelectItem value="access_summary">Resumo de Acessos (agregado)</SelectItem>
+                <SelectItem value="visitors_by_company">Visitantes por Empresa (agregado)</SelectItem>
+                <SelectItem value="visitors">Lista de Visitantes</SelectItem>
+                <SelectItem value="employees">Lista de Colaboradores</SelectItem>
+                <SelectItem value="audit">Logs de Auditoria</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -423,50 +391,6 @@ const ReportsTab = () => {
             />
           </div>
 
-          {filters.reportType === 'access' && (
-            <>
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1">
-                  <Users className="w-3 h-3" />
-                  Tipo de Sujeito
-                </Label>
-                <Select
-                  value={filters.subjectType ?? 'all'}
-                  onValueChange={(v) => setFilters({ ...filters, subjectType: v === 'all' ? undefined : v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todos" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="visitor">Visitantes</SelectItem>
-                    <SelectItem value="employee">Colaboradores</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1">
-                  <Filter className="w-3 h-3" />
-                  Direção
-                </Label>
-                <Select
-                  value={filters.direction ?? 'all'}
-                  onValueChange={(v) => setFilters({ ...filters, direction: v === 'all' ? undefined : v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todos" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="in">Entrada</SelectItem>
-                    <SelectItem value="out">Saída</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </>
-          )}
-
           <div className="flex items-end">
             <Button onClick={handleApplyFilters} className="w-full gap-2">
               <Search className="w-4 h-4" />
@@ -478,13 +402,14 @@ const ReportsTab = () => {
         {/* Results count */}
         <div className="text-sm text-muted-foreground">
           {data?.count || 0} registro(s) encontrado(s)
+          {isAggregated && ' (dados agregados server-side)'}
         </div>
 
         {/* Table */}
         <div className="rounded-md border">{renderTable()}</div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
+        {/* Pagination (only for non-aggregated reports) */}
+        {!isAggregated && totalPages > 1 && (
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
               Página {page + 1} de {totalPages}

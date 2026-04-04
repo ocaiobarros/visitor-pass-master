@@ -1,68 +1,23 @@
-import { useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Activity, TrendingUp, TrendingDown, Clock } from 'lucide-react';
-import { startOfDay, endOfDay, subHours } from 'date-fns';
+import { Activity, TrendingUp, TrendingDown, Clock, Loader2 } from 'lucide-react';
+import { useTodayStats } from '@/hooks/useDashboardStats';
 
-interface AccessLog {
-  id: string;
-  created_at: string;
-  direction: 'in' | 'out';
-  subject_type: 'visitor' | 'employee';
-}
+const TodayStats = () => {
+  const { data: stats, isLoading } = useTodayStats();
 
-interface TodayStatsProps {
-  accessLogs: AccessLog[];
-}
-
-const TodayStats = ({ accessLogs }: TodayStatsProps) => {
-  const stats = useMemo(() => {
-    const now = new Date();
-    const todayStart = startOfDay(now);
-    const todayEnd = endOfDay(now);
-    const last24h = subHours(now, 24);
-
-    const todayLogs = accessLogs.filter((log) => {
-      const logDate = new Date(log.created_at);
-      return logDate >= todayStart && logDate <= todayEnd;
-    });
-
-    const last24hLogs = accessLogs.filter((log) => {
-      const logDate = new Date(log.created_at);
-      return logDate >= last24h;
-    });
-
-    const totalToday = todayLogs.length;
-    const entriesHoje = todayLogs.filter((log) => log.direction === 'in').length;
-    const exitsHoje = todayLogs.filter((log) => log.direction === 'out').length;
-    
-    // Calculate hourly rate
-    const hoursElapsed = Math.max(1, (now.getTime() - todayStart.getTime()) / (1000 * 60 * 60));
-    const avgPerHour = (totalToday / hoursElapsed).toFixed(1);
-
-    // Compare with yesterday (approximate)
-    const yesterdayLogs = accessLogs.filter((log) => {
-      const logDate = new Date(log.created_at);
-      const yesterdayStart = new Date(todayStart);
-      yesterdayStart.setDate(yesterdayStart.getDate() - 1);
-      const yesterdayEnd = new Date(todayEnd);
-      yesterdayEnd.setDate(yesterdayEnd.getDate() - 1);
-      return logDate >= yesterdayStart && logDate <= yesterdayEnd;
-    });
-
-    const trend = totalToday - yesterdayLogs.length;
-    const trendPercentage = yesterdayLogs.length > 0 
-      ? ((trend / yesterdayLogs.length) * 100).toFixed(0) 
-      : '0';
-
-    return {
-      totalToday,
-      entriesHoje,
-      exitsHoje,
-      avgPerHour,
-      trend,
-      trendPercentage,
-    };
-  }, [accessLogs]);
+  if (isLoading || !stats) {
+    return (
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[1, 2, 3, 4].map(i => (
+          <Card key={i} className="animate-pulse">
+            <CardContent className="pt-4 pb-4 flex items-center justify-center h-24">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -74,7 +29,7 @@ const TodayStats = ({ accessLogs }: TodayStatsProps) => {
             </div>
             <div>
               <p className="text-xs text-muted-foreground font-medium">Total Hoje</p>
-              <p className="text-2xl font-bold text-primary">{stats.totalToday}</p>
+              <p className="text-2xl font-bold text-primary">{stats.total_today}</p>
               <div className="flex items-center gap-1 text-xs">
                 {stats.trend >= 0 ? (
                   <TrendingUp className="w-3 h-3 text-success" />
@@ -82,7 +37,7 @@ const TodayStats = ({ accessLogs }: TodayStatsProps) => {
                   <TrendingDown className="w-3 h-3 text-destructive" />
                 )}
                 <span className={stats.trend >= 0 ? 'text-success' : 'text-destructive'}>
-                  {stats.trend >= 0 ? '+' : ''}{stats.trendPercentage}%
+                  {stats.trend >= 0 ? '+' : ''}{stats.trend_percentage}%
                 </span>
                 <span className="text-muted-foreground">vs ontem</span>
               </div>
@@ -99,7 +54,7 @@ const TodayStats = ({ accessLogs }: TodayStatsProps) => {
             </div>
             <div>
               <p className="text-xs text-muted-foreground font-medium">Entradas</p>
-              <p className="text-2xl font-bold text-success">{stats.entriesHoje}</p>
+              <p className="text-2xl font-bold text-success">{stats.entries_today}</p>
               <p className="text-xs text-muted-foreground">Hoje</p>
             </div>
           </div>
@@ -114,7 +69,7 @@ const TodayStats = ({ accessLogs }: TodayStatsProps) => {
             </div>
             <div>
               <p className="text-xs text-muted-foreground font-medium">Saídas</p>
-              <p className="text-2xl font-bold">{stats.exitsHoje}</p>
+              <p className="text-2xl font-bold">{stats.exits_today}</p>
               <p className="text-xs text-muted-foreground">Hoje</p>
             </div>
           </div>
@@ -129,7 +84,7 @@ const TodayStats = ({ accessLogs }: TodayStatsProps) => {
             </div>
             <div>
               <p className="text-xs text-muted-foreground font-medium">Média/Hora</p>
-              <p className="text-2xl font-bold">{stats.avgPerHour}</p>
+              <p className="text-2xl font-bold">{stats.avg_per_hour}</p>
               <p className="text-xs text-muted-foreground">acessos</p>
             </div>
           </div>

@@ -158,7 +158,7 @@ const ReportsTab = () => {
             format(new Date(v.created_at), 'dd/MM/yyyy HH:mm:ss'),
             v.full_name,
             v.document,
-            v.company || '-',
+            v.companies?.name || v.company_reason || '-',
             v.visit_to_name,
             v.status,
           ].join(',')

@@ -314,7 +314,35 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_activity_chart_data: {
+        Args: never
+        Returns: {
+          date_label: string
+          day: string
+          day_label: string
+          entries: number
+          exits: number
+        }[]
+      }
+      get_critical_events: {
+        Args: { p_limit?: number }
+        Returns: {
+          action_type: Database["public"]["Enums"]["audit_action_type"]
+          created_at: string
+          details: Json
+          id: string
+          user_email: string
+          user_id: string
+        }[]
+      }
       get_dashboard_stats: { Args: never; Returns: Json }
+      get_last_access_direction: {
+        Args: {
+          p_subject_id: string
+          p_subject_type: Database["public"]["Enums"]["subject_type"]
+        }
+        Returns: Database["public"]["Enums"]["access_direction"]
+      }
       get_recent_visitors: {
         Args: { p_limit?: number }
         Returns: {
@@ -328,6 +356,7 @@ export type Database = {
           visit_to_type: Database["public"]["Enums"]["visit_to_type"]
         }[]
       }
+      get_today_stats: { Args: never; Returns: Json }
       get_visitors_inside: {
         Args: { p_limit?: number }
         Returns: {

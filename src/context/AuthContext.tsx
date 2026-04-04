@@ -263,7 +263,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [user?.roles]);
 
   // Compute isAdminOrRh based on current user state
-  const isAdminOrRh = user?.roles?.some(r => r === 'admin' || r === 'rh') || false;
+  const isAdminOrRh = user?.roles?.some(r => r === 'admin' || r === 'operador_acesso') || false;
 
   return (
     <AuthContext.Provider value={{

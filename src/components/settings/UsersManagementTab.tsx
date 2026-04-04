@@ -453,7 +453,7 @@ const UsersManagementTab = () => {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="rh">RH</SelectItem>
+                          <SelectItem value="operador_acesso">Operador de Acesso</SelectItem>
                           <SelectItem value="security">Segurança</SelectItem>
                         </SelectContent>
                       </Select>

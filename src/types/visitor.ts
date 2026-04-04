@@ -81,13 +81,13 @@ export interface AccessLog {
 
 // Helper para verificar permissões
 export const canManageVisitors = (roles: AppRole[]): boolean => {
-  return roles.includes('admin') || roles.includes('rh');
+  return roles.includes('admin') || roles.includes('operador_acesso');
 };
 
 export const canManageCredentials = (roles: AppRole[]): boolean => {
-  return roles.includes('admin') || roles.includes('rh');
+  return roles.includes('admin') || roles.includes('operador_acesso');
 };
 
 export const canScan = (roles: AppRole[]): boolean => {
-  return roles.includes('admin') || roles.includes('rh') || roles.includes('security');
+  return roles.includes('admin') || roles.includes('operador_acesso') || roles.includes('security');
 };

@@ -366,7 +366,7 @@ export type Database = {
     }
     Enums: {
       access_direction: "in" | "out"
-      app_role: "admin" | "rh" | "security"
+      app_role: "admin" | "rh" | "security" | "operador_acesso"
       audit_action_type:
         | "LOGIN"
         | "LOGOUT"
@@ -524,7 +524,7 @@ export const Constants = {
   public: {
     Enums: {
       access_direction: ["in", "out"],
-      app_role: ["admin", "rh", "security"],
+      app_role: ["admin", "rh", "security", "operador_acesso"],
       audit_action_type: [
         "LOGIN",
         "LOGOUT",

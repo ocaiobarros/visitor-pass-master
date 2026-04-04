@@ -361,7 +361,7 @@ const UsersManagementTab = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="admin">Admin (acesso total)</SelectItem>
-                      <SelectItem value="rh">RH (cadastros)</SelectItem>
+                      <SelectItem value="operador_acesso">Operador de Acesso (cadastros)</SelectItem>
                       <SelectItem value="security">Segurança (scanner)</SelectItem>
                     </SelectContent>
                   </Select>

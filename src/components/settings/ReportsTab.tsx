@@ -272,7 +272,7 @@ const ReportsTab = () => {
                     {format(new Date(v.created_at), 'dd/MM/yyyy', { locale: ptBR })}
                   </TableCell>
                   <TableCell className="font-medium">{v.full_name}</TableCell>
-                  <TableCell>{v.company || '-'}</TableCell>
+                  <TableCell>{v.companies?.name || v.company_reason || '-'}</TableCell>
                   <TableCell>{v.visit_to_name}</TableCell>
                   <TableCell>
                     <Badge variant={v.status === 'inside' ? 'default' : 'secondary'}>

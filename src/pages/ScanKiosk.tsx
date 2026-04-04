@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useVisitorByPassId, useUpdateVisitorStatus, useVisitorByVehiclePassId } from '@/hooks/useVisitors';
-import { useCredentialByQrId } from '@/hooks/useEmployeeCredentials';
+import { useUpdateVisitorStatus } from '@/hooks/useVisitors';
 import { useCreateAccessLog } from '@/hooks/useAccessLogs';
 import { useScanFeedback } from '@/hooks/useScanFeedback';
 import { Camera, User, Car, CheckCircle, XCircle, AlertTriangle, ArrowLeft, Printer } from 'lucide-react';
@@ -11,19 +10,70 @@ import { useNavigate } from 'react-router-dom';
 import BrandLogo from '@/components/BrandLogo';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { supabase } from '@/integrations/supabase/client';
 
 type ScanResult = {
   type: 'visitor';
   data: Visitor;
   status: 'allowed' | 'blocked' | 'expired';
+  direction: 'in' | 'out';
 } | {
   type: 'employee';
   data: EmployeeCredential;
   status: 'allowed' | 'blocked';
+  direction: 'in' | 'out';
 } | {
   type: 'error';
   code: string;
 } | null;
+
+// Anti-duplicate: 10s window
+const ANTI_DUP_WINDOW_MS = 10_000;
+const scanTimestamps = new Map<string, number>();
+
+const mapDbToVisitor = (row: any): Visitor => ({
+  id: row.id,
+  passId: row.pass_id,
+  fullName: row.full_name,
+  document: row.document,
+  companyId: row.company_id,
+  companyName: row.company_name,
+  phone: row.phone,
+  photoUrl: row.photo_url,
+  visitToType: row.visit_to_type,
+  visitToName: row.visit_to_name,
+  gateObs: row.gate_obs,
+  companyReason: row.company_reason,
+  accessType: row.access_type,
+  vehiclePassId: row.vehicle_pass_id,
+  vehiclePlate: row.vehicle_plate,
+  vehicleBrand: row.vehicle_brand,
+  vehicleModel: row.vehicle_model,
+  vehicleColor: row.vehicle_color,
+  validFrom: new Date(row.valid_from),
+  validUntil: new Date(row.valid_until),
+  status: row.status,
+  createdBy: row.created_by,
+  createdAt: new Date(row.created_at),
+  updatedAt: new Date(row.updated_at),
+});
+
+const mapDbToCredential = (row: any): EmployeeCredential => ({
+  id: row.id,
+  credentialId: row.credential_id,
+  type: row.type,
+  fullName: row.full_name,
+  document: row.document,
+  departmentId: row.department_id,
+  jobTitle: row.job_title,
+  photoUrl: row.photo_url,
+  vehicleMakeModel: row.vehicle_make_model,
+  vehiclePlate: row.vehicle_plate,
+  status: row.status,
+  createdBy: row.created_by,
+  createdAt: new Date(row.created_at),
+  updatedAt: new Date(row.updated_at),
+});
 
 const ScanKiosk = () => {
   const [qrCode, setQrCode] = useState('');
@@ -33,6 +83,7 @@ const ScanKiosk = () => {
   const [settingsClicks, setSettingsClicks] = useState(0);
   const [currentTime, setCurrentTime] = useState(format(new Date(), 'HH:mm:ss'));
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -45,17 +96,6 @@ const ScanKiosk = () => {
   const updateVisitorStatus = useUpdateVisitorStatus();
   const createAccessLog = useCreateAccessLog();
 
-  // Queries — VP- = visitor pass, VV- = visitor vehicle pass
-  const { data: visitor, isLoading: isLoadingVisitor } = useVisitorByPassId(
-    searchCode.startsWith('VP-') ? searchCode : ''
-  );
-  const { data: vehicleVisitor, isLoading: isLoadingVehicleVisitor } = useVisitorByVehiclePassId(
-    searchCode.startsWith('VV-') ? searchCode : ''
-  );
-  const { data: credential, isLoading: isLoadingCredential } = useCredentialByQrId(
-    searchCode.startsWith('EC-') ? searchCode : ''
-  );
-
   // Update clock
   useEffect(() => {
     const interval = setInterval(() => {
@@ -64,7 +104,7 @@ const ScanKiosk = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Force focus on input (kiosk mode - eternal focus)
+  // Force focus on input (kiosk mode)
   const forceFocus = useCallback(() => {
     if (!scanResult && inputRef.current) {
       inputRef.current.focus();
@@ -79,19 +119,15 @@ const ScanKiosk = () => {
           await containerRef.current.requestFullscreen();
           setIsFullscreen(true);
         }
-      } catch (e) {
-        // Fullscreen might not be available
-      }
+      } catch (e) {}
     };
     enterFullscreen();
     
-    // Track fullscreen changes
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     
-    // Eternal focus guard
     focusIntervalRef.current = setInterval(forceFocus, 1000);
     
     return () => {
@@ -100,14 +136,12 @@ const ScanKiosk = () => {
     };
   }, [forceFocus]);
 
-  // Focus after result clears
   useEffect(() => {
     if (!scanResult) {
       setTimeout(forceFocus, 100);
     }
   }, [scanResult, forceFocus]);
 
-  // Auto-reset after showing result
   const scheduleReset = useCallback((delay: number = 3000) => {
     if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
     resetTimerRef.current = setTimeout(() => {
@@ -117,109 +151,158 @@ const ScanKiosk = () => {
     }, delay);
   }, []);
 
-  // Process scan result
-  useEffect(() => {
-    if (!searchCode) return;
+  /**
+   * Deterministic direction toggle:
+   * Queries get_last_access_direction RPC for the subject.
+   * If last was 'in' → next is 'out'. If 'out' or null → next is 'in'.
+   */
+  const getNextDirection = async (subjectType: 'visitor' | 'employee', subjectId: string): Promise<'in' | 'out'> => {
+    try {
+      const { data, error } = await supabase.rpc('get_last_access_direction', {
+        p_subject_type: subjectType,
+        p_subject_id: subjectId,
+      });
+      if (error || !data) return 'in';
+      return data === 'in' ? 'out' : 'in';
+    } catch {
+      return 'in';
+    }
+  };
 
-    const timer = setTimeout(async () => {
-      if (searchCode.startsWith('VP-')) {
-        if (visitor) {
-          let status: 'allowed' | 'blocked' | 'expired' = 'allowed';
-          
+  /**
+   * Fetch fresh data directly from DB (bypass React Query cache)
+   */
+  const fetchFreshVisitor = async (field: string, value: string): Promise<Visitor | null> => {
+    const { data, error } = await supabase
+      .from('visitors')
+      .select('*, companies(name)')
+      .eq(field, value)
+      .maybeSingle();
+    if (error || !data) return null;
+    return mapDbToVisitor({ ...data, company_name: (data as any).companies?.name });
+  };
+
+  const fetchFreshCredential = async (credentialId: string): Promise<EmployeeCredential | null> => {
+    const { data, error } = await supabase
+      .from('employee_credentials')
+      .select('*')
+      .eq('credential_id', credentialId)
+      .maybeSingle();
+    if (error || !data) return null;
+    return mapDbToCredential(data);
+  };
+
+  // Process scan
+  useEffect(() => {
+    if (!searchCode || isProcessing) return;
+
+    const processScan = async () => {
+      setIsProcessing(true);
+
+      // Anti-duplicate check
+      const now = Date.now();
+      const lastScan = scanTimestamps.get(searchCode);
+      if (lastScan && now - lastScan < ANTI_DUP_WINDOW_MS) {
+        setIsProcessing(false);
+        return;
+      }
+      scanTimestamps.set(searchCode, now);
+
+      try {
+        if (searchCode.startsWith('VP-') || searchCode.startsWith('VV-')) {
+          const field = searchCode.startsWith('VP-') ? 'pass_id' : 'vehicle_pass_id';
+          const visitor = await fetchFreshVisitor(field, searchCode);
+
+          if (!visitor) {
+            playError();
+            setScanResult({ type: 'error', code: searchCode });
+            scheduleReset(3000);
+            return;
+          }
+
           if (visitor.status === 'closed') {
-            status = 'blocked';
             playBlocked();
-          } else if (new Date() < new Date(visitor.validFrom)) {
-            status = 'blocked';
-            playBlocked();
-          } else if (new Date() > new Date(visitor.validUntil)) {
-            status = 'expired';
-            playBlocked();
-          } else {
-            status = 'allowed';
-            playSuccess();
-            
-            // Auto register entry if allowed
-            if (visitor.status !== 'inside') {
-              await updateVisitorStatus.mutateAsync({ id: visitor.id, status: 'inside' });
-              await createAccessLog.mutateAsync({
-                subjectType: 'visitor',
-                subjectId: visitor.id,
-                direction: 'in',
-              });
-            }
+            setScanResult({ type: 'visitor', data: visitor, status: 'blocked', direction: 'in' });
+            scheduleReset(4000);
+            return;
           }
-          
-          setScanResult({ type: 'visitor', data: visitor, status });
-          scheduleReset(status === 'allowed' ? 3000 : 4000);
-        } else if (!isLoadingVisitor) {
-          playError();
-          setScanResult({ type: 'error', code: searchCode });
-          scheduleReset(3000);
-        }
-      } else if (searchCode.startsWith('VV-')) {
-        // Vehicle visitor QR
-        if (vehicleVisitor) {
-          let status: 'allowed' | 'blocked' | 'expired' = 'allowed';
-          
-          if (vehicleVisitor.status === 'closed') {
-            status = 'blocked';
+          if (new Date() < visitor.validFrom) {
             playBlocked();
-          } else if (new Date() < new Date(vehicleVisitor.validFrom)) {
-            status = 'blocked';
-            playBlocked();
-          } else if (new Date() > new Date(vehicleVisitor.validUntil)) {
-            status = 'expired';
-            playBlocked();
-          } else {
-            status = 'allowed';
-            playSuccess();
-            
-            if (vehicleVisitor.status !== 'inside') {
-              await updateVisitorStatus.mutateAsync({ id: vehicleVisitor.id, status: 'inside' });
-              await createAccessLog.mutateAsync({
-                subjectType: 'visitor',
-                subjectId: vehicleVisitor.id,
-                direction: 'in',
-              });
-            }
+            setScanResult({ type: 'visitor', data: visitor, status: 'blocked', direction: 'in' });
+            scheduleReset(4000);
+            return;
           }
+          if (new Date() > visitor.validUntil) {
+            playBlocked();
+            setScanResult({ type: 'visitor', data: visitor, status: 'expired', direction: 'in' });
+            scheduleReset(4000);
+            return;
+          }
+
+          // Deterministic toggle
+          const direction = await getNextDirection('visitor', visitor.id);
           
-          setScanResult({ type: 'visitor', data: vehicleVisitor, status });
-          scheduleReset(status === 'allowed' ? 3000 : 4000);
-        } else if (!isLoadingVehicleVisitor) {
-          playError();
-          setScanResult({ type: 'error', code: searchCode });
+          playSuccess();
+          
+          // Update visitor status based on direction
+          const newStatus = direction === 'in' ? 'inside' : 'outside';
+          await updateVisitorStatus.mutateAsync({ id: visitor.id, status: newStatus as any });
+          await createAccessLog.mutateAsync({
+            subjectType: 'visitor',
+            subjectId: visitor.id,
+            direction,
+          });
+
+          setScanResult({ type: 'visitor', data: { ...visitor, status: newStatus as any }, status: 'allowed', direction });
           scheduleReset(3000);
-        }
-      } else if (searchCode.startsWith('EC-')) {
-        if (credential) {
+
+        } else if (searchCode.startsWith('EC-')) {
+          const credential = await fetchFreshCredential(searchCode);
+
+          if (!credential) {
+            playError();
+            setScanResult({ type: 'error', code: searchCode });
+            scheduleReset(3000);
+            return;
+          }
+
           if (credential.status === 'blocked') {
             playBlocked();
-            setScanResult({ type: 'employee', data: credential, status: 'blocked' });
-          } else {
-            playSuccess();
-            // Auto register entry
-            await createAccessLog.mutateAsync({
-              subjectType: 'employee',
-              subjectId: credential.id,
-              direction: 'in',
-            });
-            setScanResult({ type: 'employee', data: credential, status: 'allowed' });
+            setScanResult({ type: 'employee', data: credential, status: 'blocked', direction: 'in' });
+            scheduleReset(3000);
+            return;
           }
+
+          // Deterministic toggle
+          const direction = await getNextDirection('employee', credential.id);
+          
+          playSuccess();
+          await createAccessLog.mutateAsync({
+            subjectType: 'employee',
+            subjectId: credential.id,
+            direction,
+          });
+
+          setScanResult({ type: 'employee', data: credential, status: 'allowed', direction });
           scheduleReset(3000);
-        } else if (!isLoadingCredential) {
+        } else {
           playError();
           setScanResult({ type: 'error', code: searchCode });
           scheduleReset(3000);
         }
+      } catch (err) {
+        console.error('[ScanKiosk] Error processing scan:', err);
+        playError();
+        setScanResult({ type: 'error', code: searchCode });
+        scheduleReset(3000);
+      } finally {
+        setIsProcessing(false);
       }
-    }, 200);
+    };
 
-    return () => clearTimeout(timer);
-  }, [searchCode, visitor, vehicleVisitor, credential, isLoadingVisitor, isLoadingVehicleVisitor, isLoadingCredential, playSuccess, playError, playBlocked, scheduleReset, updateVisitorStatus, createAccessLog]);
+    processScan();
+  }, [searchCode]);
 
-  // Handle scan input
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && qrCode.trim()) {
       e.preventDefault();
@@ -236,7 +319,6 @@ const ScanKiosk = () => {
     }
   };
 
-  // Secret settings access (triple click on logo)
   const handleLogoClick = () => {
     setSettingsClicks(prev => prev + 1);
     setTimeout(() => setSettingsClicks(0), 2000);
@@ -254,35 +336,31 @@ const ScanKiosk = () => {
     navigate('/dashboard');
   };
 
-  // Print badge
   const handlePrint = () => {
     if (!scanResult || scanResult.type === 'error') return;
     window.print();
   };
 
-  const isLoading = isLoadingVisitor || isLoadingVehicleVisitor || isLoadingCredential;
-
   // ==================== RESULT SCREENS ====================
   
   // ALLOWED - Green fullscreen
-  if (scanResult && ((scanResult.type === 'visitor' && scanResult.status === 'allowed') || 
-      (scanResult.type === 'employee' && scanResult.status === 'allowed'))) {
+  if (scanResult && scanResult.type !== 'error' && scanResult.status === 'allowed') {
     const isVehicle = scanResult.type === 'employee' && scanResult.data.type === 'vehicle';
     const isVisitor = scanResult.type === 'visitor';
+    const directionLabel = scanResult.direction === 'in' ? 'ENTRADA' : 'SAÍDA';
+    const directionIcon = scanResult.direction === 'in' ? '↓' : '↑';
     
     return (
       <div 
         ref={containerRef}
         className="min-h-screen flex flex-col items-center justify-center p-8 bg-kiosk-allowed print:bg-white"
       >
-        {/* Header bar - hidden on print */}
         <div className="absolute top-0 left-0 right-0 py-4 px-8 text-center bg-black/20 print:hidden">
           <h1 className="text-4xl md:text-5xl font-black tracking-wider text-white">
-            ✓ ACESSO LIBERADO
+            ✓ ACESSO LIBERADO — {directionIcon} {directionLabel}
           </h1>
         </div>
 
-        {/* Botão Voltar - SEMPRE visível */}
         <div
           className="fixed z-50 print:hidden"
           style={{
@@ -300,7 +378,6 @@ const ScanKiosk = () => {
           </Button>
         </div>
 
-        {/* Botão Imprimir */}
         <div className="absolute top-4 right-4 z-20 print:hidden">
           <Button onClick={handlePrint} className="gap-2">
             <Printer className="w-4 h-4" />
@@ -308,9 +385,7 @@ const ScanKiosk = () => {
           </Button>
         </div>
 
-        {/* Main content */}
         <div ref={printRef} className="flex flex-col md:flex-row items-center gap-8 md:gap-12 mt-16 print:mt-0 print:flex-col print:text-black">
-          {/* Photo - Para veículos mostra a foto do dono (via photoUrl buscado pelo hook) */}
           <div 
             className="w-40 h-40 md:w-56 md:h-56 rounded-2xl flex items-center justify-center overflow-hidden border-4 bg-white/90 border-white/50 print:w-32 print:h-32 print:border-gray-300"
             style={{ aspectRatio: '1/1' }}
@@ -329,7 +404,6 @@ const ScanKiosk = () => {
             )}
           </div>
 
-          {/* Info */}
           <div className="text-center md:text-left text-white print:text-black">
             {isVehicle && scanResult.type === 'employee' && (
               <>
@@ -378,11 +452,11 @@ const ScanKiosk = () => {
 
             <div className="mt-8 flex items-center justify-center md:justify-start gap-3 print:hidden">
               <CheckCircle className="w-8 h-8" />
-              <span className="text-2xl">STATUS: LIBERADO</span>
+              <span className="text-2xl">{directionIcon} {directionLabel} REGISTRADA</span>
             </div>
             
             <p className="text-xl mt-4 opacity-80 print:text-sm print:text-gray-500">
-              ⏰ Entrada registrada às {currentTime}
+              ⏰ {directionLabel} registrada às {currentTime}
             </p>
           </div>
         </div>
@@ -419,14 +493,12 @@ const ScanKiosk = () => {
         ref={containerRef}
         className="min-h-screen flex flex-col items-center justify-center p-8 bg-kiosk-blocked"
       >
-        {/* Header bar */}
         <div className="absolute top-0 left-0 right-0 py-4 px-8 text-center bg-black/30">
           <h1 className="text-4xl md:text-5xl font-black tracking-wider text-white">
             ✕ ACESSO NEGADO
           </h1>
         </div>
 
-        {/* Botão Voltar - SEMPRE visível */}
         <div
           className="fixed z-50"
           style={{
@@ -444,7 +516,6 @@ const ScanKiosk = () => {
           </Button>
         </div>
 
-        {/* Main content */}
         <div className="text-center text-white">
           <XCircle className="w-32 h-32 md:w-48 md:h-48 mx-auto mb-8 opacity-90" />
           
@@ -502,7 +573,7 @@ const ScanKiosk = () => {
         </div>
       )}
 
-      {/* Header com botão voltar - SEMPRE VISÍVEL (fullscreen ou não) */}
+      {/* Header */}
       <header
         className="fixed left-4 right-4 z-50 flex justify-between items-center print:hidden"
         style={{ top: 'calc(1rem + env(safe-area-inset-top))' }}
@@ -511,7 +582,6 @@ const ScanKiosk = () => {
           <BrandLogo size="sm" />
         </div>
 
-        {/* Botão Voltar - SEMPRE visível, independente de fullscreen */}
         <Button 
           variant="default" 
           onClick={handleExit} 
@@ -522,33 +592,29 @@ const ScanKiosk = () => {
         </Button>
       </header>
 
-      {/* Main content - centered */}
+      {/* Main content */}
       <main className="flex-1 flex flex-col items-center justify-center p-8">
-        {/* Camera icon placeholder */}
         <div className="w-64 h-64 md:w-80 md:h-80 rounded-3xl border-4 border-dashed flex items-center justify-center mb-8 border-muted-foreground/30 bg-black/5">
           <Camera className="w-24 h-24 md:w-32 md:h-32 text-muted-foreground" />
         </div>
 
-        {/* Instructions */}
         <h1 className="text-4xl md:text-5xl font-black tracking-wide mb-4 text-foreground">
           📷 APONTE O QR
         </h1>
         
         <p className={cn(
           "text-xl md:text-2xl text-muted-foreground",
-          isLoading && "animate-pulse"
+          isProcessing && "animate-pulse"
         )}>
-          {isLoading ? '⏳ Processando...' : '⏳ Aguardando leitura...'}
+          {isProcessing ? '⏳ Processando...' : '⏳ Aguardando leitura...'}
         </p>
 
-        {/* Dica para sair */}
         {isFullscreen && (
           <p className="text-sm text-muted-foreground mt-8 opacity-50">
             💡 Clique 3x no logo para sair do modo kiosk
           </p>
         )}
 
-        {/* Clock */}
         <div className="absolute bottom-8 right-8 opacity-50">
           <p className="text-2xl font-mono text-foreground">
             {format(new Date(), 'HH:mm')}

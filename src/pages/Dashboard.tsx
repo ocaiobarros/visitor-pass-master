@@ -1,5 +1,3 @@
-import { useAccessLogs } from '@/hooks/useAccessLogs';
-import { useAuditLogs } from '@/hooks/useAuditLogs';
 import { useDashboardStats, useRecentVisitors, useVisitorsInside } from '@/hooks/useDashboardStats';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,8 +13,6 @@ const Dashboard = () => {
   const { data: stats, isLoading: isLoadingStats } = useDashboardStats();
   const { data: recentVisitors = [], isLoading: isLoadingRecent } = useRecentVisitors(5);
   const { data: insideVisitors = [], isLoading: isLoadingInside } = useVisitorsInside(5);
-  const { data: accessLogs = [] } = useAccessLogs(500);
-  const { data: auditData, isLoading: isLoadingAudit } = useAuditLogs({}, 50, 0);
 
   if (isLoadingStats) {
     return (
@@ -45,15 +41,8 @@ const Dashboard = () => {
           </p>
         </div>
 
-        {/* Today Stats — server-side aggregated */}
-        <TodayStats 
-          accessLogs={accessLogs.map(log => ({
-            id: log.id,
-            created_at: log.createdAt.toISOString(),
-            direction: log.direction,
-            subject_type: log.subjectType,
-          }))} 
-        />
+        {/* Today Stats — 100% server-side */}
+        <TodayStats />
 
         {/* Status Widgets — server-side stats */}
         <StatusWidgets
@@ -64,22 +53,10 @@ const Dashboard = () => {
           employeesActive={s.employees_active}
         />
 
-        {/* Activity Chart */}
+        {/* Activity Chart + Critical Events — 100% server-side */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <ActivityChart 
-            accessLogs={accessLogs.map(log => ({
-              id: log.id,
-              created_at: log.createdAt.toISOString(),
-              direction: log.direction,
-              subject_type: log.subjectType,
-            }))} 
-          />
-          
-          {/* Critical Events */}
-          <CriticalEventsList 
-            auditLogs={auditData?.data || []} 
-            isLoading={isLoadingAudit} 
-          />
+          <ActivityChart />
+          <CriticalEventsList />
         </div>
 
         {/* Stats Cards — server-side aggregated */}

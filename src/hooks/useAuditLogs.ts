@@ -87,7 +87,6 @@ export const useCreateAuditLog = () => {
       action_type: AuditActionType;
       details?: Record<string, unknown>;
     }) => {
-      // Usar endpoint server-side para auditoria (RLS compliant)
       await logAuditAction(action_type, details);
     },
     onSuccess: () => {
@@ -97,11 +96,10 @@ export const useCreateAuditLog = () => {
 };
 
 /**
- * Registra uma ação de auditoria via endpoint server-side.
+ * Registra uma ação de auditoria via INSERT direto no banco.
  * 
- * IMPORTANTE: Esta função NÃO faz INSERT direto no banco.
- * Ela usa o endpoint POST /admin/audit que opera com SERVICE_ROLE_KEY,
- * garantindo compliance com RLS e imutabilidade dos logs.
+ * Usa o SDK autenticado do Supabase para gravar diretamente na tabela audit_logs.
+ * A RLS policy permite INSERT para usuários autenticados (auth.uid() IS NOT NULL).
  * 
  * A função é resiliente a falhas - nunca interrompe o fluxo principal.
  */
@@ -111,83 +109,32 @@ export const logAuditAction = async (
   userInfo?: { id?: string; email?: string }
 ) => {
   try {
-    // Obter token de sessão para autenticação
+    // Get current session for user info
     const { data: sessionData } = await supabase.auth.getSession();
     const session = sessionData?.session;
 
-    // Construir payload
-    const payload = {
-      action_type,
-      details: {
-        ...details,
-        user_info: userInfo || null,
-      },
-      resource: details.resource || null,
-    };
+    const userId = userInfo?.id || session?.user?.id || null;
+    const userEmail = userInfo?.email || session?.user?.email || null;
 
-    // Determinar URL base da API
-    const apiUrl = getApiUrl();
-    
-    // Headers com autenticação se disponível
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
+    const { error } = await supabase
+      .from('audit_logs')
+      .insert({
+        action_type,
+        user_id: userId,
+        user_email: userEmail,
+        details: {
+          ...details,
+          user_info: userInfo || null,
+        },
+        ip_address: null,
+        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+      });
 
-    // Adicionar apikey para passar pelo Kong (se disponível)
-    const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-    if (anonKey) {
-      headers['apikey'] = anonKey;
-    }
-
-    if (session?.access_token) {
-      headers['Authorization'] = `Bearer ${session.access_token}`;
-    }
-
-    // Enviar para endpoint server-side
-    const response = await fetch(`${apiUrl}/admin/v1/audit`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      // Log silencioso - não quebrar fluxo do usuário
-      console.warn('[audit] Falha ao registrar auditoria:', response.status);
+    if (error) {
+      console.warn('[audit] Falha ao registrar auditoria:', error.message);
     }
   } catch (err) {
     // Falhas de auditoria NUNCA devem interromper o fluxo principal
     console.warn('[audit] Erro ao registrar auditoria:', err);
   }
 };
-
-/**
- * Determina a URL base da API considerando ambiente local e produção.
- */
-function getApiUrl(): string {
-  // Verificar se há variável de ambiente configurada
-  const envApiUrl = import.meta.env.VITE_API_URL;
-  if (envApiUrl) {
-    return envApiUrl;
-  }
-
-  // Em produção (Docker), usar Kong Gateway na porta 8000
-  if (typeof window !== 'undefined') {
-    const origin = window.location.origin;
-    
-    try {
-      const url = new URL(origin);
-      
-      // Self-hosted: SEMPRE usar porta 8000 para API (Kong Gateway)
-      // O frontend roda na porta 80 (Nginx), API está no Kong (8000)
-      url.port = '8000';
-      
-      return url.origin;
-    } catch {
-      // Fallback se URL parsing falhar
-      const host = window.location.hostname;
-      return `http://${host}:8000`;
-    }
-  }
-  
-  return 'http://localhost:8000';
-}

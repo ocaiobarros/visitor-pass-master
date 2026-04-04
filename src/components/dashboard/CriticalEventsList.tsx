@@ -1,16 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, LogIn, LogOut, UserPlus, Shield, Clock } from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
+import { AlertTriangle, LogIn, LogOut, UserPlus, Shield, Clock, Loader2 } from 'lucide-react';
+import { formatDistanceToNow, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { AuditLog, AuditActionType } from '@/hooks/useAuditLogs';
+import { useCriticalEvents, CriticalEvent } from '@/hooks/useDashboardStats';
+import { AuditActionType } from '@/hooks/useAuditLogs';
 
-interface CriticalEventsListProps {
-  auditLogs: AuditLog[];
-  isLoading: boolean;
-}
-
-const getActionIcon = (actionType: AuditActionType) => {
+const getActionIcon = (actionType: string) => {
   switch (actionType) {
     case 'LOGIN':
       return <LogIn className="w-4 h-4 text-success" />;
@@ -33,8 +29,8 @@ const getActionIcon = (actionType: AuditActionType) => {
   }
 };
 
-const getActionLabel = (actionType: AuditActionType): string => {
-  const labels: Record<AuditActionType, string> = {
+const getActionLabel = (actionType: string): string => {
+  const labels: Record<string, string> = {
     LOGIN: 'Login',
     LOGOUT: 'Logout',
     LOGIN_FAILED: 'Login Falhou',
@@ -61,29 +57,15 @@ const getActionLabel = (actionType: AuditActionType): string => {
   return labels[actionType] || actionType;
 };
 
-const getActionVariant = (actionType: AuditActionType): 'default' | 'secondary' | 'destructive' | 'outline' => {
+const getActionVariant = (actionType: string): 'default' | 'secondary' | 'destructive' | 'outline' => {
   if (actionType.includes('FAILED') || actionType.includes('DELETE')) return 'destructive';
   if (actionType.includes('CREATE')) return 'default';
   if (actionType.includes('DEACTIVATE')) return 'secondary';
   return 'outline';
 };
 
-const CriticalEventsList = ({ auditLogs, isLoading }: CriticalEventsListProps) => {
-  // Filter critical events
-  const criticalActions: AuditActionType[] = [
-    'LOGIN_FAILED',
-    'USER_CREATE',
-    'USER_DELETE',
-    'USER_DEACTIVATE',
-    'ROLE_UPDATE',
-    'PASSWORD_RESET',
-    'CONFIG_UPDATE',
-    'BACKUP_EXPORT',
-  ];
-
-  const criticalLogs = auditLogs
-    .filter((log) => criticalActions.includes(log.action_type))
-    .slice(0, 10);
+const CriticalEventsList = () => {
+  const { data: criticalLogs = [], isLoading } = useCriticalEvents(10);
 
   return (
     <Card>
@@ -95,7 +77,9 @@ const CriticalEventsList = ({ auditLogs, isLoading }: CriticalEventsListProps) =
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <p className="text-muted-foreground text-center py-4">Carregando...</p>
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          </div>
         ) : criticalLogs.length === 0 ? (
           <p className="text-muted-foreground text-center py-8">Nenhum evento crítico registrado</p>
         ) : (

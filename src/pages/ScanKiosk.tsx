@@ -173,13 +173,12 @@ const ScanKiosk = () => {
    * Fetch fresh data directly from DB (bypass React Query cache)
    */
   const fetchFreshVisitor = async (field: string, value: string): Promise<Visitor | null> => {
-    const { data, error } = await supabase
-      .from('visitors')
-      .select('*, companies(name)')
-      .eq(field as any, value)
-      .maybeSingle();
+    // Use raw query to avoid deep type instantiation
+    const query = supabase.from('visitors').select('*, companies(name)');
+    const { data, error } = await (query as any).eq(field, value).maybeSingle();
     if (error || !data) return null;
-    return mapDbToVisitor({ ...data, company_name: (data as any).companies?.name });
+    return mapDbToVisitor({ ...data, company_name: data.companies?.name });
+  };
   };
 
   const fetchFreshCredential = async (credentialId: string): Promise<EmployeeCredential | null> => {

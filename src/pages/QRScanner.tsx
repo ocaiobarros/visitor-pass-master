@@ -757,7 +757,7 @@ const QRScanner = () => {
                 </div>
                 <div className="flex-1">
                   <h3 className="text-2xl font-bold">{scanResult.data.fullName}</h3>
-                  <p className="text-muted-foreground">{scanResult.data.companyReason || scanResult.data.company || 'Visitante'}</p>
+                  <p className="text-muted-foreground">{scanResult.data.companyReason || scanResult.data.companyName || 'Visitante'}</p>
                   
                   {/* Vehicle info if present */}
                   {scanResult.data.vehiclePlate && (

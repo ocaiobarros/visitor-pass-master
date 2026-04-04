@@ -357,8 +357,8 @@ const ScanKiosk = () => {
               <>
                 <p className="text-2xl mb-2 print:text-lg print:text-gray-600">✓ VISITANTE OK</p>
                 <h2 className="text-5xl md:text-6xl font-black mb-2 print:text-3xl">{scanResult.data.fullName}</h2>
-                {scanResult.data.company && (
-                  <p className="text-2xl opacity-90 mb-4 print:text-lg">{scanResult.data.company}</p>
+                {scanResult.data.companyName && (
+                  <p className="text-2xl opacity-90 mb-4 print:text-lg">{scanResult.data.companyName}</p>
                 )}
                 <div className="mt-6 p-4 rounded-xl bg-black/20 print:bg-gray-100 print:border print:border-gray-300">
                   <p className="text-2xl print:text-lg">

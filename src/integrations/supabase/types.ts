@@ -77,6 +77,24 @@ export type Database = {
         }
         Relationships: []
       }
+      companies: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       departments: {
         Row: {
           created_at: string
@@ -208,7 +226,7 @@ export type Database = {
       visitors: {
         Row: {
           access_type: Database["public"]["Enums"]["visitor_access_type"]
-          company: string | null
+          company_id: string | null
           company_reason: string
           created_at: string
           created_by: string | null
@@ -233,7 +251,7 @@ export type Database = {
         }
         Insert: {
           access_type?: Database["public"]["Enums"]["visitor_access_type"]
-          company?: string | null
+          company_id?: string | null
           company_reason?: string
           created_at?: string
           created_by?: string | null
@@ -258,7 +276,7 @@ export type Database = {
         }
         Update: {
           access_type?: Database["public"]["Enums"]["visitor_access_type"]
-          company?: string | null
+          company_id?: string | null
           company_reason?: string
           created_at?: string
           created_by?: string | null
@@ -281,18 +299,70 @@ export type Database = {
           visit_to_name?: string
           visit_to_type?: Database["public"]["Enums"]["visit_to_type"]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "visitors_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      get_dashboard_stats: { Args: never; Returns: Json }
+      get_recent_visitors: {
+        Args: { p_limit?: number }
+        Returns: {
+          company_name: string
+          company_reason: string
+          created_at: string
+          full_name: string
+          id: string
+          status: Database["public"]["Enums"]["visitor_status"]
+          visit_to_name: string
+          visit_to_type: Database["public"]["Enums"]["visit_to_type"]
+        }[]
+      }
+      get_visitors_inside: {
+        Args: { p_limit?: number }
+        Returns: {
+          company_name: string
+          created_at: string
+          full_name: string
+          id: string
+          visit_to_name: string
+          visit_to_type: Database["public"]["Enums"]["visit_to_type"]
+        }[]
+      }
       has_role: {
         Args: { check_role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
       }
       is_admin_or_rh: { Args: never; Returns: boolean }
+      report_access_summary: {
+        Args: { p_end: string; p_start: string }
+        Returns: {
+          day: string
+          total_entries: number
+          total_exits: number
+          unique_employees: number
+          unique_visitors: number
+        }[]
+      }
+      report_visitors_by_company: {
+        Args: { p_end: string; p_start: string }
+        Returns: {
+          company_name: string
+          total_visitors: number
+          visitors_closed: number
+          visitors_inside: number
+        }[]
+      }
     }
     Enums: {
       access_direction: "in" | "out"

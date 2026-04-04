@@ -117,7 +117,7 @@ const App = () => (
                       } />
                       
                       <Route path="/register/employee" element={
-                        <ProtectedRoute requiredRoles={['admin', 'rh']}>
+                        <ProtectedRoute requiredRoles={['admin', 'operador_acesso']}>
                           <RegisterEmployee />
                         </ProtectedRoute>
                       } />

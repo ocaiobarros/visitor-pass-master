@@ -253,7 +253,7 @@ const ScanKiosk = () => {
             direction,
           });
 
-          setScanResult({ type: 'visitor', data: { ...visitor, status: newStatus as any }, status: 'allowed', direction });
+          setScanResult({ type: 'visitor', data: { ...visitor, status: newVisitorStatus }, status: 'allowed', direction });
           scheduleReset(3000);
 
         } else if (searchCode.startsWith('EC-')) {

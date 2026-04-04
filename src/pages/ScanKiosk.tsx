@@ -245,8 +245,8 @@ const ScanKiosk = () => {
           playSuccess();
           
           // Update visitor status based on direction
-          const newStatus = direction === 'in' ? 'inside' : 'outside';
-          await updateVisitorStatus.mutateAsync({ id: visitor.id, status: newStatus as any });
+          const newVisitorStatus = direction === 'in' ? 'inside' as const : 'outside' as const;
+          await updateVisitorStatus.mutateAsync({ id: visitor.id, status: newVisitorStatus });
           await createAccessLog.mutateAsync({
             subjectType: 'visitor',
             subjectId: visitor.id,

@@ -1,4 +1,4 @@
-export type AppRole = 'admin' | 'rh' | 'security';
+export type AppRole = 'admin' | 'operador_acesso' | 'security';
 export type VisitorStatus = 'pending' | 'inside' | 'outside' | 'closed';
 export type CredentialType = 'personal' | 'vehicle';
 export type CredentialStatus = 'allowed' | 'blocked';

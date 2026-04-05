@@ -181,7 +181,6 @@ const ScanKiosk = () => {
   };
 
 
-  };
 
   const fetchFreshCredential = async (credentialId: string): Promise<EmployeeCredential | null> => {
     const { data, error } = await supabase

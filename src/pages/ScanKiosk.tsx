@@ -179,7 +179,8 @@ const ScanKiosk = () => {
     if (error || !data) return null;
     return mapDbToVisitor({ ...data, company_name: data.companies?.name });
   };
-  };
+
+
 
   const fetchFreshCredential = async (credentialId: string): Promise<EmployeeCredential | null> => {
     const { data, error } = await supabase

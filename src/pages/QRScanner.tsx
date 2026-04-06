@@ -297,24 +297,53 @@ const QRScanner = () => {
     };
   };
 
-  // Para veículos: buscar dados do proprietário pelo documento
-  const fetchOwnerByDocument = async (document: string): Promise<{ jobTitle?: string; department?: { id: string; name: string } } | null> => {
-    // Primeiro tenta buscar na tabela de credenciais pessoais
-    const { data: credential } = await supabase
-      .from('employee_credentials')
-      .select('job_title, departments(id, name)')
-      .eq('document', document)
-      .eq('type', 'personal')
+  // ============================================
+  // SESSION HELPERS
+  // ============================================
+
+  const findPendingVisitorSession = async (visitorId: string) => {
+    const { data } = await supabase
+      .from('access_sessions')
+      .select('*')
+      .eq('visitor_id', visitorId)
+      .eq('status', 'pending')
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
-    
-    if (credential) {
-      return {
-        jobTitle: credential.job_title || undefined,
-        department: credential.departments ? { id: credential.departments.id, name: credential.departments.name } : undefined,
-      };
+    return data;
+  };
+
+  const findPendingVehicleSession = async (vehicleCredentialId: string) => {
+    const { data } = await supabase
+      .from('access_sessions')
+      .select('*')
+      .eq('vehicle_credential_id', vehicleCredentialId)
+      .eq('status', 'pending')
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return data;
+  };
+
+  const checkAuthorizedDriver = async (vehicleCredentialId: string, driverCredentialId: string | null, associateId: string | null) => {
+    let query = supabase
+      .from('vehicle_authorized_drivers')
+      .select('*')
+      .eq('vehicle_credential_id', vehicleCredentialId)
+      .eq('is_active', true);
+
+    if (driverCredentialId) {
+      query = query.eq('employee_credential_id', driverCredentialId);
+    } else if (associateId) {
+      query = query.eq('associate_id', associateId);
+    } else {
+      return null;
     }
-    
-    return null;
+
+    const { data } = await query.maybeSingle();
+    return data;
   };
 
   // ============================================
@@ -326,13 +355,15 @@ const QRScanner = () => {
     if (processingRef.current) return;
 
     const process = async () => {
-      // Mutex: evita duplo processamento
       if (processingRef.current) return;
       processingRef.current = true;
       setIsProcessing(true);
 
       try {
-        // =============== VISITANTE ===============
+        const { data: user } = await supabase.auth.getUser();
+        const operatorId = user.user?.id || null;
+
+        // =============== VISITANTE PESSOAL (VP-) ===============
         if (searchCode.startsWith('VP-')) {
           const freshVisitor = await fetchFreshVisitor(searchCode);
           
@@ -345,10 +376,12 @@ const QRScanner = () => {
 
           await fetchRecentLogs('visitor', freshVisitor.id);
 
-          if (freshVisitor.status === 'closed') {
+          // Status checks
+          if (freshVisitor.status === 'closed' || freshVisitor.status === 'expired_unused') {
             playBlocked();
-            setScanResult({ type: 'visitor', data: freshVisitor, action: 'closed' });
-            logAuditAction('ACCESS_SCAN', { subject_type: 'visitor', subject_id: freshVisitor.id, result: 'DENIED', reason: 'closed' });
+            const action = freshVisitor.status === 'expired_unused' ? 'expired_unused' : 'closed';
+            setScanResult({ type: 'visitor', data: freshVisitor, action });
+            logAuditAction('ACCESS_SCAN', { subject_type: 'visitor', subject_id: freshVisitor.id, result: 'DENIED', reason: freshVisitor.status });
             scheduleReset(4000);
             return;
           }
@@ -362,7 +395,8 @@ const QRScanner = () => {
             return;
           }
 
-          if (new Date() > new Date(freshVisitor.validUntil)) {
+          // Expiration check: only block if visitor is NOT currently inside
+          if (new Date() > new Date(freshVisitor.validUntil) && freshVisitor.status !== 'inside') {
             playBlocked();
             setScanResult({ type: 'visitor', data: freshVisitor, action: 'expired' });
             logAuditAction('ACCESS_SCAN', { subject_type: 'visitor', subject_id: freshVisitor.id, result: 'DENIED', reason: 'expired' });
@@ -370,8 +404,81 @@ const QRScanner = () => {
             return;
           }
 
-          const result = await executeToggle('visitor', freshVisitor.id);
+          // === VISITANTE CONDUTOR: precisa dupla validação ===
+          if (freshVisitor.accessType === 'driver' && freshVisitor.vehiclePassId) {
+            // Check for existing session
+            const existingSession = await findPendingVisitorSession(freshVisitor.id);
 
+            if (existingSession && existingSession.first_scan === 'vehicle') {
+              // VV was scanned first, now VP completes the session
+              await supabase
+                .from('access_sessions')
+                .update({ status: 'completed', completed_at: new Date().toISOString() })
+                .eq('id', existingSession.id);
+
+              // Now do the toggle
+              const result = await executeToggle('visitor', freshVisitor.id);
+              if (!result.success) {
+                if (result.reason === 'duplicate') {
+                  playBlocked();
+                  setScanResult({ type: 'visitor', data: freshVisitor, action: 'duplicate' });
+                  scheduleReset(2000);
+                } else {
+                  playError();
+                  setScanError(result.reason || 'Erro ao registrar');
+                  scheduleReset(3000);
+                }
+                return;
+              }
+
+              const newStatus = result.direction === 'in' ? 'inside' : 'closed';
+              await updateVisitorStatus.mutateAsync({ id: freshVisitor.id, status: newStatus as any });
+              await fetchRecentLogs('visitor', freshVisitor.id);
+
+              playSuccess();
+              setScanResult({ type: 'visitor', data: { ...freshVisitor, status: newStatus as any }, action: result.direction });
+              toast({ title: result.direction === 'in' ? '✓ Entrada registrada!' : '✓ Saída registrada!', description: `${freshVisitor.fullName} (dupla validação OK)` });
+              scheduleReset(3000);
+              return;
+            }
+
+            // No session or person was already first_scan — create new session with person as first
+            if (!existingSession) {
+              const expiresAt = new Date(Date.now() + 60_000).toISOString();
+              await supabase.from('access_sessions').insert({
+                session_type: 'visitor_driver',
+                visitor_id: freshVisitor.id,
+                first_scan: 'person',
+                expires_at: expiresAt,
+                operator_id: operatorId,
+              });
+
+              playSuccess();
+              setScanResult({
+                type: 'visitor',
+                data: freshVisitor,
+                action: 'waiting_second_qr',
+                sessionInfo: { waitingFor: `Veículo (${freshVisitor.vehiclePassId})`, expiresIn: 60 },
+              });
+              toast({ title: '📷 Aguardando QR do veículo', description: 'Escaneie o QR do veículo em até 60 segundos.' });
+              scheduleReset(60_000);
+              return;
+            }
+
+            // Session exists with first_scan='person' — duplicate person scan
+            playBlocked();
+            setScanResult({
+              type: 'visitor',
+              data: freshVisitor,
+              action: 'waiting_second_qr',
+              sessionInfo: { waitingFor: `Veículo (${freshVisitor.vehiclePassId})`, expiresIn: Math.max(0, Math.round((new Date(existingSession.expires_at).getTime() - Date.now()) / 1000)) },
+            });
+            scheduleReset(5000);
+            return;
+          }
+
+          // === VISITANTE PEDESTRE: fluxo normal ===
+          const result = await executeToggle('visitor', freshVisitor.id);
           if (!result.success) {
             if (result.reason === 'duplicate') {
               playBlocked();
@@ -386,20 +493,12 @@ const QRScanner = () => {
             return;
           }
 
-          if (result.direction === 'in') {
-            await updateVisitorStatus.mutateAsync({ id: freshVisitor.id, status: 'inside' });
-          } else {
-            await updateVisitorStatus.mutateAsync({ id: freshVisitor.id, status: 'closed' });
-          }
-
+          const newStatus = result.direction === 'in' ? 'inside' : 'closed';
+          await updateVisitorStatus.mutateAsync({ id: freshVisitor.id, status: newStatus as any });
           await fetchRecentLogs('visitor', freshVisitor.id);
 
           playSuccess();
-          setScanResult({ 
-            type: 'visitor', 
-            data: { ...freshVisitor, status: result.direction === 'in' ? 'inside' : 'closed' }, 
-            action: result.direction 
-          });
+          setScanResult({ type: 'visitor', data: { ...freshVisitor, status: newStatus as any }, action: result.direction });
           toast({
             title: result.direction === 'in' ? '✓ Entrada registrada!' : '✓ Saída registrada!',
             description: `${freshVisitor.fullName} ${result.direction === 'in' ? 'entrou' : 'saiu'}.`,
@@ -408,7 +507,6 @@ const QRScanner = () => {
 
         // =============== VEÍCULO VISITANTE (VV-) ===============
         } else if (searchCode.startsWith('VV-')) {
-          // Buscar visitante pelo vehicle_pass_id
           const { data: vData, error: vError } = await supabase
             .from('visitors')
             .select('*')
@@ -423,109 +521,109 @@ const QRScanner = () => {
           }
 
           const freshVisitor: Visitor = {
-            id: vData.id,
-            passId: vData.pass_id,
-            fullName: vData.full_name,
-            document: vData.document,
-            companyId: vData.company_id,
-            companyName: null,
-            phone: vData.phone,
-            photoUrl: vData.photo_url,
-            visitToType: vData.visit_to_type,
-            visitToName: vData.visit_to_name,
-            gateObs: vData.gate_obs,
-            companyReason: vData.company_reason || '',
-            accessType: vData.access_type || 'pedestrian',
-            vehiclePassId: vData.vehicle_pass_id,
-            vehiclePlate: vData.vehicle_plate,
-            vehicleBrand: vData.vehicle_brand,
-            vehicleModel: vData.vehicle_model,
-            vehicleColor: vData.vehicle_color,
-            validFrom: new Date(vData.valid_from),
-            validUntil: new Date(vData.valid_until),
-            status: vData.status,
-            createdBy: vData.created_by,
-            createdAt: new Date(vData.created_at),
-            updatedAt: new Date(vData.updated_at),
+            id: vData.id, passId: vData.pass_id, fullName: vData.full_name, document: vData.document,
+            companyId: vData.company_id, companyName: null, phone: vData.phone, photoUrl: vData.photo_url,
+            visitToType: vData.visit_to_type, visitToName: vData.visit_to_name, gateObs: vData.gate_obs,
+            companyReason: vData.company_reason || '', accessType: vData.access_type || 'pedestrian',
+            vehiclePassId: vData.vehicle_pass_id, vehiclePlate: vData.vehicle_plate,
+            vehicleBrand: vData.vehicle_brand, vehicleModel: vData.vehicle_model, vehicleColor: vData.vehicle_color,
+            validFrom: new Date(vData.valid_from), validUntil: new Date(vData.valid_until),
+            status: vData.status, createdBy: vData.created_by,
+            createdAt: new Date(vData.created_at), updatedAt: new Date(vData.updated_at),
           };
-
-          // Use vehicle_pass_id as unique subject for independent vehicle tracking
-          const vehicleSubjectId = vData.id + '-vehicle';
 
           await fetchRecentLogs('visitor', freshVisitor.id);
 
-          if (freshVisitor.status === 'closed') {
+          if (freshVisitor.status === 'closed' || freshVisitor.status === 'expired_unused') {
             playBlocked();
-            setScanResult({ type: 'visitor', data: freshVisitor, action: 'closed' });
+            setScanResult({ type: 'visitor', data: freshVisitor, action: freshVisitor.status === 'expired_unused' ? 'expired_unused' : 'closed' });
             scheduleReset(4000);
             return;
           }
-
           if (new Date() < new Date(freshVisitor.validFrom)) {
             playBlocked();
             setScanResult({ type: 'visitor', data: freshVisitor, action: 'blocked' });
-            toast({ title: '🚫 Passe ainda não válido', description: `Válido a partir de ${format(new Date(freshVisitor.validFrom), 'dd/MM/yyyy HH:mm')}`, variant: 'destructive' });
             scheduleReset(4000);
             return;
           }
-
-          if (new Date() > new Date(freshVisitor.validUntil)) {
+          if (new Date() > new Date(freshVisitor.validUntil) && freshVisitor.status !== 'inside') {
             playBlocked();
             setScanResult({ type: 'visitor', data: freshVisitor, action: 'expired' });
             scheduleReset(4000);
             return;
           }
 
-          // Independent toggle for the vehicle - we use a separate subject_id
-          // by appending '-vehicle' to distinguish from the personal QR
-          const { data: lastVLog } = await supabase
-            .from('access_logs')
-            .select('id, direction, created_at')
-            .eq('subject_type', 'visitor')
-            .eq('gate_id', 'VEICULO_' + searchCode)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+          // Check for existing session
+          const existingSession = await findPendingVisitorSession(freshVisitor.id);
 
-          const now = Date.now();
-          if (lastVLog) {
-            const elapsed = now - new Date(lastVLog.created_at).getTime();
-            if (elapsed < ANTI_DUP_WINDOW_MS) {
-              playBlocked();
-              setScanResult({ type: 'visitor', data: freshVisitor, action: 'duplicate' });
-              toast({ title: '⏱️ Aguarde', description: 'Bip repetido. Aguarde 10 segundos.' });
-              scheduleReset(2000);
+          if (existingSession && existingSession.first_scan === 'person') {
+            // VP was scanned first, now VV completes the session
+            await supabase
+              .from('access_sessions')
+              .update({ status: 'completed', completed_at: new Date().toISOString() })
+              .eq('id', existingSession.id);
+
+            const result = await executeToggle('visitor', freshVisitor.id);
+            if (!result.success) {
+              if (result.reason === 'duplicate') {
+                playBlocked();
+                setScanResult({ type: 'visitor', data: freshVisitor, action: 'duplicate' });
+                scheduleReset(2000);
+              } else {
+                playError();
+                setScanError(result.reason || 'Erro ao registrar');
+                scheduleReset(3000);
+              }
               return;
             }
-          }
 
-          const nextDir: AccessDirection = lastVLog?.direction === 'in' ? 'out' : 'in';
-          const { data: user } = await supabase.auth.getUser();
+            const newStatus = result.direction === 'in' ? 'inside' : 'closed';
+            await updateVisitorStatus.mutateAsync({ id: freshVisitor.id, status: newStatus as any });
+            await fetchRecentLogs('visitor', freshVisitor.id);
 
-          const { error: insErr } = await supabase.from('access_logs').insert({
-            subject_type: 'visitor',
-            subject_id: freshVisitor.id,
-            direction: nextDir,
-            gate_id: 'VEICULO_' + searchCode,
-            operator_id: user.user?.id || null,
-          });
-
-          if (insErr) {
-            playError();
-            setScanError(insErr.message);
+            playSuccess();
+            setScanResult({ type: 'visitor', data: { ...freshVisitor, status: newStatus as any }, action: result.direction });
+            toast({ title: result.direction === 'in' ? '✓ Entrada registrada!' : '✓ Saída registrada!', description: `${freshVisitor.fullName} (dupla validação OK)` });
             scheduleReset(3000);
             return;
           }
 
-          playSuccess();
-          setScanResult({ type: 'visitor', data: freshVisitor, action: nextDir });
-          toast({
-            title: nextDir === 'in' ? '✓ Veículo: Entrada registrada!' : '✓ Veículo: Saída registrada!',
-            description: `${freshVisitor.vehiclePlate} - ${freshVisitor.fullName}`,
+          // Create new session with vehicle as first
+          if (!existingSession) {
+            const expiresAt = new Date(Date.now() + 60_000).toISOString();
+            await supabase.from('access_sessions').insert({
+              session_type: 'visitor_driver',
+              visitor_id: freshVisitor.id,
+              first_scan: 'vehicle',
+              expires_at: expiresAt,
+              operator_id: operatorId,
+            });
+
+            playSuccess();
+            setScanResult({
+              type: 'visitor',
+              data: freshVisitor,
+              action: 'waiting_second_qr',
+              sessionInfo: { waitingFor: `Pessoal (${freshVisitor.passId})`, expiresIn: 60 },
+            });
+            toast({ title: '📷 Aguardando QR pessoal', description: 'Escaneie o QR pessoal em até 60 segundos.' });
+            scheduleReset(60_000);
+            return;
+          }
+
+          // Already waiting for person
+          playBlocked();
+          setScanResult({
+            type: 'visitor',
+            data: freshVisitor,
+            action: 'waiting_second_qr',
+            sessionInfo: { waitingFor: `Pessoal (${freshVisitor.passId})`, expiresIn: Math.max(0, Math.round((new Date(existingSession.expires_at).getTime() - Date.now()) / 1000)) },
           });
-          scheduleReset(3000);
+          scheduleReset(5000);
+          return;
+
+        // =============== CREDENCIAL (EC-) ===============
         } else if (searchCode.startsWith('EC-')) {
-          // CONSULTA DIRETA - Bypass total do cache
           let freshCredential = await fetchFreshCredential(searchCode);
           
           if (!freshCredential) {
@@ -535,7 +633,7 @@ const QRScanner = () => {
             return;
           }
 
-          // Para VEÍCULOS: buscar dados do proprietário (Cargo + Departamento)
+          // For vehicles: check owner data
           if (freshCredential.type === 'vehicle' && freshCredential.document) {
             const ownerData = await fetchOwnerByDocument(freshCredential.document);
             if (ownerData) {
@@ -549,7 +647,6 @@ const QRScanner = () => {
 
           await fetchRecentLogs('employee', freshCredential.id);
 
-          // BLOQUEIO: Credencial bloqueada (reflexo instantâneo)
           if (freshCredential.status === 'blocked') {
             playBlocked();
             setScanResult({ type: 'employee', data: freshCredential, action: 'blocked' });
@@ -562,33 +659,145 @@ const QRScanner = () => {
             return;
           }
 
-          // TOGGLE
-          const result = await executeToggle('employee', freshCredential.id);
-
-          if (!result.success) {
-            if (result.reason === 'duplicate') {
-              playBlocked();
-              setScanResult({ type: 'employee', data: freshCredential, action: 'duplicate' });
-              toast({ title: '⏱️ Aguarde', description: 'Bip repetido. Aguarde 10 segundos.' });
-              scheduleReset(2000);
-            } else {
-              playError();
-              setScanError(result.reason || 'Erro ao registrar');
-              scheduleReset(3000);
+          // === VEHICLE CREDENTIAL: create session, wait for driver ===
+          if (freshCredential.type === 'vehicle') {
+            const expiresAt = new Date(Date.now() + 30_000).toISOString();
+            try {
+              await supabase.from('access_sessions').insert({
+                session_type: 'employee_vehicle',
+                vehicle_credential_id: freshCredential.id,
+                first_scan: 'vehicle',
+                expires_at: expiresAt,
+                operator_id: operatorId,
+              });
+            } catch (e: any) {
+              // Unique index may reject if session already pending
+              const existingSession = await findPendingVehicleSession(freshCredential.id);
+              if (existingSession) {
+                playBlocked();
+                setScanResult({
+                  type: 'employee',
+                  data: freshCredential,
+                  action: 'waiting_second_qr',
+                  sessionInfo: { waitingFor: 'QR pessoal do condutor', expiresIn: Math.max(0, Math.round((new Date(existingSession.expires_at).getTime() - Date.now()) / 1000)) },
+                });
+                scheduleReset(5000);
+                return;
+              }
             }
+
+            playSuccess();
+            setScanResult({
+              type: 'employee',
+              data: freshCredential,
+              action: 'waiting_second_qr',
+              sessionInfo: { waitingFor: 'QR pessoal do condutor autorizado', expiresIn: 30 },
+            });
+            toast({ title: '📷 Aguardando condutor', description: 'Escaneie o QR pessoal do condutor em até 30 segundos.' });
+            scheduleReset(30_000);
             return;
           }
 
-          // Recarregar logs
-          await fetchRecentLogs('employee', freshCredential.id);
+          // === PERSONAL CREDENTIAL: check if there's a pending vehicle session ===
+          if (freshCredential.type === 'personal') {
+            // Check for any pending vehicle session
+            const { data: pendingSessions } = await supabase
+              .from('access_sessions')
+              .select('*')
+              .eq('session_type', 'employee_vehicle')
+              .eq('status', 'pending')
+              .gt('expires_at', new Date().toISOString())
+              .order('created_at', { ascending: false })
+              .limit(1);
 
-          playSuccess();
-          setScanResult({ type: 'employee', data: freshCredential, action: result.direction });
-          toast({
-            title: result.direction === 'in' ? '✓ Entrada registrada!' : '✓ Saída registrada!',
-            description: `${freshCredential.fullName} ${result.direction === 'in' ? 'entrou' : 'saiu'}.`,
-          });
-          scheduleReset(3000);
+            const pendingSession = pendingSessions?.[0];
+
+            if (pendingSession && pendingSession.vehicle_credential_id) {
+              // Validate driver authorization
+              const authorization = await checkAuthorizedDriver(
+                pendingSession.vehicle_credential_id,
+                freshCredential.id,
+                null
+              );
+
+              if (authorization) {
+                // Authorized! Complete session
+                await supabase
+                  .from('access_sessions')
+                  .update({
+                    status: 'completed',
+                    person_credential_id: freshCredential.id,
+                    authorization_type: authorization.authorization_type,
+                    completed_at: new Date().toISOString(),
+                  })
+                  .eq('id', pendingSession.id);
+
+                // Toggle both vehicle and person
+                const vehicleResult = await executeToggle('employee', pendingSession.vehicle_credential_id);
+                const personResult = await executeToggle('employee', freshCredential.id);
+
+                await fetchRecentLogs('employee', freshCredential.id);
+
+                playSuccess();
+                setScanResult({
+                  type: 'employee',
+                  data: freshCredential,
+                  action: personResult.success ? personResult.direction : 'in',
+                  sessionInfo: { waitingFor: '', expiresIn: 0 },
+                });
+                toast({
+                  title: personResult.direction === 'in' ? '✓ Entrada registrada!' : '✓ Saída registrada!',
+                  description: `${freshCredential.fullName} — Condutor autorizado (${authorization.authorization_type})`,
+                });
+                scheduleReset(3000);
+                return;
+              } else {
+                // Not authorized
+                await supabase
+                  .from('access_sessions')
+                  .update({
+                    status: 'denied',
+                    person_credential_id: freshCredential.id,
+                    denial_reason: 'Condutor não autorizado para este veículo',
+                    completed_at: new Date().toISOString(),
+                  })
+                  .eq('id', pendingSession.id);
+
+                playBlocked();
+                setScanResult({ type: 'employee', data: freshCredential, action: 'session_denied' });
+                toast({ title: '✕ Condutor não autorizado', description: 'Este colaborador não está autorizado a conduzir este veículo.', variant: 'destructive' });
+                scheduleReset(4000);
+                return;
+              }
+            }
+
+            // No pending vehicle session — normal pedestrian toggle
+            const result = await executeToggle('employee', freshCredential.id);
+
+            if (!result.success) {
+              if (result.reason === 'duplicate') {
+                playBlocked();
+                setScanResult({ type: 'employee', data: freshCredential, action: 'duplicate' });
+                toast({ title: '⏱️ Aguarde', description: 'Bip repetido. Aguarde 10 segundos.' });
+                scheduleReset(2000);
+              } else {
+                playError();
+                setScanError(result.reason || 'Erro ao registrar');
+                scheduleReset(3000);
+              }
+              return;
+            }
+
+            await fetchRecentLogs('employee', freshCredential.id);
+
+            playSuccess();
+            setScanResult({ type: 'employee', data: freshCredential, action: result.direction });
+            toast({
+              title: result.direction === 'in' ? '✓ Entrada registrada!' : '✓ Saída registrada!',
+              description: `${freshCredential.fullName} ${result.direction === 'in' ? 'entrou' : 'saiu'}.`,
+            });
+            scheduleReset(3000);
+          }
         }
       } catch (error: any) {
         console.error('[SCAN] Erro:', error);

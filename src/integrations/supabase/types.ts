@@ -44,6 +44,148 @@ export type Database = {
         }
         Relationships: []
       }
+      access_sessions: {
+        Row: {
+          associate_id: string | null
+          authorization_type: string | null
+          completed_at: string | null
+          created_at: string
+          denial_reason: string | null
+          expires_at: string
+          first_scan: string
+          id: string
+          operator_id: string | null
+          person_credential_id: string | null
+          session_type: string
+          status: string
+          vehicle_credential_id: string | null
+          visitor_id: string | null
+        }
+        Insert: {
+          associate_id?: string | null
+          authorization_type?: string | null
+          completed_at?: string | null
+          created_at?: string
+          denial_reason?: string | null
+          expires_at: string
+          first_scan: string
+          id?: string
+          operator_id?: string | null
+          person_credential_id?: string | null
+          session_type: string
+          status?: string
+          vehicle_credential_id?: string | null
+          visitor_id?: string | null
+        }
+        Update: {
+          associate_id?: string | null
+          authorization_type?: string | null
+          completed_at?: string | null
+          created_at?: string
+          denial_reason?: string | null
+          expires_at?: string
+          first_scan?: string
+          id?: string
+          operator_id?: string | null
+          person_credential_id?: string | null
+          session_type?: string
+          status?: string
+          vehicle_credential_id?: string | null
+          visitor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "access_sessions_associate_id_fkey"
+            columns: ["associate_id"]
+            isOneToOne: false
+            referencedRelation: "associates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "access_sessions_person_credential_id_fkey"
+            columns: ["person_credential_id"]
+            isOneToOne: false
+            referencedRelation: "employee_credentials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "access_sessions_vehicle_credential_id_fkey"
+            columns: ["vehicle_credential_id"]
+            isOneToOne: false
+            referencedRelation: "employee_credentials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "access_sessions_visitor_id_fkey"
+            columns: ["visitor_id"]
+            isOneToOne: false
+            referencedRelation: "visitors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      associates: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          document: string
+          employee_credential_id: string
+          full_name: string
+          id: string
+          pass_id: string
+          phone: string | null
+          photo_url: string | null
+          relationship_type: string
+          status: string
+          updated_at: string
+          valid_from: string | null
+          valid_until: string | null
+          validity_type: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          document: string
+          employee_credential_id: string
+          full_name: string
+          id?: string
+          pass_id: string
+          phone?: string | null
+          photo_url?: string | null
+          relationship_type: string
+          status?: string
+          updated_at?: string
+          valid_from?: string | null
+          valid_until?: string | null
+          validity_type?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          document?: string
+          employee_credential_id?: string
+          full_name?: string
+          id?: string
+          pass_id?: string
+          phone?: string | null
+          photo_url?: string | null
+          relationship_type?: string
+          status?: string
+          updated_at?: string
+          valid_from?: string | null
+          valid_until?: string | null
+          validity_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "associates_employee_credential_id_fkey"
+            columns: ["employee_credential_id"]
+            isOneToOne: false
+            referencedRelation: "employee_credentials"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action_type: Database["public"]["Enums"]["audit_action_type"]
@@ -222,6 +364,70 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      vehicle_authorized_drivers: {
+        Row: {
+          associate_id: string | null
+          authorization_type: string
+          created_at: string
+          created_by: string | null
+          driver_type: string
+          employee_credential_id: string | null
+          id: string
+          is_active: boolean
+          valid_from: string | null
+          valid_until: string | null
+          vehicle_credential_id: string
+        }
+        Insert: {
+          associate_id?: string | null
+          authorization_type: string
+          created_at?: string
+          created_by?: string | null
+          driver_type: string
+          employee_credential_id?: string | null
+          id?: string
+          is_active?: boolean
+          valid_from?: string | null
+          valid_until?: string | null
+          vehicle_credential_id: string
+        }
+        Update: {
+          associate_id?: string | null
+          authorization_type?: string
+          created_at?: string
+          created_by?: string | null
+          driver_type?: string
+          employee_credential_id?: string | null
+          id?: string
+          is_active?: boolean
+          valid_from?: string | null
+          valid_until?: string | null
+          vehicle_credential_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_authorized_drivers_associate_id_fkey"
+            columns: ["associate_id"]
+            isOneToOne: false
+            referencedRelation: "associates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_authorized_drivers_employee_credential_id_fkey"
+            columns: ["employee_credential_id"]
+            isOneToOne: false
+            referencedRelation: "employee_credentials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_authorized_drivers_vehicle_credential_id_fkey"
+            columns: ["vehicle_credential_id"]
+            isOneToOne: false
+            referencedRelation: "employee_credentials"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       visitors: {
         Row: {
@@ -419,6 +625,13 @@ export type Database = {
         | "DEPARTMENT_DELETE"
         | "BACKUP_EXPORT"
         | "ACCESS_SCAN"
+        | "ASSOCIATE_CREATE"
+        | "ASSOCIATE_UPDATE"
+        | "ASSOCIATE_DELETE"
+        | "ACCESS_SESSION_CREATE"
+        | "ACCESS_SESSION_COMPLETE"
+        | "ACCESS_SESSION_DENY"
+        | "ACCESS_SESSION_EXPIRE"
       credential_status: "allowed" | "blocked"
       credential_type: "personal" | "vehicle"
       subject_type: "visitor" | "employee"
@@ -577,6 +790,13 @@ export const Constants = {
         "DEPARTMENT_DELETE",
         "BACKUP_EXPORT",
         "ACCESS_SCAN",
+        "ASSOCIATE_CREATE",
+        "ASSOCIATE_UPDATE",
+        "ASSOCIATE_DELETE",
+        "ACCESS_SESSION_CREATE",
+        "ACCESS_SESSION_COMPLETE",
+        "ACCESS_SESSION_DENY",
+        "ACCESS_SESSION_EXPIRE",
       ],
       credential_status: ["allowed", "blocked"],
       credential_type: ["personal", "vehicle"],

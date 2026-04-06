@@ -434,9 +434,43 @@ SET search_path TO 'public'
 AS $$
 BEGIN
   IF NEW.status = 'blocked' AND (OLD.status IS NULL OR OLD.status != 'blocked') THEN
+    -- Suspend associates
     UPDATE public.associates
     SET status = 'suspended', updated_at = now()
-    WHERE employee_credential_id = NEW.id;
+    WHERE employee_credential_id = NEW.id
+      AND status = 'active';
+
+    -- Deactivate driver authorizations for the employee
+    UPDATE public.vehicle_authorized_drivers
+    SET is_active = false
+    WHERE employee_credential_id = NEW.id
+      AND is_active = true;
+
+    -- Deactivate driver authorizations for associates of this employee
+    UPDATE public.vehicle_authorized_drivers
+    SET is_active = false
+    WHERE associate_id IN (
+      SELECT id FROM public.associates WHERE employee_credential_id = NEW.id
+    )
+    AND is_active = true;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+-- Cascata: agregado suspenso/expirado → autorizações de condução desativadas
+CREATE OR REPLACE FUNCTION public.cascade_associate_deactivation()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+BEGIN
+  IF NEW.status IN ('suspended', 'expired') AND OLD.status = 'active' THEN
+    UPDATE public.vehicle_authorized_drivers
+    SET is_active = false
+    WHERE associate_id = NEW.id
+      AND is_active = true;
   END IF;
   RETURN NEW;
 END;
@@ -456,6 +490,7 @@ DROP TRIGGER IF EXISTS generate_credential_id_trigger ON public.employee_credent
 DROP TRIGGER IF EXISTS trg_generate_associate_pass_id ON public.associates;
 DROP TRIGGER IF EXISTS trg_associates_updated_at ON public.associates;
 DROP TRIGGER IF EXISTS trg_cascade_employee_deactivation ON public.employee_credentials;
+DROP TRIGGER IF EXISTS trg_cascade_associate_deactivation ON public.associates;
 
 CREATE TRIGGER update_visitors_updated_at
   BEFORE UPDATE ON public.visitors
@@ -501,12 +536,27 @@ CREATE TRIGGER trg_associates_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION public.update_updated_at();
 
--- Cascata: colaborador bloqueado → agregados suspensos
+-- Cascata: colaborador bloqueado → agregados suspensos + autorizações desativadas
 CREATE TRIGGER trg_cascade_employee_deactivation
   AFTER UPDATE ON public.employee_credentials
   FOR EACH ROW
   WHEN (NEW.status = 'blocked')
   EXECUTE FUNCTION public.cascade_employee_deactivation();
+
+-- Cascata: agregado suspenso/expirado → autorizações de condução desativadas
+CREATE TRIGGER trg_cascade_associate_deactivation
+  AFTER UPDATE ON public.associates
+  FOR EACH ROW
+  EXECUTE FUNCTION public.cascade_associate_deactivation();
+
+-- Unique constraints: impedir duplicidade de autorização ativa
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_driver_employee_vehicle
+  ON public.vehicle_authorized_drivers (vehicle_credential_id, employee_credential_id)
+  WHERE employee_credential_id IS NOT NULL AND is_active = true;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_driver_associate_vehicle
+  ON public.vehicle_authorized_drivers (vehicle_credential_id, associate_id)
+  WHERE associate_id IS NOT NULL AND is_active = true;
 
 -- ============================================================
 -- PARTE 6: DADOS INICIAIS

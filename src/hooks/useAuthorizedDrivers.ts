@@ -51,9 +51,9 @@ export const useAuthorizedDrivers = (vehicleCredentialId: string) => {
   return useQuery({
     queryKey: ['authorized_drivers', vehicleCredentialId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase
         .from('vehicle_authorized_drivers')
-        .select('*, employee_credentials(full_name, document), associates(full_name, document)')
+        .select('*, employee_credentials!vehicle_authorized_drivers_employee_credential_id_fkey(full_name, document), associates(full_name, document)') as any)
         .eq('vehicle_credential_id', vehicleCredentialId)
         .order('created_at', { ascending: false });
       if (error) throw error;

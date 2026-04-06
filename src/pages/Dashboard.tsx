@@ -63,7 +63,7 @@ const Dashboard = () => {
         </div>
 
         {/* Stats Cards — server-side aggregated */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <Card className="card-stats">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
@@ -115,6 +115,20 @@ const Dashboard = () => {
                 </div>
                 <div className="w-12 h-12 rounded-xl bg-warning/10 flex items-center justify-center">
                   <Clock className="w-6 h-6 text-warning" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="card-stats border-destructive/30 bg-destructive/5">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Expirados (Sem Uso)</p>
+                  <p className="text-3xl font-bold text-destructive">{s.visitors_expired_unused}</p>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-destructive/10 flex items-center justify-center">
+                  <Clock className="w-6 h-6 text-destructive" />
                 </div>
               </div>
             </CardContent>

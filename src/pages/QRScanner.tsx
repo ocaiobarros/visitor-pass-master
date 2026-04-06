@@ -346,9 +346,9 @@ const QRScanner = () => {
   };
 
   const checkAuthorizedDriver = async (vehicleCredentialId: string, driverCredentialId: string | null, associateId: string | null): Promise<{ authorization_type: string; driver_type: string; driverName?: string } | null> => {
-    let query = supabase
+    let query: any = supabase
       .from('vehicle_authorized_drivers')
-      .select('*, employee_credentials(full_name, status), associates(full_name, status, employee_credential_id)')
+      .select('*, employee_credentials!vehicle_authorized_drivers_employee_credential_id_fkey(full_name, status), associates(full_name, status, employee_credential_id)')
       .eq('vehicle_credential_id', vehicleCredentialId)
       .eq('is_active', true);
 

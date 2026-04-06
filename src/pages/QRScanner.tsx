@@ -782,7 +782,7 @@ const QRScanner = () => {
                 null
               );
 
-              if (authorization) {
+              if (authorization.authorized) {
                 // Authorized! Complete session
                 await supabase
                   .from('access_sessions')
@@ -809,25 +809,30 @@ const QRScanner = () => {
                 });
                 toast({
                   title: personResult.direction === 'in' ? '✓ Entrada registrada!' : '✓ Saída registrada!',
-                  description: `${freshCredential.fullName} — Condutor autorizado (${authorization.authorization_type})`,
+                  description: `${freshCredential.fullName} — Condutor ${authorization.driverName || ''} (${authorization.authorization_type})`,
                 });
                 scheduleReset(3000);
                 return;
               } else {
-                // Not authorized
+                // Not authorized — specific reason
+                const denialReason = authorization.denial_reason;
                 await supabase
                   .from('access_sessions')
                   .update({
                     status: 'denied',
                     person_credential_id: freshCredential.id,
-                    denial_reason: 'Condutor não autorizado para este veículo',
+                    denial_reason: denialReason,
                     completed_at: new Date().toISOString(),
                   })
                   .eq('id', pendingSession.id);
 
                 playBlocked();
                 setScanResult({ type: 'employee', data: freshCredential, action: 'session_denied' });
-                toast({ title: '✕ Condutor não autorizado', description: 'Este colaborador não está autorizado a conduzir este veículo.', variant: 'destructive' });
+                logAuditAction('ACCESS_SCAN', {
+                  subject_type: 'employee', subject_id: freshCredential.id,
+                  result: 'DENIED', reason: denialReason,
+                });
+                toast({ title: '✕ Acesso negado', description: denialReason, variant: 'destructive' });
                 scheduleReset(4000);
                 return;
               }

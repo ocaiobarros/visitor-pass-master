@@ -345,7 +345,7 @@ const QRScanner = () => {
     return data;
   };
 
-  const checkAuthorizedDriver = async (vehicleCredentialId: string, driverCredentialId: string | null, associateId: string | null): Promise<{ authorization_type: string; driver_type: string; driverName?: string } | null> => {
+  const checkAuthorizedDriver = async (vehicleCredentialId: string, driverCredentialId: string | null, associateId: string | null): Promise<{ authorized: true; authorization_type: string; driver_type: string; driverName?: string } | { authorized: false; denial_reason: string }> => {
     let query: any = supabase
       .from('vehicle_authorized_drivers')
       .select('*, employee_credentials!vehicle_authorized_drivers_employee_credential_id_fkey(full_name, status), associates!vehicle_authorized_drivers_associate_id_fkey(full_name, status, employee_credential_id)')
@@ -357,36 +357,51 @@ const QRScanner = () => {
     } else if (associateId) {
       query = query.eq('associate_id', associateId);
     } else {
-      return null;
+      return { authorized: false, denial_reason: 'Condutor não identificado' };
     }
 
     const { data } = await query.maybeSingle();
-    if (!data) return null;
+    if (!data) return { authorized: false, denial_reason: 'Condutor não autorizado para este veículo' };
 
     // Validate: if driver is an employee, check they're not blocked
     if (data.driver_type === 'employee' && data.employee_credentials?.status === 'blocked') {
-      return null;
+      return { authorized: false, denial_reason: `Colaborador ${data.employee_credentials.full_name} está bloqueado` };
     }
 
     // Validate: if driver is an associate, check they're active
     if (data.driver_type === 'associate') {
-      if (data.associates?.status !== 'active') return null;
+      if (data.associates?.status === 'suspended') {
+        return { authorized: false, denial_reason: `Agregado ${data.associates.full_name} está suspenso` };
+      }
+      if (data.associates?.status === 'expired') {
+        return { authorized: false, denial_reason: `Agregado ${data.associates.full_name} está expirado` };
+      }
+      if (data.associates?.status !== 'active') {
+        return { authorized: false, denial_reason: `Agregado ${data.associates.full_name} não está ativo` };
+      }
       // Also check the responsible employee is not blocked
       if (data.associates?.employee_credential_id) {
         const { data: empCred } = await supabase
           .from('employee_credentials')
-          .select('status')
+          .select('status, full_name')
           .eq('id', data.associates.employee_credential_id)
           .maybeSingle();
-        if (empCred?.status === 'blocked') return null;
+        if (empCred?.status === 'blocked') {
+          return { authorized: false, denial_reason: `Responsável ${empCred.full_name} está bloqueado` };
+        }
       }
     }
 
     // Check validity period
-    if (data.valid_from && new Date(data.valid_from) > new Date()) return null;
-    if (data.valid_until && new Date(data.valid_until) < new Date()) return null;
+    if (data.valid_from && new Date(data.valid_from) > new Date()) {
+      return { authorized: false, denial_reason: 'Autorização ainda não válida' };
+    }
+    if (data.valid_until && new Date(data.valid_until) < new Date()) {
+      return { authorized: false, denial_reason: 'Autorização vencida' };
+    }
 
     return {
+      authorized: true,
       authorization_type: data.authorization_type,
       driver_type: data.driver_type,
       driverName: data.employee_credentials?.full_name || data.associates?.full_name,
@@ -767,7 +782,7 @@ const QRScanner = () => {
                 null
               );
 
-              if (authorization) {
+              if (authorization.authorized) {
                 // Authorized! Complete session
                 await supabase
                   .from('access_sessions')
@@ -794,25 +809,30 @@ const QRScanner = () => {
                 });
                 toast({
                   title: personResult.direction === 'in' ? '✓ Entrada registrada!' : '✓ Saída registrada!',
-                  description: `${freshCredential.fullName} — Condutor autorizado (${authorization.authorization_type})`,
+                  description: `${freshCredential.fullName} — Condutor ${authorization.driverName || ''} (${authorization.authorization_type})`,
                 });
                 scheduleReset(3000);
                 return;
               } else {
-                // Not authorized
+                // Not authorized — specific reason
+                const denialReason = 'denial_reason' in authorization ? authorization.denial_reason : 'Condutor não autorizado';
                 await supabase
                   .from('access_sessions')
                   .update({
                     status: 'denied',
                     person_credential_id: freshCredential.id,
-                    denial_reason: 'Condutor não autorizado para este veículo',
+                    denial_reason: denialReason,
                     completed_at: new Date().toISOString(),
                   })
                   .eq('id', pendingSession.id);
 
                 playBlocked();
                 setScanResult({ type: 'employee', data: freshCredential, action: 'session_denied' });
-                toast({ title: '✕ Condutor não autorizado', description: 'Este colaborador não está autorizado a conduzir este veículo.', variant: 'destructive' });
+                logAuditAction('ACCESS_SCAN', {
+                  subject_type: 'employee', subject_id: freshCredential.id,
+                  result: 'DENIED', reason: denialReason,
+                });
+                toast({ title: '✕ Acesso negado', description: denialReason, variant: 'destructive' });
                 scheduleReset(4000);
                 return;
               }

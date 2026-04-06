@@ -26,8 +26,16 @@ const authLabels: Record<string, string> = {
 
 const authColors: Record<string, string> = {
   owner: 'bg-primary/10 text-primary border-primary/30',
-  delegated: 'bg-warning/10 text-warning border-warning/30',
-  corporate_pool: 'bg-accent/10 text-accent-foreground border-accent/30',
+  delegated: 'bg-accent/10 text-accent-foreground border-accent/30',
+  corporate_pool: 'bg-secondary/10 text-secondary-foreground border-secondary/30',
+};
+
+const statusLabels: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+  allowed: { label: 'Ativo', variant: 'default' },
+  active: { label: 'Ativo', variant: 'default' },
+  blocked: { label: 'Bloqueado', variant: 'destructive' },
+  suspended: { label: 'Suspenso', variant: 'destructive' },
+  expired: { label: 'Expirado', variant: 'secondary' },
 };
 
 const AuthorizedDriversPanel = ({ vehicleCredentialId, vehiclePlate }: Props) => {
@@ -41,7 +49,6 @@ const AuthorizedDriversPanel = ({ vehicleCredentialId, vehiclePlate }: Props) =>
   const personalCredentials = credentials.filter(c => c.type === 'personal' && c.status === 'allowed');
   const activeAssociates = associates.filter(a => a.status === 'active');
 
-  // IDs already authorized (active) for this vehicle
   const authorizedEmployeeIds = new Set(drivers.filter(d => d.isActive && d.employeeCredentialId).map(d => d.employeeCredentialId));
   const authorizedAssociateIds = new Set(drivers.filter(d => d.isActive && d.associateId).map(d => d.associateId));
 
@@ -73,6 +80,10 @@ const AuthorizedDriversPanel = ({ vehicleCredentialId, vehiclePlate }: Props) =>
         }
       },
     });
+  };
+
+  const isExpiredValidity = (d: { validUntil?: string }) => {
+    return d.validUntil && new Date(d.validUntil) < new Date();
   };
 
   return (
@@ -118,7 +129,10 @@ const AuthorizedDriversPanel = ({ vehicleCredentialId, vehiclePlate }: Props) =>
                       : availableAssociates.length === 0
                         ? <SelectItem value="_none" disabled>Nenhum agregado ativo disponível</SelectItem>
                         : availableAssociates.map(a => (
-                            <SelectItem key={a.id} value={a.id}>{a.fullName} — {a.document}</SelectItem>
+                            <SelectItem key={a.id} value={a.id}>
+                              {a.fullName} — {a.document}
+                              {a.employeeName ? ` (resp: ${a.employeeName})` : ''}
+                            </SelectItem>
                           ))
                     }
                   </SelectContent>
@@ -157,65 +171,95 @@ const AuthorizedDriversPanel = ({ vehicleCredentialId, vehiclePlate }: Props) =>
                 <TableHead>Condutor</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Autorização</TableHead>
+                <TableHead>Responsável</TableHead>
                 <TableHead>Validade</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {drivers.map(d => (
-                <TableRow key={d.id} className={!d.isActive ? 'opacity-60' : ''}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {d.driverType === 'employee' 
-                        ? <User className="w-4 h-4 text-primary shrink-0" />
-                        : <UsersRound className="w-4 h-4 text-warning shrink-0" />
-                      }
-                      <div>
-                        <p className="font-medium">{d.driverName || '—'}</p>
-                        {d.driverDocument && <p className="text-xs text-muted-foreground">{d.driverDocument}</p>}
+              {drivers.map(d => {
+                const expired = isExpiredValidity(d);
+                const driverStatusInfo = statusLabels[d.driverStatus || ''] || statusLabels['allowed'];
+                const effectivelyInactive = !d.isActive || expired || d.driverStatus === 'blocked' || d.driverStatus === 'suspended';
+
+                return (
+                  <TableRow key={d.id} className={effectivelyInactive ? 'opacity-60' : ''}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {d.driverType === 'employee' 
+                          ? <User className="w-4 h-4 text-primary shrink-0" />
+                          : <UsersRound className="w-4 h-4 text-accent-foreground shrink-0" />
+                        }
+                        <div>
+                          <p className="font-medium">{d.driverName || '—'}</p>
+                          {d.driverDocument && <p className="text-xs text-muted-foreground">{d.driverDocument}</p>}
+                        </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={d.driverType === 'employee' ? 'border-primary/30 text-primary' : 'border-warning/30 text-warning'}>
-                      {d.driverType === 'employee' ? 'Colaborador' : 'Agregado'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={authColors[d.authorizationType] || ''}>
-                      {authLabels[d.authorizationType] || d.authorizationType}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {d.validFrom || d.validUntil ? (
-                      <>
-                        {d.validFrom && format(new Date(d.validFrom), 'dd/MM/yy')}
-                        {d.validFrom && d.validUntil && ' — '}
-                        {d.validUntil && format(new Date(d.validUntil), 'dd/MM/yy')}
-                      </>
-                    ) : (
-                      'Permanente'
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={d.isActive ? 'default' : 'secondary'}>
-                      {d.isActive ? 'Ativo' : 'Inativo'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleStatus.mutate({ id: d.id, isActive: !d.isActive, vehicleCredentialId })}
-                      disabled={toggleStatus.isPending}
-                      title={d.isActive ? 'Desativar autorização' : 'Reativar autorização'}
-                    >
-                      {d.isActive ? <ShieldOff className="w-4 h-4 text-warning" /> : <ShieldCheck className="w-4 h-4 text-success" />}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={d.driverType === 'employee' ? 'border-primary/30 text-primary' : 'border-accent/30 text-accent-foreground'}>
+                        {d.driverType === 'employee' ? 'Colaborador' : 'Agregado'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={authColors[d.authorizationType] || ''}>
+                        {authLabels[d.authorizationType] || d.authorizationType}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {d.driverType === 'associate' && d.responsibleEmployeeName ? (
+                        <span className="text-muted-foreground">{d.responsibleEmployeeName}</span>
+                      ) : d.driverType === 'employee' ? (
+                        <span className="text-muted-foreground italic">—</span>
+                      ) : (
+                        <span className="text-muted-foreground italic">N/D</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {d.validFrom || d.validUntil ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span>
+                            {d.validFrom && format(new Date(d.validFrom), 'dd/MM/yy')}
+                            {d.validFrom && d.validUntil && ' — '}
+                            {d.validUntil && format(new Date(d.validUntil), 'dd/MM/yy')}
+                          </span>
+                          {expired && (
+                            <Badge variant="destructive" className="text-[10px] px-1 py-0 w-fit">
+                              <AlertTriangle className="w-3 h-3 mr-0.5" /> Vencida
+                            </Badge>
+                          )}
+                        </div>
+                      ) : (
+                        'Permanente'
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        <Badge variant={d.isActive ? 'default' : 'secondary'}>
+                          {d.isActive ? 'Ativo' : 'Inativo'}
+                        </Badge>
+                        {d.driverStatus && d.driverStatus !== 'allowed' && d.driverStatus !== 'active' && (
+                          <Badge variant={driverStatusInfo.variant}>
+                            {driverStatusInfo.label}
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleStatus.mutate({ id: d.id, isActive: !d.isActive, vehicleCredentialId })}
+                        disabled={toggleStatus.isPending}
+                        title={d.isActive ? 'Desativar autorização' : 'Reativar autorização'}
+                      >
+                        {d.isActive ? <ShieldOff className="w-4 h-4 text-destructive" /> : <ShieldCheck className="w-4 h-4 text-primary" />}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}

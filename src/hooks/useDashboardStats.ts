@@ -10,6 +10,7 @@ export interface DashboardStats {
   exits_today: number;
   total_access_today: number;
   employees_active: number;
+  vehicles_active: number;
   total_users: number;
   entries_yesterday: number;
   avg_per_hour: number;

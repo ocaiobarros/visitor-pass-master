@@ -27,7 +27,7 @@ const Dashboard = () => {
   const s = stats || {
     total_visitors: 0, visitors_inside: 0, visitors_outside: 0, visitors_pending: 0,
     entries_today: 0, exits_today: 0, total_access_today: 0, employees_active: 0,
-    total_users: 0, entries_yesterday: 0, avg_per_hour: 0,
+    vehicles_active: 0, total_users: 0, entries_yesterday: 0, avg_per_hour: 0,
   };
 
   return (
@@ -51,6 +51,7 @@ const Dashboard = () => {
           totalGates={1}
           visitorsInside={s.visitors_inside}
           employeesActive={s.employees_active}
+          vehiclesActive={s.vehicles_active}
         />
 
         {/* Activity Chart + Critical Events — 100% server-side */}

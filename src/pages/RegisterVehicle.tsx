@@ -66,7 +66,7 @@ const RegisterVehicle = () => {
         document: formData.document,
         vehicleMakeModel: formData.vehicleMakeModel || undefined,
         vehiclePlate: formData.vehiclePlate.toUpperCase(),
-        // Associar foto do funcionário/visitante ao veículo
+        // Associar foto do colaborador/visitante ao veículo
         photoUrl: personData?.photoUrl || undefined,
       });
 
@@ -132,7 +132,7 @@ const RegisterVehicle = () => {
                   <div className="flex items-center gap-2 text-success">
                     <CheckCircle className="w-4 h-4" />
                     <span className="text-sm font-medium">
-                      {personData.source === 'employee' ? 'Funcionário encontrado' : 'Visitante encontrado'}
+                      {personData.source === 'employee' ? 'Colaborador encontrado' : 'Visitante encontrado'}
                     </span>
                   </div>
                 </div>

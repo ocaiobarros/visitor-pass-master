@@ -36,7 +36,7 @@ interface DashboardLayoutProps {
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/visitors', label: 'Visitantes', icon: ClipboardList },
-  { href: '/employees', label: 'Funcionários', icon: Users },
+  { href: '/employees', label: 'Colaboradores', icon: Users },
   { href: '/vehicles', label: 'Veículos', icon: Car },
   { href: '/scan', label: 'Scanner QR', icon: QrCode },
   { href: '/audit', label: 'Auditoria', icon: FileText, roles: ['admin'] },
@@ -46,7 +46,7 @@ const navItems = [
 
 const registerItems = [
   { href: '/register', label: 'Visitante', icon: UserPlus },
-  { href: '/register/employee', label: 'Funcionário', icon: Users },
+  { href: '/register/employee', label: 'Colaborador', icon: Users },
   { href: '/register/vehicle', label: 'Veículo', icon: Car },
 ];
 

@@ -60,6 +60,15 @@ serve(async (req) => {
     // Get request body
     const { email, password, full_name, role } = await req.json();
 
+    // Validate role
+    const validRoles = ['admin', 'operador_acesso', 'security'];
+    if (role && !validRoles.includes(role)) {
+      return new Response(
+        JSON.stringify({ error: `Role inválida: ${role}. Valores aceitos: ${validRoles.join(', ')}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     if (!email || !password) {
       return new Response(
         JSON.stringify({ error: "Email and password are required" }),

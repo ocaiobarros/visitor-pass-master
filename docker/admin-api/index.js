@@ -117,9 +117,9 @@ app.post('/admin/create-user', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Senha deve ter pelo menos 6 caracteres' });
     }
 
-    const validRoles = ['admin', 'rh', 'security'];
+    const validRoles = ['admin', 'operador_acesso', 'security'];
     if (!validRoles.includes(role)) {
-      return res.status(400).json({ error: 'Role inválida' });
+      return res.status(400).json({ error: `Role inválida: ${role}. Valores aceitos: ${validRoles.join(', ')}` });
     }
 
     logger.info(`Criando usuário: ${email} (role: ${role})`, { 

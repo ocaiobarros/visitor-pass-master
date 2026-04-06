@@ -1,5 +1,5 @@
 import { Card, CardContent } from '@/components/ui/card';
-import { Users, Shield, DoorOpen, UserCog } from 'lucide-react';
+import { Users, Shield, DoorOpen, UserCog, Car } from 'lucide-react';
 
 interface StatusWidgetsProps {
   totalUsers: number;
@@ -7,6 +7,7 @@ interface StatusWidgetsProps {
   totalGates: number;
   visitorsInside: number;
   employeesActive: number;
+  vehiclesActive: number;
 }
 
 const StatusWidgets = ({
@@ -15,9 +16,10 @@ const StatusWidgets = ({
   totalGates,
   visitorsInside,
   employeesActive,
+  vehiclesActive,
 }: StatusWidgetsProps) => {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
       <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
         <CardContent className="pt-4 pb-4">
           <div className="flex items-center gap-3">
@@ -59,6 +61,21 @@ const StatusWidgets = ({
             <div>
               <p className="text-xs text-muted-foreground font-medium">Colaboradores</p>
               <p className="text-xl font-bold">{employeesActive}</p>
+              <p className="text-xs text-muted-foreground">Ativos</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-gradient-to-br from-accent/50 to-accent/30 border-accent/20">
+        <CardContent className="pt-4 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center">
+              <Car className="w-5 h-5 text-accent-foreground" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground font-medium">Veículos</p>
+              <p className="text-xl font-bold">{vehiclesActive}</p>
               <p className="text-xs text-muted-foreground">Ativos</p>
             </div>
           </div>

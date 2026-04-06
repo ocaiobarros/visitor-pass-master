@@ -8,8 +8,8 @@ interface PersonData {
 }
 
 /**
- * Hook para buscar dados de pessoa (funcionário ou visitante) pelo CPF.
- * Prioriza funcionário sobre visitante.
+ * Hook para buscar dados de pessoa (colaborador ou visitante) pelo CPF.
+ * Prioriza colaborador sobre visitante.
  */
 export const usePersonByDocument = (document: string) => {
   // Normaliza o CPF removendo pontos e traços

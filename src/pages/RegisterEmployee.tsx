@@ -80,10 +80,10 @@ const RegisterEmployee = () => {
 
   if (!isAdminOrRh) {
     return (
-      <DashboardLayout pageTitle="Cadastrar Funcionário">
+      <DashboardLayout pageTitle="Cadastrar Colaborador">
         <div className="flex flex-col items-center justify-center py-20">
           <h2 className="text-2xl font-bold text-foreground">Acesso Restrito</h2>
-          <p className="text-muted-foreground mt-2">Apenas RH e Administradores podem cadastrar funcionários.</p>
+          <p className="text-muted-foreground mt-2">Apenas Operadores de Acesso e Administradores podem cadastrar colaboradores.</p>
           <Button onClick={() => navigate('/dashboard')} className="mt-6">
             Voltar ao Dashboard
           </Button>
@@ -93,19 +93,19 @@ const RegisterEmployee = () => {
   }
 
   return (
-    <DashboardLayout pageTitle="Cadastrar Funcionário">
+    <DashboardLayout pageTitle="Cadastrar Colaborador">
       <div className="max-w-3xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
             <UserPlus className="w-8 h-8 text-primary" />
-            Cadastrar Funcionário
+            Cadastrar Colaborador
           </h1>
           <p className="text-muted-foreground mt-1">Cadastre um novo colaborador interno da empresa</p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Dados do Funcionário</CardTitle>
+            <CardTitle>Dados do Colaborador</CardTitle>
             <CardDescription>Informações para o crachá de identificação</CardDescription>
           </CardHeader>
           <CardContent>
@@ -115,7 +115,7 @@ const RegisterEmployee = () => {
                 <div className="relative">
                   <div className="w-32 h-32 rounded-xl bg-muted border-2 border-dashed border-border flex items-center justify-center overflow-hidden">
                     {photoUrl ? (
-                      <img src={photoUrl} alt="Foto do funcionário" className="w-full h-full object-cover" />
+                      <img src={photoUrl} alt="Foto do colaborador" className="w-full h-full object-cover" />
                     ) : (
                       <Camera className="w-8 h-8 text-muted-foreground" />
                     )}
@@ -138,7 +138,7 @@ const RegisterEmployee = () => {
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="fullName"
-                      placeholder="Nome do funcionário"
+                      placeholder="Nome do colaborador"
                       value={formData.fullName}
                       onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                       className="pl-10"

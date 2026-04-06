@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAssociates, useUpdateAssociateStatus, type Associate } from '@/hooks/useAssociates';
-import { Search, Users, Loader2, ShieldCheck, ShieldOff } from 'lucide-react';
+import { Search, Users, Loader2, ShieldCheck, ShieldOff, Eye } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -137,18 +137,25 @@ const AssociateList = () => {
                         </TableCell>
                         {isAdminOrRh && (
                           <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleToggleStatus(a)}
-                              disabled={updateStatus.isPending}
-                            >
-                              {a.status === 'active' ? (
-                                <ShieldOff className="w-4 h-4 text-warning" />
-                              ) : (
-                                <ShieldCheck className="w-4 h-4 text-success" />
-                              )}
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              <Link to={`/associate-pass/${a.id}`}>
+                                <Button variant="ghost" size="sm" title="Ver Passe">
+                                  <Eye className="w-4 h-4 text-primary" />
+                                </Button>
+                              </Link>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleToggleStatus(a)}
+                                disabled={updateStatus.isPending}
+                              >
+                                {a.status === 'active' ? (
+                                  <ShieldOff className="w-4 h-4 text-warning" />
+                                ) : (
+                                  <ShieldCheck className="w-4 h-4 text-success" />
+                                )}
+                              </Button>
+                            </div>
                           </TableCell>
                         )}
                       </TableRow>

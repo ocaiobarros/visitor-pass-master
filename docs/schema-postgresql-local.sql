@@ -227,7 +227,7 @@ CREATE TABLE IF NOT EXISTS public.associates (
   phone TEXT,
   photo_url TEXT,
   employee_credential_id UUID NOT NULL REFERENCES public.employee_credentials(id) ON DELETE CASCADE,
-  relationship_type TEXT NOT NULL CHECK (relationship_type IN ('spouse', 'father', 'mother', 'private_driver', 'other')),
+  relationship_type TEXT NOT NULL CHECK (relationship_type IN ('conjuge', 'pai', 'mae', 'motorista_particular', 'outro', 'irmao', 'irma', 'namorado', 'namorada', 'filho', 'filha')),
   validity_type TEXT NOT NULL DEFAULT 'permanent' CHECK (validity_type IN ('permanent', 'temporary')),
   valid_from TIMESTAMPTZ,
   valid_until TIMESTAMPTZ,

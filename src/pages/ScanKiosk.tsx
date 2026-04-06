@@ -565,7 +565,7 @@ const ScanKiosk = () => {
       e.preventDefault();
       const code = qrCode.toUpperCase().trim();
       
-      if (code.startsWith('VP-') || code.startsWith('VV-') || code.startsWith('EC-')) {
+      if (code.startsWith('VP-') || code.startsWith('VV-') || code.startsWith('EC-') || code.startsWith('AG-')) {
         setSearchCode(code);
       } else {
         playError();

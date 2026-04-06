@@ -325,7 +325,7 @@ const RegisterVisitor = () => {
                     </SelectContent>
                   </Select>
                 ) : (
-                  <Input id="visitToName" placeholder="Nome do funcionário" value={formData.visitToName} onChange={(e) => setFormData({ ...formData, visitToName: e.target.value })} required />
+                  <Input id="visitToName" placeholder="Nome do colaborador" value={formData.visitToName} onChange={(e) => setFormData({ ...formData, visitToName: e.target.value })} required />
                 )}
               </div>
 

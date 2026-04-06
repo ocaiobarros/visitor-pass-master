@@ -66,7 +66,7 @@ const RegisterVehicle = () => {
         document: formData.document,
         vehicleMakeModel: formData.vehicleMakeModel || undefined,
         vehiclePlate: formData.vehiclePlate.toUpperCase(),
-        // Associar foto do funcionário/visitante ao veículo
+        // Associar foto do colaborador/visitante ao veículo
         photoUrl: personData?.photoUrl || undefined,
       });
 

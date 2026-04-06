@@ -80,7 +80,7 @@ export const useCredentialByQrId = (credentialId: string) => {
       
       const credential = mapDbToCredential(data);
       
-      // Para veículos: buscar a foto do funcionário dono (mesmo CPF/documento)
+      // Para veículos: buscar a foto do colaborador dono (mesmo CPF/documento)
       if (credential.type === 'vehicle' && !credential.photoUrl && credential.document) {
         const { data: ownerData } = await supabase
           .from('employee_credentials')

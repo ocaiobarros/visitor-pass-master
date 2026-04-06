@@ -75,7 +75,7 @@ DO $$ BEGIN
     CREATE TYPE public.credential_type AS ENUM ('personal', 'vehicle');
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'subject_type') THEN
-    CREATE TYPE public.subject_type AS ENUM ('visitor', 'employee');
+    CREATE TYPE public.subject_type AS ENUM ('visitor', 'employee', 'associate');
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'visit_to_type') THEN
     CREATE TYPE public.visit_to_type AS ENUM ('setor', 'pessoa');
@@ -881,6 +881,8 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM visitors WHERE id = NEW.subject_id) THEN RAISE EXCEPTION 'Visitor % does not exist', NEW.subject_id; END IF;
   ELSIF NEW.subject_type = 'employee' THEN
     IF NOT EXISTS (SELECT 1 FROM employee_credentials WHERE id = NEW.subject_id) THEN RAISE EXCEPTION 'Employee % does not exist', NEW.subject_id; END IF;
+  ELSIF NEW.subject_type = 'associate' THEN
+    IF NOT EXISTS (SELECT 1 FROM associates WHERE id = NEW.subject_id) THEN RAISE EXCEPTION 'Associate % does not exist', NEW.subject_id; END IF;
   END IF;
   RETURN NEW;
 END;

@@ -959,6 +959,7 @@ const QRScanner = () => {
             scanResult.action === 'in' ? 'border-success/50 bg-success/5' :
             scanResult.action === 'out' ? 'border-primary/50 bg-primary/5' :
             scanResult.action === 'duplicate' ? 'border-warning/50 bg-warning/5' :
+            scanResult.action === 'waiting_second_qr' ? 'border-warning/50 bg-warning/5' :
             'border-destructive/50 bg-destructive/5'
           }>
             <CardContent className="pt-6">
@@ -966,6 +967,7 @@ const QRScanner = () => {
                 scanResult.action === 'in' ? 'bg-success' :
                 scanResult.action === 'out' ? 'bg-primary' :
                 scanResult.action === 'duplicate' ? 'bg-warning' :
+                scanResult.action === 'waiting_second_qr' ? 'bg-warning' :
                 'bg-destructive'
               }`}>
                 {scanResult.action === 'in' && '✓ ENTRADA REGISTRADA'}
@@ -973,7 +975,9 @@ const QRScanner = () => {
                 {scanResult.action === 'duplicate' && '⏱️ AGUARDE - BIP REPETIDO'}
                 {scanResult.action === 'blocked' && '✕ ACESSO NEGADO'}
                 {scanResult.action === 'expired' && '✕ PASSE EXPIRADO'}
+                {scanResult.action === 'expired_unused' && '✕ PASSE EXPIRADO (SEM USO)'}
                 {scanResult.action === 'closed' && '✕ PASSE JÁ UTILIZADO'}
+                {scanResult.action === 'waiting_second_qr' && '📷 AGUARDANDO SEGUNDO QR'}
               </div>
 
               <div className="flex items-start gap-4">

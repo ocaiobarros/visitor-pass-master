@@ -31,10 +31,12 @@ type ScanResult = {
   type: 'visitor';
   data: Visitor;
   action: ScanAction;
+  sessionInfo?: { waitingFor: string; expiresIn: number };
 } | {
   type: 'employee';
   data: EmployeeCredential;
   action: ScanAction;
+  sessionInfo?: { waitingFor: string; expiresIn: number };
 } | null;
 
 interface RecentLog {

@@ -225,9 +225,10 @@ const ScanKiosk = () => {
   };
 
   const checkAuthorizedDriver = async (vehicleCredentialId: string, driverCredentialId: string | null, associateId: string | null): Promise<{ authorized: true; authorization_type: string; driver_type: string; driverName?: string } | { authorized: false; denial_reason: string }> => {
-    let query: any = supabase
+    // Use separate queries to avoid PostgREST FK ambiguity (PGRST201)
+    let query = supabase
       .from('vehicle_authorized_drivers')
-      .select('*, employee_credentials!vehicle_authorized_drivers_employee_credential_id_fkey(full_name, status), associates!vehicle_authorized_drivers_associate_id_fkey(full_name, status, employee_credential_id)')
+      .select('*')
       .eq('vehicle_credential_id', vehicleCredentialId)
       .eq('is_active', true);
 
@@ -242,25 +243,41 @@ const ScanKiosk = () => {
     const { data } = await query.maybeSingle();
     if (!data) return { authorized: false, denial_reason: 'Condutor não autorizado para este veículo' };
 
-    if (data.driver_type === 'employee' && data.employee_credentials?.status === 'blocked') {
-      return { authorized: false, denial_reason: `Colaborador ${data.employee_credentials.full_name} bloqueado` };
+    let driverName: string | undefined;
+
+    if (data.driver_type === 'employee' && data.employee_credential_id) {
+      const { data: emp } = await supabase
+        .from('employee_credentials')
+        .select('full_name, status')
+        .eq('id', data.employee_credential_id)
+        .maybeSingle();
+      if (emp?.status === 'blocked') {
+        return { authorized: false, denial_reason: `Colaborador ${emp.full_name} bloqueado` };
+      }
+      driverName = emp?.full_name;
     }
 
-    if (data.driver_type === 'associate') {
-      if (data.associates?.status === 'suspended') {
-        return { authorized: false, denial_reason: `Agregado ${data.associates.full_name} suspenso` };
+    if (data.driver_type === 'associate' && data.associate_id) {
+      const { data: assoc } = await supabase
+        .from('associates')
+        .select('full_name, status, employee_credential_id')
+        .eq('id', data.associate_id)
+        .maybeSingle();
+      if (assoc?.status === 'suspended') {
+        return { authorized: false, denial_reason: `Agregado ${assoc.full_name} suspenso` };
       }
-      if (data.associates?.status === 'expired') {
-        return { authorized: false, denial_reason: `Agregado ${data.associates.full_name} expirado` };
+      if (assoc?.status === 'expired') {
+        return { authorized: false, denial_reason: `Agregado ${assoc.full_name} expirado` };
       }
-      if (data.associates?.status !== 'active') {
-        return { authorized: false, denial_reason: `Agregado ${data.associates.full_name} não está ativo` };
+      if (assoc?.status !== 'active') {
+        return { authorized: false, denial_reason: `Agregado ${assoc.full_name} não está ativo` };
       }
-      if (data.associates?.employee_credential_id) {
+      driverName = assoc?.full_name;
+      if (assoc?.employee_credential_id) {
         const { data: empCred } = await supabase
           .from('employee_credentials')
           .select('status, full_name')
-          .eq('id', data.associates.employee_credential_id)
+          .eq('id', assoc.employee_credential_id)
           .maybeSingle();
         if (empCred?.status === 'blocked') {
           return { authorized: false, denial_reason: `Responsável ${empCred.full_name} bloqueado` };
@@ -279,7 +296,7 @@ const ScanKiosk = () => {
       authorized: true,
       authorization_type: data.authorization_type,
       driver_type: data.driver_type,
-      driverName: data.employee_credentials?.full_name || data.associates?.full_name,
+      driverName,
     };
   };
 

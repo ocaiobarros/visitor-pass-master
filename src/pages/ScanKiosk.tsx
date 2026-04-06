@@ -194,6 +194,55 @@ const ScanKiosk = () => {
     return mapDbToCredential(data);
   };
 
+  // ============================================
+  // SESSION HELPERS
+  // ============================================
+
+  const findPendingVisitorSession = async (visitorId: string) => {
+    const { data } = await supabase
+      .from('access_sessions')
+      .select('*')
+      .eq('visitor_id', visitorId)
+      .eq('status', 'pending')
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return data;
+  };
+
+  const findPendingVehicleSession = async (vehicleCredentialId: string) => {
+    const { data } = await supabase
+      .from('access_sessions')
+      .select('*')
+      .eq('vehicle_credential_id', vehicleCredentialId)
+      .eq('status', 'pending')
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return data;
+  };
+
+  const checkAuthorizedDriver = async (vehicleCredentialId: string, driverCredentialId: string | null, associateId: string | null) => {
+    let query = supabase
+      .from('vehicle_authorized_drivers')
+      .select('*')
+      .eq('vehicle_credential_id', vehicleCredentialId)
+      .eq('is_active', true);
+
+    if (driverCredentialId) {
+      query = query.eq('employee_credential_id', driverCredentialId);
+    } else if (associateId) {
+      query = query.eq('associate_id', associateId);
+    } else {
+      return null;
+    }
+
+    const { data } = await query.maybeSingle();
+    return data;
+  };
+
   // Process scan
   useEffect(() => {
     if (!searchCode || isProcessing) return;
@@ -211,6 +260,10 @@ const ScanKiosk = () => {
       scanTimestamps.set(searchCode, now);
 
       try {
+        const { data: userData } = await supabase.auth.getUser();
+        const operatorId = userData.user?.id || null;
+
+        // =============== VISITANTE (VP- ou VV-) ===============
         if (searchCode.startsWith('VP-') || searchCode.startsWith('VV-')) {
           const field = searchCode.startsWith('VP-') ? 'pass_id' : 'vehicle_pass_id';
           const visitor = await fetchFreshVisitor(field, searchCode);
@@ -222,9 +275,10 @@ const ScanKiosk = () => {
             return;
           }
 
+          // Status checks
           if (visitor.status === 'closed' || visitor.status === 'expired_unused') {
             playBlocked();
-            setScanResult({ type: 'visitor', data: visitor, status: 'blocked', direction: 'in' });
+            setScanResult({ type: 'visitor', data: visitor, status: visitor.status === 'expired_unused' ? 'expired_unused' : 'blocked', direction: 'in' });
             scheduleReset(4000);
             return;
           }
@@ -241,23 +295,75 @@ const ScanKiosk = () => {
             return;
           }
 
-          // Deterministic toggle
+          // === VISITANTE CONDUTOR: dupla validação ===
+          if (visitor.accessType === 'driver' && visitor.vehiclePassId) {
+            const isPersonScan = searchCode.startsWith('VP-');
+            const existingSession = await findPendingVisitorSession(visitor.id);
+
+            // Second scan completes the session
+            if (existingSession) {
+              const completesSession = (isPersonScan && existingSession.first_scan === 'vehicle') ||
+                                       (!isPersonScan && existingSession.first_scan === 'person');
+
+              if (completesSession) {
+                await supabase
+                  .from('access_sessions')
+                  .update({ status: 'completed', completed_at: new Date().toISOString() })
+                  .eq('id', existingSession.id);
+
+                const direction = await getNextDirection('visitor', visitor.id);
+                const newStatus = direction === 'in' ? 'inside' as const : 'outside' as const;
+                await updateVisitorStatus.mutateAsync({ id: visitor.id, status: newStatus });
+                await createAccessLog.mutateAsync({ subjectType: 'visitor', subjectId: visitor.id, direction });
+
+                playSuccess();
+                setScanResult({ type: 'visitor', data: { ...visitor, status: newStatus }, status: 'allowed', direction });
+                scheduleReset(3000);
+                return;
+              }
+
+              // Same type scanned again — show waiting
+              playBlocked();
+              const waitingFor = isPersonScan ? `Veículo (${visitor.vehiclePassId})` : `Pessoal (${visitor.passId})`;
+              const remaining = Math.max(0, Math.round((new Date(existingSession.expires_at).getTime() - Date.now()) / 1000));
+              setScanResult({
+                type: 'visitor', data: visitor, status: 'waiting_second_qr', direction: 'in',
+                sessionInfo: { waitingFor, expiresIn: remaining },
+              });
+              scheduleReset(5000);
+              return;
+            }
+
+            // No session — create one
+            const expiresAt = new Date(Date.now() + 60_000).toISOString();
+            await supabase.from('access_sessions').insert({
+              session_type: 'visitor_driver',
+              visitor_id: visitor.id,
+              first_scan: isPersonScan ? 'person' : 'vehicle',
+              expires_at: expiresAt,
+              operator_id: operatorId,
+            });
+
+            playSuccess();
+            const waitingFor = isPersonScan ? `Veículo (${visitor.vehiclePassId})` : `Pessoal (${visitor.passId})`;
+            setScanResult({
+              type: 'visitor', data: visitor, status: 'waiting_second_qr', direction: 'in',
+              sessionInfo: { waitingFor, expiresIn: 60 },
+            });
+            scheduleReset(60_000);
+            return;
+          }
+
+          // === VISITANTE PEDESTRE: fluxo normal ===
           const direction = await getNextDirection('visitor', visitor.id);
-          
           playSuccess();
-          
-          // Update visitor status based on direction
           const newVisitorStatus = direction === 'in' ? 'inside' as const : 'outside' as const;
           await updateVisitorStatus.mutateAsync({ id: visitor.id, status: newVisitorStatus });
-          await createAccessLog.mutateAsync({
-            subjectType: 'visitor',
-            subjectId: visitor.id,
-            direction,
-          });
-
+          await createAccessLog.mutateAsync({ subjectType: 'visitor', subjectId: visitor.id, direction });
           setScanResult({ type: 'visitor', data: { ...visitor, status: newVisitorStatus }, status: 'allowed', direction });
           scheduleReset(3000);
 
+        // =============== CREDENCIAL (EC-) ===============
         } else if (searchCode.startsWith('EC-')) {
           const credential = await fetchFreshCredential(searchCode);
 
@@ -275,18 +381,109 @@ const ScanKiosk = () => {
             return;
           }
 
-          // Deterministic toggle
-          const direction = await getNextDirection('employee', credential.id);
-          
-          playSuccess();
-          await createAccessLog.mutateAsync({
-            subjectType: 'employee',
-            subjectId: credential.id,
-            direction,
-          });
+          // === VEHICLE CREDENTIAL: create session, wait for driver ===
+          if (credential.type === 'vehicle') {
+            const expiresAt = new Date(Date.now() + 30_000).toISOString();
+            const { error: insertError } = await supabase.from('access_sessions').insert({
+              session_type: 'employee_vehicle',
+              vehicle_credential_id: credential.id,
+              first_scan: 'vehicle',
+              expires_at: expiresAt,
+              operator_id: operatorId,
+            });
 
-          setScanResult({ type: 'employee', data: credential, status: 'allowed', direction });
-          scheduleReset(3000);
+            if (insertError) {
+              // Unique index may reject — session already pending
+              const existingSession = await findPendingVehicleSession(credential.id);
+              if (existingSession) {
+                playBlocked();
+                setScanResult({
+                  type: 'employee', data: credential, status: 'waiting_second_qr', direction: 'in',
+                  sessionInfo: { waitingFor: 'QR pessoal do condutor', expiresIn: Math.max(0, Math.round((new Date(existingSession.expires_at).getTime() - Date.now()) / 1000)) },
+                });
+                scheduleReset(5000);
+                return;
+              }
+            }
+
+            playSuccess();
+            setScanResult({
+              type: 'employee', data: credential, status: 'waiting_second_qr', direction: 'in',
+              sessionInfo: { waitingFor: 'QR pessoal do condutor autorizado', expiresIn: 30 },
+            });
+            scheduleReset(30_000);
+            return;
+          }
+
+          // === PERSONAL CREDENTIAL: check if there's a pending vehicle session ===
+          if (credential.type === 'personal') {
+            const { data: pendingSessions } = await supabase
+              .from('access_sessions')
+              .select('*')
+              .eq('session_type', 'employee_vehicle')
+              .eq('status', 'pending')
+              .gt('expires_at', new Date().toISOString())
+              .order('created_at', { ascending: false })
+              .limit(1);
+
+            const pendingSession = pendingSessions?.[0];
+
+            if (pendingSession && pendingSession.vehicle_credential_id) {
+              const authorization = await checkAuthorizedDriver(
+                pendingSession.vehicle_credential_id,
+                credential.id,
+                null
+              );
+
+              if (authorization) {
+                // Authorized — complete session
+                await supabase
+                  .from('access_sessions')
+                  .update({
+                    status: 'completed',
+                    person_credential_id: credential.id,
+                    authorization_type: authorization.authorization_type,
+                    completed_at: new Date().toISOString(),
+                  })
+                  .eq('id', pendingSession.id);
+
+                // Toggle both
+                const vehicleDir = await getNextDirection('employee', pendingSession.vehicle_credential_id);
+                await createAccessLog.mutateAsync({ subjectType: 'employee', subjectId: pendingSession.vehicle_credential_id, direction: vehicleDir });
+
+                const personDir = await getNextDirection('employee', credential.id);
+                await createAccessLog.mutateAsync({ subjectType: 'employee', subjectId: credential.id, direction: personDir });
+
+                playSuccess();
+                setScanResult({ type: 'employee', data: credential, status: 'allowed', direction: personDir });
+                scheduleReset(3000);
+                return;
+              } else {
+                // Not authorized
+                await supabase
+                  .from('access_sessions')
+                  .update({
+                    status: 'denied',
+                    person_credential_id: credential.id,
+                    denial_reason: 'Condutor não autorizado para este veículo',
+                    completed_at: new Date().toISOString(),
+                  })
+                  .eq('id', pendingSession.id);
+
+                playBlocked();
+                setScanResult({ type: 'employee', data: credential, status: 'session_denied', direction: 'in' });
+                scheduleReset(4000);
+                return;
+              }
+            }
+
+            // No pending vehicle session — normal pedestrian toggle
+            const direction = await getNextDirection('employee', credential.id);
+            playSuccess();
+            await createAccessLog.mutateAsync({ subjectType: 'employee', subjectId: credential.id, direction });
+            setScanResult({ type: 'employee', data: credential, status: 'allowed', direction });
+            scheduleReset(3000);
+          }
         } else {
           playError();
           setScanResult({ type: 'error', code: searchCode });

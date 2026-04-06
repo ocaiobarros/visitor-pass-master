@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useUpdateVisitorStatus } from '@/hooks/useVisitors';
 import { useCreateAccessLog } from '@/hooks/useAccessLogs';
 import { useScanFeedback } from '@/hooks/useScanFeedback';
-import { Camera, User, Car, CheckCircle, XCircle, AlertTriangle, ArrowLeft, Printer } from 'lucide-react';
+import { Camera, User, Car, CheckCircle, XCircle, AlertTriangle, ArrowLeft, Printer, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Visitor, EmployeeCredential } from '@/types/visitor';

@@ -815,7 +815,7 @@ const QRScanner = () => {
                 return;
               } else {
                 // Not authorized — specific reason
-                const denialReason = authorization.denial_reason;
+                const denialReason = 'denial_reason' in authorization ? authorization.denial_reason : 'Condutor não autorizado';
                 await supabase
                   .from('access_sessions')
                   .update({

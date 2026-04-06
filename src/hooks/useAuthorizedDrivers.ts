@@ -33,50 +33,72 @@ interface CreateDriverData {
   validUntil?: string;
 }
 
-const mapRow = (row: any): AuthorizedDriver => ({
-  id: row.id,
-  vehicleCredentialId: row.vehicle_credential_id,
-  driverType: row.driver_type,
-  employeeCredentialId: row.employee_credential_id,
-  associateId: row.associate_id,
-  authorizationType: row.authorization_type,
-  isActive: row.is_active,
-  validFrom: row.valid_from,
-  validUntil: row.valid_until,
-  createdAt: row.created_at,
-  driverName: row.employee_credentials?.full_name || row.associates?.full_name,
-  driverDocument: row.employee_credentials?.document || row.associates?.document,
-  driverStatus: row.employee_credentials?.status || row.associates?.status,
-  responsibleEmployeeName: row.associates?.responsible_employee_name,
-});
-
 export const useAuthorizedDrivers = (vehicleCredentialId: string) => {
   return useQuery({
     queryKey: ['authorized_drivers', vehicleCredentialId],
     queryFn: async () => {
-      const { data, error } = await (supabase
+      // 1. Fetch base rows (no joins — avoids PGRST201 ambiguity)
+      const { data: rows, error } = await supabase
         .from('vehicle_authorized_drivers')
-        .select('*, employee_credentials!vehicle_authorized_drivers_employee_credential_id_fkey(full_name, document, status), associates!vehicle_authorized_drivers_associate_id_fkey(full_name, document, status, employee_credential_id)') as any)
+        .select('*')
         .eq('vehicle_credential_id', vehicleCredentialId)
         .order('created_at', { ascending: false });
       if (error) throw error;
+      if (!rows || rows.length === 0) return [];
 
-      // For associates, fetch the responsible employee name
-      const rows = data || [];
-      for (const row of rows) {
-        if (row.driver_type === 'associate' && row.associates?.employee_credential_id) {
-          const { data: emp } = await supabase
-            .from('employee_credentials')
-            .select('full_name')
-            .eq('id', row.associates.employee_credential_id)
-            .maybeSingle();
-          if (emp) {
-            row.associates.responsible_employee_name = emp.full_name;
-          }
-        }
+      // 2. Collect IDs for batch lookups
+      const empIds = [...new Set(rows.filter(r => r.employee_credential_id).map(r => r.employee_credential_id!))];
+      const assocIds = [...new Set(rows.filter(r => r.associate_id).map(r => r.associate_id!))];
+
+      // 3. Batch fetch employees and associates in parallel
+      const [empResult, assocResult] = await Promise.all([
+        empIds.length > 0
+          ? supabase.from('employee_credentials').select('id, full_name, document, status').in('id', empIds)
+          : Promise.resolve({ data: [], error: null }),
+        assocIds.length > 0
+          ? supabase.from('associates').select('id, full_name, document, status, employee_credential_id').in('id', assocIds)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      const empMap = new Map((empResult.data || []).map(e => [e.id, e]));
+      const assocMap = new Map((assocResult.data || []).map(a => [a.id, a]));
+
+      // 4. For associates, fetch responsible employee names
+      const responsibleEmpIds = [...new Set(
+        (assocResult.data || []).filter(a => a.employee_credential_id).map(a => a.employee_credential_id!)
+      )].filter(id => !empMap.has(id)); // only fetch if not already loaded
+
+      if (responsibleEmpIds.length > 0) {
+        const { data: respEmps } = await supabase
+          .from('employee_credentials')
+          .select('id, full_name')
+          .in('id', responsibleEmpIds);
+        (respEmps || []).forEach(e => empMap.set(e.id, e));
       }
 
-      return rows.map(mapRow);
+      // 5. Map to domain model
+      return rows.map((row): AuthorizedDriver => {
+        const emp = row.employee_credential_id ? empMap.get(row.employee_credential_id) : null;
+        const assoc = row.associate_id ? assocMap.get(row.associate_id) : null;
+        const responsibleEmp = assoc?.employee_credential_id ? empMap.get(assoc.employee_credential_id) : null;
+
+        return {
+          id: row.id,
+          vehicleCredentialId: row.vehicle_credential_id,
+          driverType: row.driver_type as DriverType,
+          employeeCredentialId: row.employee_credential_id || undefined,
+          associateId: row.associate_id || undefined,
+          authorizationType: row.authorization_type as AuthorizationType,
+          isActive: row.is_active,
+          validFrom: row.valid_from || undefined,
+          validUntil: row.valid_until || undefined,
+          createdAt: row.created_at,
+          driverName: emp?.full_name || assoc?.full_name,
+          driverDocument: emp?.document || assoc?.document,
+          driverStatus: emp?.status || assoc?.status,
+          responsibleEmployeeName: responsibleEmp?.full_name,
+        };
+      });
     },
     enabled: !!vehicleCredentialId,
   });

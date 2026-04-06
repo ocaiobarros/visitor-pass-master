@@ -1043,21 +1043,25 @@ const QRScanner = () => {
         {/* Employee Result */}
         {scanResult?.type === 'employee' && (
           <Card className={
-            scanResult.action === 'blocked' ? 'border-destructive/50 bg-destructive/5' :
+            scanResult.action === 'blocked' || scanResult.action === 'session_denied' ? 'border-destructive/50 bg-destructive/5' :
             scanResult.action === 'duplicate' ? 'border-warning/50 bg-warning/5' :
+            scanResult.action === 'waiting_second_qr' ? 'border-warning/50 bg-warning/5' :
             scanResult.action === 'in' ? 'border-success/50 bg-success/5' :
             'border-primary/50 bg-primary/5'
           }>
             <CardContent className="pt-6">
               <div className={`mb-4 p-4 rounded-lg text-center text-white font-bold text-xl ${
-                scanResult.action === 'blocked' ? 'bg-destructive' :
+                scanResult.action === 'blocked' || scanResult.action === 'session_denied' ? 'bg-destructive' :
                 scanResult.action === 'duplicate' ? 'bg-warning' :
+                scanResult.action === 'waiting_second_qr' ? 'bg-warning' :
                 scanResult.action === 'in' ? 'bg-success' : 'bg-primary'
               }`}>
                 {scanResult.action === 'in' && '✓ ENTRADA REGISTRADA'}
                 {scanResult.action === 'out' && '✓ SAÍDA REGISTRADA'}
                 {scanResult.action === 'blocked' && '✕ ACESSO BLOQUEADO'}
                 {scanResult.action === 'duplicate' && '⏱️ AGUARDE - BIP REPETIDO'}
+                {scanResult.action === 'waiting_second_qr' && '📷 AGUARDANDO CONDUTOR'}
+                {scanResult.action === 'session_denied' && '✕ CONDUTOR NÃO AUTORIZADO'}
               </div>
 
               <div className="flex items-start gap-4">

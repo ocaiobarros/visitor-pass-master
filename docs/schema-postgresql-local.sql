@@ -453,6 +453,9 @@ DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
 DROP TRIGGER IF EXISTS generate_visitor_pass_id_trigger ON public.visitors;
 DROP TRIGGER IF EXISTS generate_visitor_vehicle_pass_id_trigger ON public.visitors;
 DROP TRIGGER IF EXISTS generate_credential_id_trigger ON public.employee_credentials;
+DROP TRIGGER IF EXISTS trg_generate_associate_pass_id ON public.associates;
+DROP TRIGGER IF EXISTS trg_associates_updated_at ON public.associates;
+DROP TRIGGER IF EXISTS trg_cascade_employee_deactivation ON public.employee_credentials;
 
 CREATE TRIGGER update_visitors_updated_at
   BEFORE UPDATE ON public.visitors
@@ -485,6 +488,25 @@ CREATE TRIGGER generate_credential_id_trigger
   FOR EACH ROW
   WHEN (NEW.credential_id IS NULL)
   EXECUTE FUNCTION public.generate_credential_id();
+
+-- Agregados: pass_id automático
+CREATE TRIGGER trg_generate_associate_pass_id
+  BEFORE INSERT ON public.associates
+  FOR EACH ROW
+  EXECUTE FUNCTION public.generate_associate_pass_id();
+
+-- Agregados: updated_at
+CREATE TRIGGER trg_associates_updated_at
+  BEFORE UPDATE ON public.associates
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_updated_at();
+
+-- Cascata: colaborador bloqueado → agregados suspensos
+CREATE TRIGGER trg_cascade_employee_deactivation
+  AFTER UPDATE ON public.employee_credentials
+  FOR EACH ROW
+  WHEN (NEW.status = 'blocked')
+  EXECUTE FUNCTION public.cascade_employee_deactivation();
 
 -- ============================================================
 -- PARTE 6: DADOS INICIAIS

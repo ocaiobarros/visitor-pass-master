@@ -3,7 +3,7 @@ export type VisitorStatus = 'pending' | 'inside' | 'outside' | 'closed' | 'expir
 export type CredentialType = 'personal' | 'vehicle';
 export type CredentialStatus = 'allowed' | 'blocked';
 export type AccessDirection = 'in' | 'out';
-export type SubjectType = 'visitor' | 'employee';
+export type SubjectType = 'visitor' | 'employee' | 'associate';
 export type VisitToType = 'setor' | 'pessoa';
 export type VisitorAccessType = 'pedestrian' | 'driver';
 

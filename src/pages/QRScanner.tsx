@@ -880,7 +880,194 @@ const QRScanner = () => {
               description: `${freshCredential.fullName} ${result.direction === 'in' ? 'entrou' : 'saiu'}.`,
             });
             scheduleReset(3000);
+        }
+
+        // =============== AGREGADO (AG-) ===============
+        } else if (searchCode.startsWith('AG-')) {
+          const { data: assocData, error: assocError } = await supabase
+            .from('associates')
+            .select('*, employee_credentials!associates_employee_credential_id_fkey(full_name, status)')
+            .eq('pass_id', searchCode)
+            .maybeSingle();
+
+          if (assocError || !assocData) {
+            playError();
+            setScanError(`Agregado ${searchCode} não encontrado`);
+            scheduleReset(3000);
+            return;
           }
+
+          const empData = (assocData as any).employee_credentials;
+
+          // Status checks
+          if (assocData.status === 'suspended') {
+            playBlocked();
+            setScanError(`Agregado ${assocData.full_name} está suspenso`);
+            logAuditAction('ACCESS_SCAN', { subject_type: 'associate', subject_id: assocData.id, result: 'DENIED', reason: 'suspended' });
+            scheduleReset(3000);
+            return;
+          }
+          if (assocData.status === 'expired') {
+            playBlocked();
+            setScanError(`Agregado ${assocData.full_name} está expirado`);
+            logAuditAction('ACCESS_SCAN', { subject_type: 'associate', subject_id: assocData.id, result: 'DENIED', reason: 'expired' });
+            scheduleReset(3000);
+            return;
+          }
+          if (assocData.status !== 'active') {
+            playBlocked();
+            setScanError(`Agregado ${assocData.full_name} não está ativo`);
+            scheduleReset(3000);
+            return;
+          }
+
+          // Check responsible employee
+          if (empData?.status === 'blocked') {
+            playBlocked();
+            setScanError(`Responsável ${empData.full_name} está bloqueado`);
+            logAuditAction('ACCESS_SCAN', { subject_type: 'associate', subject_id: assocData.id, result: 'DENIED', reason: `Responsável ${empData.full_name} bloqueado` });
+            scheduleReset(3000);
+            return;
+          }
+
+          // Validity check
+          if (assocData.validity_type === 'temporary') {
+            if (assocData.valid_from && new Date(assocData.valid_from) > new Date()) {
+              playBlocked();
+              setScanError('Autorização ainda não válida');
+              scheduleReset(3000);
+              return;
+            }
+            if (assocData.valid_until && new Date(assocData.valid_until) < new Date()) {
+              playBlocked();
+              setScanError('Autorização vencida');
+              scheduleReset(3000);
+              return;
+            }
+          }
+
+          await fetchRecentLogs('associate' as any, assocData.id);
+
+          // Check pending vehicle session
+          const { data: pendingSessions } = await supabase
+            .from('access_sessions')
+            .select('*')
+            .eq('session_type', 'employee_vehicle')
+            .eq('status', 'pending')
+            .gt('expires_at', new Date().toISOString())
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          const pendingSession = pendingSessions?.[0];
+
+          if (pendingSession && pendingSession.vehicle_credential_id) {
+            const authorization = await checkAuthorizedDriver(
+              pendingSession.vehicle_credential_id,
+              null,
+              assocData.id
+            );
+
+            if (authorization.authorized) {
+              await supabase
+                .from('access_sessions')
+                .update({
+                  status: 'completed',
+                  associate_id: assocData.id,
+                  authorization_type: authorization.authorization_type,
+                  completed_at: new Date().toISOString(),
+                })
+                .eq('id', pendingSession.id);
+
+              // Toggle vehicle
+              await executeToggle('employee', pendingSession.vehicle_credential_id);
+
+              // Toggle associate
+              const assocResult = await executeToggle('associate' as any, assocData.id);
+
+              await fetchRecentLogs('associate' as any, assocData.id);
+
+              const displayData: EmployeeCredential = {
+                id: assocData.id,
+                credentialId: assocData.pass_id,
+                type: 'personal',
+                fullName: assocData.full_name,
+                document: assocData.document,
+                jobTitle: `Agregado de ${empData?.full_name || ''}`,
+                status: 'allowed',
+                createdAt: new Date(assocData.created_at),
+                updatedAt: new Date(assocData.updated_at),
+              };
+
+              playSuccess();
+              setScanResult({
+                type: 'employee',
+                data: displayData,
+                action: assocResult.success ? assocResult.direction : 'in',
+              });
+              toast({
+                title: assocResult.direction === 'in' ? '✓ Entrada registrada!' : '✓ Saída registrada!',
+                description: `${assocData.full_name} — Condutor autorizado (${authorization.authorization_type})`,
+              });
+              scheduleReset(3000);
+              return;
+            } else {
+              const denialReason = 'denial_reason' in authorization ? authorization.denial_reason : 'Condutor não autorizado';
+              await supabase
+                .from('access_sessions')
+                .update({
+                  status: 'denied',
+                  associate_id: assocData.id,
+                  denial_reason: denialReason,
+                  completed_at: new Date().toISOString(),
+                })
+                .eq('id', pendingSession.id);
+
+              playBlocked();
+              setScanError(denialReason);
+              logAuditAction('ACCESS_SCAN', { subject_type: 'associate', subject_id: assocData.id, result: 'DENIED', reason: denialReason });
+              toast({ title: '✕ Acesso negado', description: denialReason, variant: 'destructive' });
+              scheduleReset(4000);
+              return;
+            }
+          }
+
+          // No pending vehicle session — normal pedestrian toggle
+          const result = await executeToggle('associate' as any, assocData.id);
+
+          if (!result.success) {
+            if (result.reason === 'duplicate') {
+              playBlocked();
+              toast({ title: '⏱️ Aguarde', description: 'Bip repetido. Aguarde 10 segundos.' });
+              scheduleReset(2000);
+            } else {
+              playError();
+              setScanError(result.reason || 'Erro ao registrar');
+              scheduleReset(3000);
+            }
+            return;
+          }
+
+          await fetchRecentLogs('associate' as any, assocData.id);
+
+          const displayData: EmployeeCredential = {
+            id: assocData.id,
+            credentialId: assocData.pass_id,
+            type: 'personal',
+            fullName: assocData.full_name,
+            document: assocData.document,
+            jobTitle: `Agregado de ${empData?.full_name || ''}`,
+            status: 'allowed',
+            createdAt: new Date(assocData.created_at),
+            updatedAt: new Date(assocData.updated_at),
+          };
+
+          playSuccess();
+          setScanResult({ type: 'employee', data: displayData, action: result.direction });
+          toast({
+            title: result.direction === 'in' ? '✓ Entrada registrada!' : '✓ Saída registrada!',
+            description: `${assocData.full_name} ${result.direction === 'in' ? 'entrou' : 'saiu'}.`,
+          });
+          scheduleReset(3000);
         }
       } catch (error: any) {
         console.error('[SCAN] Erro:', error);
@@ -906,9 +1093,9 @@ const QRScanner = () => {
 
     const code = qrCode.toUpperCase().trim();
     
-    if (!code.startsWith('VP-') && !code.startsWith('EC-') && !code.startsWith('VV-')) {
+    if (!code.startsWith('VP-') && !code.startsWith('EC-') && !code.startsWith('VV-') && !code.startsWith('AG-')) {
       playError();
-      setScanError('Código inválido. Use VP-, VV- ou EC-XXXXXXXX.');
+      setScanError('Código inválido. Use VP-, VV-, EC- ou AG-XXXXXXXX.');
       setQrCode('');
       scheduleReset(3000);
       return;
@@ -922,7 +1109,7 @@ const QRScanner = () => {
     const normalized = code.toUpperCase().trim();
     clearScan();
     
-    if (normalized.startsWith('VP-') || normalized.startsWith('EC-') || normalized.startsWith('VV-')) {
+    if (normalized.startsWith('VP-') || normalized.startsWith('EC-') || normalized.startsWith('VV-') || normalized.startsWith('AG-')) {
       setSearchCode(normalized);
     } else {
       playError();

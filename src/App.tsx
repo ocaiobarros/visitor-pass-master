@@ -27,6 +27,7 @@ import AuditLogs from "./pages/AuditLogs";
 import Reports from "./pages/Reports";
 import InstallWizard from "./pages/InstallWizard";
 import AssociateList from "./pages/AssociateList";
+import AssociatePass from "./pages/AssociatePass";
 import RegisterAssociate from "./pages/RegisterAssociate";
 import NotFound from "./pages/NotFound";
 
@@ -104,6 +105,7 @@ const App = () => (
                       {/* Rotas públicas de passes (não requerem login) */}
                       <Route path="/pass/:id" element={<VisitorPass />} />
                       <Route path="/credential/:id" element={<CredentialPass />} />
+                      <Route path="/associate-pass/:id" element={<AssociatePass />} />
                       
                       {/* Protected routes - requerem autenticação */}
                       <Route path="/dashboard" element={

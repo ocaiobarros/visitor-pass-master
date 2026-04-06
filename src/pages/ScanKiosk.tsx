@@ -542,6 +542,172 @@ const ScanKiosk = () => {
             setScanResult({ type: 'employee', data: credential, status: 'allowed', direction });
             scheduleReset(3000);
           }
+        // =============== AGREGADO (AG-) ===============
+        } else if (searchCode.startsWith('AG-')) {
+          const { data: assocData, error: assocError } = await supabase
+            .from('associates')
+            .select('*, employee_credentials!associates_employee_credential_id_fkey(full_name, status)')
+            .eq('pass_id', searchCode)
+            .maybeSingle();
+
+          if (assocError || !assocData) {
+            playError();
+            setScanResult({ type: 'error', code: searchCode });
+            scheduleReset(3000);
+            return;
+          }
+
+          const empData = (assocData as any).employee_credentials;
+
+          // Check associate status
+          if (assocData.status === 'suspended') {
+            playBlocked();
+            setScanResult({ type: 'error', code: searchCode });
+            scheduleReset(3000);
+            return;
+          }
+          if (assocData.status === 'expired') {
+            playBlocked();
+            setScanResult({ type: 'error', code: searchCode });
+            scheduleReset(3000);
+            return;
+          }
+          if (assocData.status !== 'active') {
+            playBlocked();
+            setScanResult({ type: 'error', code: searchCode });
+            scheduleReset(3000);
+            return;
+          }
+
+          // Check responsible employee status
+          if (empData?.status === 'blocked') {
+            playBlocked();
+            setScanResult({ type: 'error', code: searchCode });
+            scheduleReset(3000);
+            return;
+          }
+
+          // Check validity
+          if (assocData.validity_type === 'temporary') {
+            if (assocData.valid_from && new Date(assocData.valid_from) > new Date()) {
+              playBlocked();
+              setScanResult({ type: 'error', code: searchCode });
+              scheduleReset(3000);
+              return;
+            }
+            if (assocData.valid_until && new Date(assocData.valid_until) < new Date()) {
+              playBlocked();
+              setScanResult({ type: 'error', code: searchCode });
+              scheduleReset(3000);
+              return;
+            }
+          }
+
+          // Check pending vehicle session — associate as driver
+          const { data: pendingSessions } = await supabase
+            .from('access_sessions')
+            .select('*')
+            .eq('session_type', 'employee_vehicle')
+            .eq('status', 'pending')
+            .gt('expires_at', new Date().toISOString())
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          const pendingSession = pendingSessions?.[0];
+
+          if (pendingSession && pendingSession.vehicle_credential_id) {
+            const authorization = await checkAuthorizedDriver(
+              pendingSession.vehicle_credential_id,
+              null,
+              assocData.id
+            );
+
+            if (authorization.authorized) {
+              await supabase
+                .from('access_sessions')
+                .update({
+                  status: 'completed',
+                  associate_id: assocData.id,
+                  authorization_type: authorization.authorization_type,
+                  completed_at: new Date().toISOString(),
+                })
+                .eq('id', pendingSession.id);
+
+              // Toggle vehicle
+              const vehicleDir = await getNextDirection('employee', pendingSession.vehicle_credential_id);
+              await createAccessLog.mutateAsync({ subjectType: 'employee', subjectId: pendingSession.vehicle_credential_id, direction: vehicleDir });
+
+              // Toggle associate
+              const assocDir = await getNextDirection('associate' as any, assocData.id);
+              const { data: user } = await supabase.auth.getUser();
+              await supabase.from('access_logs').insert({
+                subject_type: 'associate' as any,
+                subject_id: assocData.id,
+                direction: assocDir,
+                gate_id: 'GUARITA_01',
+                operator_id: user.user?.id || null,
+              });
+
+              playSuccess();
+              // Build a credential-like object for display
+              const displayData: EmployeeCredential = {
+                id: assocData.id,
+                credentialId: assocData.pass_id,
+                type: 'personal',
+                fullName: assocData.full_name,
+                document: assocData.document,
+                status: 'allowed',
+                createdAt: new Date(assocData.created_at),
+                updatedAt: new Date(assocData.updated_at),
+              };
+              setScanResult({ type: 'employee', data: displayData, status: 'allowed', direction: assocDir });
+              scheduleReset(3000);
+              return;
+            } else {
+              const denialReason = 'denial_reason' in authorization ? authorization.denial_reason : 'Condutor não autorizado';
+              await supabase
+                .from('access_sessions')
+                .update({
+                  status: 'denied',
+                  associate_id: assocData.id,
+                  denial_reason: denialReason,
+                  completed_at: new Date().toISOString(),
+                })
+                .eq('id', pendingSession.id);
+
+              playBlocked();
+              setScanResult({ type: 'error', code: searchCode });
+              scheduleReset(4000);
+              return;
+            }
+          }
+
+          // No pending vehicle session — normal pedestrian access for associate
+          const direction = await getNextDirection('associate' as any, assocData.id);
+          const { data: user } = await supabase.auth.getUser();
+          await supabase.from('access_logs').insert({
+            subject_type: 'associate' as any,
+            subject_id: assocData.id,
+            direction,
+            gate_id: 'GUARITA_01',
+            operator_id: user.user?.id || null,
+          });
+
+          playSuccess();
+          const displayData: EmployeeCredential = {
+            id: assocData.id,
+            credentialId: assocData.pass_id,
+            type: 'personal',
+            fullName: assocData.full_name,
+            document: assocData.document,
+            jobTitle: `Agregado de ${empData?.full_name || ''}`,
+            status: 'allowed',
+            createdAt: new Date(assocData.created_at),
+            updatedAt: new Date(assocData.updated_at),
+          };
+          setScanResult({ type: 'employee', data: displayData, status: 'allowed', direction });
+          scheduleReset(3000);
+
         } else {
           playError();
           setScanResult({ type: 'error', code: searchCode });
@@ -565,7 +731,7 @@ const ScanKiosk = () => {
       e.preventDefault();
       const code = qrCode.toUpperCase().trim();
       
-      if (code.startsWith('VP-') || code.startsWith('VV-') || code.startsWith('EC-')) {
+      if (code.startsWith('VP-') || code.startsWith('VV-') || code.startsWith('EC-') || code.startsWith('AG-')) {
         setSearchCode(code);
       } else {
         playError();

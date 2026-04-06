@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 export type AssociateStatus = 'active' | 'suspended' | 'expired';
-export type RelationshipType = 'conjuge' | 'pai' | 'mae' | 'motorista_particular' | 'outro';
+export type RelationshipType = 'conjuge' | 'pai' | 'mae' | 'motorista_particular' | 'outro' | 'irmao' | 'irma' | 'namorado' | 'namorada' | 'filho' | 'filha';
 export type ValidityType = 'permanent' | 'temporary';
 
 export interface Associate {

@@ -1113,7 +1113,6 @@ const QRScanner = () => {
                   </div>
                 )}
               </div>
-            </div>
 
               {recentLogs.length > 0 && (
                 <div className="mt-4 pt-4 border-t">

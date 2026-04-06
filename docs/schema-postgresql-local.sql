@@ -826,6 +826,74 @@ $$;
 DROP TRIGGER IF EXISTS trg_validate_access_log_subject ON public.access_logs;
 CREATE TRIGGER trg_validate_access_log_subject BEFORE INSERT ON public.access_logs FOR EACH ROW EXECUTE FUNCTION public.validate_access_log_subject();
 
+-- Função de auditoria automática (trigger para INSERT/UPDATE/DELETE)
+CREATE OR REPLACE FUNCTION public.audit_trigger_func()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
+DECLARE
+  v_action audit_action_type;
+  v_details JSONB;
+  v_user_id UUID;
+BEGIN
+  v_action := CASE
+    WHEN TG_TABLE_NAME = 'visitors' AND TG_OP = 'INSERT' THEN 'VISITOR_CREATE'
+    WHEN TG_TABLE_NAME = 'visitors' AND TG_OP = 'UPDATE' THEN 'VISITOR_UPDATE'
+    WHEN TG_TABLE_NAME = 'visitors' AND TG_OP = 'DELETE' THEN 'VISITOR_DELETE'
+    WHEN TG_TABLE_NAME = 'employee_credentials' AND TG_OP = 'INSERT' THEN 'EMPLOYEE_CREATE'
+    WHEN TG_TABLE_NAME = 'employee_credentials' AND TG_OP = 'UPDATE' THEN 'EMPLOYEE_UPDATE'
+    WHEN TG_TABLE_NAME = 'employee_credentials' AND TG_OP = 'DELETE' THEN 'EMPLOYEE_DELETE'
+    WHEN TG_TABLE_NAME = 'departments' AND TG_OP = 'INSERT' THEN 'DEPARTMENT_CREATE'
+    WHEN TG_TABLE_NAME = 'departments' AND TG_OP = 'DELETE' THEN 'DEPARTMENT_DELETE'
+    WHEN TG_TABLE_NAME = 'access_logs' AND TG_OP = 'INSERT' THEN 'ACCESS_SCAN'
+    WHEN TG_TABLE_NAME = 'associates' AND TG_OP = 'INSERT' THEN 'ASSOCIATE_CREATE'
+    WHEN TG_TABLE_NAME = 'associates' AND TG_OP = 'UPDATE' THEN 'ASSOCIATE_UPDATE'
+    WHEN TG_TABLE_NAME = 'associates' AND TG_OP = 'DELETE' THEN 'ASSOCIATE_DELETE'
+    WHEN TG_TABLE_NAME = 'access_sessions' AND TG_OP = 'INSERT' THEN 'ACCESS_SESSION_CREATE'
+    WHEN TG_TABLE_NAME = 'access_sessions' AND TG_OP = 'UPDATE' THEN
+      CASE
+        WHEN NEW.status = 'completed' THEN 'ACCESS_SESSION_COMPLETE'
+        WHEN NEW.status = 'denied' THEN 'ACCESS_SESSION_DENY'
+        WHEN NEW.status = 'expired' THEN 'ACCESS_SESSION_EXPIRE'
+        ELSE 'CONFIG_UPDATE'
+      END
+    ELSE 'CONFIG_UPDATE'
+  END;
+
+  v_user_id := public.current_user_id();
+
+  IF TG_OP = 'DELETE' THEN
+    v_details := jsonb_build_object('table', TG_TABLE_NAME, 'operation', TG_OP, 'old_data', to_jsonb(OLD));
+  ELSIF TG_OP = 'INSERT' THEN
+    v_details := jsonb_build_object('table', TG_TABLE_NAME, 'operation', TG_OP, 'new_data', to_jsonb(NEW));
+  ELSE
+    v_details := jsonb_build_object('table', TG_TABLE_NAME, 'operation', TG_OP, 'old_data', to_jsonb(OLD), 'new_data', to_jsonb(NEW));
+  END IF;
+
+  INSERT INTO audit_logs (action_type, user_id, details) VALUES (v_action, v_user_id, v_details);
+
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END;
+$$;
+
+-- Audit triggers para todas as tabelas de negócio
+DROP TRIGGER IF EXISTS audit_trigger_visitors ON public.visitors;
+CREATE TRIGGER audit_trigger_visitors AFTER INSERT OR UPDATE OR DELETE ON public.visitors FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func();
+
+DROP TRIGGER IF EXISTS audit_trigger_employee_credentials ON public.employee_credentials;
+CREATE TRIGGER audit_trigger_employee_credentials AFTER INSERT OR UPDATE OR DELETE ON public.employee_credentials FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func();
+
+DROP TRIGGER IF EXISTS audit_trigger_departments ON public.departments;
+CREATE TRIGGER audit_trigger_departments AFTER INSERT OR DELETE ON public.departments FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func();
+
+DROP TRIGGER IF EXISTS audit_trigger_access_logs ON public.access_logs;
+CREATE TRIGGER audit_trigger_access_logs AFTER INSERT ON public.access_logs FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func();
+
+DROP TRIGGER IF EXISTS audit_trigger_associates ON public.associates;
+CREATE TRIGGER audit_trigger_associates AFTER INSERT OR UPDATE OR DELETE ON public.associates FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func();
+
+DROP TRIGGER IF EXISTS audit_trigger_access_sessions ON public.access_sessions;
+CREATE TRIGGER audit_trigger_access_sessions AFTER INSERT OR UPDATE ON public.access_sessions FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func();
+
 CREATE OR REPLACE FUNCTION public.report_access_summary(p_start date, p_end date)
 RETURNS TABLE(day date, total_entries bigint, total_exits bigint, unique_visitors bigint, unique_employees bigint)
 LANGUAGE sql SECURITY DEFINER SET search_path TO 'public' AS $$

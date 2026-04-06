@@ -297,6 +297,24 @@ const QRScanner = () => {
     };
   };
 
+  // Para veículos: buscar dados do proprietário pelo documento
+  const fetchOwnerByDocument = async (document: string): Promise<{ jobTitle?: string; department?: { id: string; name: string } } | null> => {
+    const { data: credential } = await supabase
+      .from('employee_credentials')
+      .select('job_title, departments(id, name)')
+      .eq('document', document)
+      .eq('type', 'personal')
+      .maybeSingle();
+    
+    if (credential) {
+      return {
+        jobTitle: credential.job_title || undefined,
+        department: credential.departments ? { id: credential.departments.id, name: credential.departments.name } : undefined,
+      };
+    }
+    return null;
+  };
+
   // ============================================
   // SESSION HELPERS
   // ============================================

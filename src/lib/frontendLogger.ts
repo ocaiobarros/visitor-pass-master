@@ -286,13 +286,9 @@ const getLogEndpoint = (): string => {
     return `${adminApiUrl}/logs`;
   }
   
-  // Fallback: mesmo host, porta 8000 (Kong)
-  if (typeof window !== 'undefined') {
-    const { protocol, hostname } = window.location;
-    return `${protocol}//${hostname}:8000/admin/v1/logs`;
-  }
-  
-  return '/admin/v1/logs';
+  // No Lovable Cloud, não há endpoint de logs externo
+  // No self-hosted, o frontendLogger só loga no console
+  return '';
 };
 
 // Singleton instance

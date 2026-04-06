@@ -9,7 +9,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useAuthorizedDrivers, useCreateAuthorizedDriver, useToggleDriverStatus, type AuthorizationType, type DriverType } from '@/hooks/useAuthorizedDrivers';
 import { useEmployeeCredentials } from '@/hooks/useEmployeeCredentials';
 import { useAssociates } from '@/hooks/useAssociates';
-import { Plus, ShieldCheck, ShieldOff, Loader2, Car } from 'lucide-react';
+import { Plus, ShieldCheck, ShieldOff, Loader2, Car, User, UsersRound, AlertTriangle } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
 
 interface Props {
   vehicleCredentialId: string;
@@ -22,20 +24,34 @@ const authLabels: Record<string, string> = {
   corporate_pool: 'Pool Corporativo',
 };
 
+const authColors: Record<string, string> = {
+  owner: 'bg-primary/10 text-primary border-primary/30',
+  delegated: 'bg-warning/10 text-warning border-warning/30',
+  corporate_pool: 'bg-accent/10 text-accent-foreground border-accent/30',
+};
+
 const AuthorizedDriversPanel = ({ vehicleCredentialId, vehiclePlate }: Props) => {
   const { data: drivers = [], isLoading } = useAuthorizedDrivers(vehicleCredentialId);
   const createDriver = useCreateAuthorizedDriver();
   const toggleStatus = useToggleDriverStatus();
   const { data: credentials = [] } = useEmployeeCredentials();
   const { data: associates = [] } = useAssociates();
+  const { toast } = useToast();
 
   const personalCredentials = credentials.filter(c => c.type === 'personal' && c.status === 'allowed');
   const activeAssociates = associates.filter(a => a.status === 'active');
+
+  // IDs already authorized (active) for this vehicle
+  const authorizedEmployeeIds = new Set(drivers.filter(d => d.isActive && d.employeeCredentialId).map(d => d.employeeCredentialId));
+  const authorizedAssociateIds = new Set(drivers.filter(d => d.isActive && d.associateId).map(d => d.associateId));
 
   const [open, setOpen] = useState(false);
   const [driverType, setDriverType] = useState<DriverType>('employee');
   const [selectedId, setSelectedId] = useState('');
   const [authType, setAuthType] = useState<AuthorizationType>('owner');
+
+  const availableEmployees = personalCredentials.filter(c => !authorizedEmployeeIds.has(c.id));
+  const availableAssociates = activeAssociates.filter(a => !authorizedAssociateIds.has(a.id));
 
   const handleAdd = () => {
     if (!selectedId) return;
@@ -50,6 +66,11 @@ const AuthorizedDriversPanel = ({ vehicleCredentialId, vehiclePlate }: Props) =>
       onSuccess: () => {
         setOpen(false);
         setSelectedId('');
+      },
+      onError: (error: any) => {
+        if (error.message?.includes('duplicate') || error.message?.includes('unique')) {
+          toast({ title: 'Condutor já autorizado', description: 'Esta pessoa já possui autorização ativa para este veículo.', variant: 'destructive' });
+        }
       },
     });
   };
@@ -89,12 +110,16 @@ const AuthorizedDriversPanel = ({ vehicleCredentialId, vehiclePlate }: Props) =>
                   <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                   <SelectContent>
                     {driverType === 'employee'
-                      ? personalCredentials.map(c => (
-                          <SelectItem key={c.id} value={c.id}>{c.fullName} — {c.document}</SelectItem>
-                        ))
-                      : activeAssociates.map(a => (
-                          <SelectItem key={a.id} value={a.id}>{a.fullName} — {a.document}</SelectItem>
-                        ))
+                      ? availableEmployees.length === 0
+                        ? <SelectItem value="_none" disabled>Nenhum colaborador disponível</SelectItem>
+                        : availableEmployees.map(c => (
+                            <SelectItem key={c.id} value={c.id}>{c.fullName} — {c.document}</SelectItem>
+                          ))
+                      : availableAssociates.length === 0
+                        ? <SelectItem value="_none" disabled>Nenhum agregado ativo disponível</SelectItem>
+                        : availableAssociates.map(a => (
+                            <SelectItem key={a.id} value={a.id}>{a.fullName} — {a.document}</SelectItem>
+                          ))
                     }
                   </SelectContent>
                 </Select>
@@ -112,7 +137,7 @@ const AuthorizedDriversPanel = ({ vehicleCredentialId, vehiclePlate }: Props) =>
                 </Select>
               </div>
 
-              <Button onClick={handleAdd} disabled={!selectedId || createDriver.isPending} className="w-full gap-2">
+              <Button onClick={handleAdd} disabled={!selectedId || selectedId === '_none' || createDriver.isPending} className="w-full gap-2">
                 {createDriver.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
                 Autorizar Condutor
               </Button>
@@ -129,20 +154,49 @@ const AuthorizedDriversPanel = ({ vehicleCredentialId, vehiclePlate }: Props) =>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nome</TableHead>
+                <TableHead>Condutor</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Autorização</TableHead>
+                <TableHead>Validade</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {drivers.map(d => (
-                <TableRow key={d.id}>
-                  <TableCell className="font-medium">{d.driverName || '—'}</TableCell>
-                  <TableCell>{d.driverType === 'employee' ? 'Colaborador' : 'Agregado'}</TableCell>
+                <TableRow key={d.id} className={!d.isActive ? 'opacity-60' : ''}>
                   <TableCell>
-                    <Badge variant="outline">{authLabels[d.authorizationType] || d.authorizationType}</Badge>
+                    <div className="flex items-center gap-2">
+                      {d.driverType === 'employee' 
+                        ? <User className="w-4 h-4 text-primary shrink-0" />
+                        : <UsersRound className="w-4 h-4 text-warning shrink-0" />
+                      }
+                      <div>
+                        <p className="font-medium">{d.driverName || '—'}</p>
+                        {d.driverDocument && <p className="text-xs text-muted-foreground">{d.driverDocument}</p>}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={d.driverType === 'employee' ? 'border-primary/30 text-primary' : 'border-warning/30 text-warning'}>
+                      {d.driverType === 'employee' ? 'Colaborador' : 'Agregado'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={authColors[d.authorizationType] || ''}>
+                      {authLabels[d.authorizationType] || d.authorizationType}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {d.validFrom || d.validUntil ? (
+                      <>
+                        {d.validFrom && format(new Date(d.validFrom), 'dd/MM/yy')}
+                        {d.validFrom && d.validUntil && ' — '}
+                        {d.validUntil && format(new Date(d.validUntil), 'dd/MM/yy')}
+                      </>
+                    ) : (
+                      'Permanente'
+                    )}
                   </TableCell>
                   <TableCell>
                     <Badge variant={d.isActive ? 'default' : 'secondary'}>
@@ -155,6 +209,7 @@ const AuthorizedDriversPanel = ({ vehicleCredentialId, vehiclePlate }: Props) =>
                       size="sm"
                       onClick={() => toggleStatus.mutate({ id: d.id, isActive: !d.isActive, vehicleCredentialId })}
                       disabled={toggleStatus.isPending}
+                      title={d.isActive ? 'Desativar autorização' : 'Reativar autorização'}
                     >
                       {d.isActive ? <ShieldOff className="w-4 h-4 text-warning" /> : <ShieldCheck className="w-4 h-4 text-success" />}
                     </Button>

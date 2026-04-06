@@ -505,7 +505,8 @@ BEGIN
     'entries_today', (SELECT COUNT(*) FROM access_logs WHERE direction = 'in' AND created_at::date = CURRENT_DATE),
     'exits_today', (SELECT COUNT(*) FROM access_logs WHERE direction = 'out' AND created_at::date = CURRENT_DATE),
     'total_access_today', (SELECT COUNT(*) FROM access_logs WHERE created_at::date = CURRENT_DATE),
-    'employees_active', (SELECT COUNT(*) FROM employee_credentials WHERE status = 'allowed'),
+    'employees_active', (SELECT COUNT(*) FROM employee_credentials WHERE status = 'allowed' AND type = 'personal'),
+    'vehicles_active', (SELECT COUNT(*) FROM employee_credentials WHERE status = 'allowed' AND type = 'vehicle'),
     'total_users', (SELECT COUNT(*) FROM profiles),
     'entries_yesterday', (SELECT COUNT(*) FROM access_logs WHERE direction = 'in' AND created_at::date = CURRENT_DATE - 1),
     'avg_per_hour', COALESCE(ROUND((SELECT COUNT(*) FROM access_logs WHERE created_at::date = CURRENT_DATE)::numeric / GREATEST(EXTRACT(HOUR FROM now())::numeric, 1), 1), 0)

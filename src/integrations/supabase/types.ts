@@ -636,7 +636,7 @@ export type Database = {
         | "ACCESS_SESSION_EXPIRE"
       credential_status: "allowed" | "blocked"
       credential_type: "personal" | "vehicle"
-      subject_type: "visitor" | "employee"
+      subject_type: "visitor" | "employee" | "associate"
       visit_to_type: "setor" | "pessoa"
       visitor_access_type: "pedestrian" | "driver"
       visitor_status:
@@ -807,7 +807,7 @@ export const Constants = {
       ],
       credential_status: ["allowed", "blocked"],
       credential_type: ["personal", "vehicle"],
-      subject_type: ["visitor", "employee"],
+      subject_type: ["visitor", "employee", "associate"],
       visit_to_type: ["setor", "pessoa"],
       visitor_access_type: ["pedestrian", "driver"],
       visitor_status: [

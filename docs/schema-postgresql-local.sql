@@ -276,6 +276,69 @@ CREATE TABLE IF NOT EXISTS public.access_sessions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ============================================================
+-- PARTE 2.5: FOREIGN KEYS EXPLÍCITAS (idempotentes)
+-- Necessário porque CREATE TABLE IF NOT EXISTS pula REFERENCES
+-- se a tabela já existia de uma migration anterior.
+-- Os nomes das constraints DEVEM bater com os FK hints do PostgREST.
+-- ============================================================
+
+-- associates → employee_credentials
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'associates_employee_credential_id_fkey' AND table_name = 'associates') THEN
+    ALTER TABLE public.associates ADD CONSTRAINT associates_employee_credential_id_fkey FOREIGN KEY (employee_credential_id) REFERENCES public.employee_credentials(id) ON DELETE CASCADE;
+  END IF;
+END $$;
+
+-- vehicle_authorized_drivers → employee_credentials (vehicle)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'vehicle_authorized_drivers_vehicle_credential_id_fkey' AND table_name = 'vehicle_authorized_drivers') THEN
+    ALTER TABLE public.vehicle_authorized_drivers ADD CONSTRAINT vehicle_authorized_drivers_vehicle_credential_id_fkey FOREIGN KEY (vehicle_credential_id) REFERENCES public.employee_credentials(id) ON DELETE CASCADE;
+  END IF;
+END $$;
+
+-- vehicle_authorized_drivers → employee_credentials (driver)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'vehicle_authorized_drivers_employee_credential_id_fkey' AND table_name = 'vehicle_authorized_drivers') THEN
+    ALTER TABLE public.vehicle_authorized_drivers ADD CONSTRAINT vehicle_authorized_drivers_employee_credential_id_fkey FOREIGN KEY (employee_credential_id) REFERENCES public.employee_credentials(id) ON DELETE CASCADE;
+  END IF;
+END $$;
+
+-- vehicle_authorized_drivers → associates
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'vehicle_authorized_drivers_associate_id_fkey' AND table_name = 'vehicle_authorized_drivers') THEN
+    ALTER TABLE public.vehicle_authorized_drivers ADD CONSTRAINT vehicle_authorized_drivers_associate_id_fkey FOREIGN KEY (associate_id) REFERENCES public.associates(id) ON DELETE CASCADE;
+  END IF;
+END $$;
+
+-- access_sessions → visitors
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'access_sessions_visitor_id_fkey' AND table_name = 'access_sessions') THEN
+    ALTER TABLE public.access_sessions ADD CONSTRAINT access_sessions_visitor_id_fkey FOREIGN KEY (visitor_id) REFERENCES public.visitors(id);
+  END IF;
+END $$;
+
+-- access_sessions → employee_credentials (vehicle)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'access_sessions_vehicle_credential_id_fkey' AND table_name = 'access_sessions') THEN
+    ALTER TABLE public.access_sessions ADD CONSTRAINT access_sessions_vehicle_credential_id_fkey FOREIGN KEY (vehicle_credential_id) REFERENCES public.employee_credentials(id);
+  END IF;
+END $$;
+
+-- access_sessions → employee_credentials (person)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'access_sessions_person_credential_id_fkey' AND table_name = 'access_sessions') THEN
+    ALTER TABLE public.access_sessions ADD CONSTRAINT access_sessions_person_credential_id_fkey FOREIGN KEY (person_credential_id) REFERENCES public.employee_credentials(id);
+  END IF;
+END $$;
+
+-- access_sessions → associates
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'access_sessions_associate_id_fkey' AND table_name = 'access_sessions') THEN
+    ALTER TABLE public.access_sessions ADD CONSTRAINT access_sessions_associate_id_fkey FOREIGN KEY (associate_id) REFERENCES public.associates(id);
+  END IF;
+END $$;
+
 -- Índices
 CREATE INDEX IF NOT EXISTS idx_visitors_pass_id ON public.visitors(pass_id);
 CREATE INDEX IF NOT EXISTS idx_visitors_status ON public.visitors(status);

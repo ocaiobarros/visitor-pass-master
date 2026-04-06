@@ -475,7 +475,7 @@ const ScanKiosk = () => {
                 null
               );
 
-              if (authorization) {
+              if (authorization.authorized) {
                 // Authorized — complete session
                 await supabase
                   .from('access_sessions')
@@ -499,13 +499,14 @@ const ScanKiosk = () => {
                 scheduleReset(3000);
                 return;
               } else {
-                // Not authorized
+                // Not authorized — specific reason
+                const denialReason = authorization.denial_reason;
                 await supabase
                   .from('access_sessions')
                   .update({
                     status: 'denied',
                     person_credential_id: credential.id,
-                    denial_reason: 'Condutor não autorizado para este veículo',
+                    denial_reason: denialReason,
                     completed_at: new Date().toISOString(),
                   })
                   .eq('id', pendingSession.id);

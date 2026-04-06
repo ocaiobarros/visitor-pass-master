@@ -604,9 +604,32 @@ DO $$ BEGIN
   CREATE POLICY "Service role insere audit logs" ON public.audit_logs FOR INSERT TO service_role WITH CHECK (true);
 END $$;
 
--- ============================================================
--- PERMISSÕES FINAIS: Garantir acesso às tabelas criadas
--- ============================================================
+-- Políticas para associates
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Autenticados visualizam agregados" ON public.associates;
+  DROP POLICY IF EXISTS "Admin/Operador gerenciam agregados" ON public.associates;
+  CREATE POLICY "Autenticados visualizam agregados" ON public.associates FOR SELECT TO authenticated USING (true);
+  CREATE POLICY "Admin/Operador gerenciam agregados" ON public.associates FOR ALL TO authenticated USING (is_admin_or_rh()) WITH CHECK (is_admin_or_rh());
+END $$;
+
+-- Políticas para vehicle_authorized_drivers
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Autenticados visualizam condutores" ON public.vehicle_authorized_drivers;
+  DROP POLICY IF EXISTS "Admin/Operador gerenciam condutores" ON public.vehicle_authorized_drivers;
+  CREATE POLICY "Autenticados visualizam condutores" ON public.vehicle_authorized_drivers FOR SELECT TO authenticated USING (true);
+  CREATE POLICY "Admin/Operador gerenciam condutores" ON public.vehicle_authorized_drivers FOR ALL TO authenticated USING (is_admin_or_rh()) WITH CHECK (is_admin_or_rh());
+END $$;
+
+-- Políticas para access_sessions
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Autenticados visualizam sessões" ON public.access_sessions;
+  DROP POLICY IF EXISTS "Autenticados criam sessões" ON public.access_sessions;
+  DROP POLICY IF EXISTS "Autenticados atualizam sessões" ON public.access_sessions;
+  CREATE POLICY "Autenticados visualizam sessões" ON public.access_sessions FOR SELECT TO authenticated USING (true);
+  CREATE POLICY "Autenticados criam sessões" ON public.access_sessions FOR INSERT TO authenticated WITH CHECK (public.current_user_id() IS NOT NULL);
+  CREATE POLICY "Autenticados atualizam sessões" ON public.access_sessions FOR UPDATE TO authenticated USING (public.current_user_id() IS NOT NULL);
+END $$;
+
 
 -- Adicionar operador_acesso ao enum (se não existir)
 DO $$

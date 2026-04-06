@@ -26,6 +26,8 @@ import Settings from "./pages/Settings";
 import AuditLogs from "./pages/AuditLogs";
 import Reports from "./pages/Reports";
 import InstallWizard from "./pages/InstallWizard";
+import AssociateList from "./pages/AssociateList";
+import RegisterAssociate from "./pages/RegisterAssociate";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -137,6 +139,18 @@ const App = () => (
                       <Route path="/vehicles" element={
                         <ProtectedRoute>
                           <VehicleList />
+                        </ProtectedRoute>
+                      } />
+                      
+                      <Route path="/associates" element={
+                        <ProtectedRoute>
+                          <AssociateList />
+                        </ProtectedRoute>
+                      } />
+                      
+                      <Route path="/register/associate" element={
+                        <ProtectedRoute requiredRoles={['admin', 'operador_acesso']}>
+                          <RegisterAssociate />
                         </ProtectedRoute>
                       } />
                       

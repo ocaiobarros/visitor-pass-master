@@ -898,7 +898,12 @@ DECLARE
   v_action audit_action_type;
   v_details JSONB;
   v_user_id UUID;
+  v_new_json JSONB;
 BEGIN
+  IF TG_OP != 'DELETE' THEN
+    v_new_json := to_jsonb(NEW);
+  END IF;
+
   v_action := CASE
     WHEN TG_TABLE_NAME = 'visitors' AND TG_OP = 'INSERT' THEN 'VISITOR_CREATE'
     WHEN TG_TABLE_NAME = 'visitors' AND TG_OP = 'UPDATE' THEN 'VISITOR_UPDATE'
@@ -915,9 +920,9 @@ BEGIN
     WHEN TG_TABLE_NAME = 'access_sessions' AND TG_OP = 'INSERT' THEN 'ACCESS_SESSION_CREATE'
     WHEN TG_TABLE_NAME = 'access_sessions' AND TG_OP = 'UPDATE' THEN
       CASE
-        WHEN NEW.status::text = 'completed' THEN 'ACCESS_SESSION_COMPLETE'
-        WHEN NEW.status::text = 'denied' THEN 'ACCESS_SESSION_DENY'
-        WHEN NEW.status::text = 'expired' THEN 'ACCESS_SESSION_EXPIRE'
+        WHEN v_new_json->>'status' = 'completed' THEN 'ACCESS_SESSION_COMPLETE'
+        WHEN v_new_json->>'status' = 'denied' THEN 'ACCESS_SESSION_DENY'
+        WHEN v_new_json->>'status' = 'expired' THEN 'ACCESS_SESSION_EXPIRE'
         ELSE 'CONFIG_UPDATE'
       END
     ELSE 'CONFIG_UPDATE'
@@ -928,9 +933,9 @@ BEGIN
   IF TG_OP = 'DELETE' THEN
     v_details := jsonb_build_object('table', TG_TABLE_NAME, 'operation', TG_OP, 'old_data', to_jsonb(OLD));
   ELSIF TG_OP = 'INSERT' THEN
-    v_details := jsonb_build_object('table', TG_TABLE_NAME, 'operation', TG_OP, 'new_data', to_jsonb(NEW));
+    v_details := jsonb_build_object('table', TG_TABLE_NAME, 'operation', TG_OP, 'new_data', v_new_json);
   ELSE
-    v_details := jsonb_build_object('table', TG_TABLE_NAME, 'operation', TG_OP, 'old_data', to_jsonb(OLD), 'new_data', to_jsonb(NEW));
+    v_details := jsonb_build_object('table', TG_TABLE_NAME, 'operation', TG_OP, 'old_data', to_jsonb(OLD), 'new_data', v_new_json);
   END IF;
 
   INSERT INTO audit_logs (action_type, user_id, details) VALUES (v_action, v_user_id, v_details);

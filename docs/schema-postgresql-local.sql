@@ -913,9 +913,9 @@ BEGIN
     WHEN TG_TABLE_NAME = 'access_sessions' AND TG_OP = 'INSERT' THEN 'ACCESS_SESSION_CREATE'
     WHEN TG_TABLE_NAME = 'access_sessions' AND TG_OP = 'UPDATE' THEN
       CASE
-        WHEN NEW.status = 'completed' THEN 'ACCESS_SESSION_COMPLETE'
-        WHEN NEW.status = 'denied' THEN 'ACCESS_SESSION_DENY'
-        WHEN NEW.status = 'expired' THEN 'ACCESS_SESSION_EXPIRE'
+        WHEN NEW.status::text = 'completed' THEN 'ACCESS_SESSION_COMPLETE'
+        WHEN NEW.status::text = 'denied' THEN 'ACCESS_SESSION_DENY'
+        WHEN NEW.status::text = 'expired' THEN 'ACCESS_SESSION_EXPIRE'
         ELSE 'CONFIG_UPDATE'
       END
     ELSE 'CONFIG_UPDATE'

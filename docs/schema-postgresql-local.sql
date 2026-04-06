@@ -81,7 +81,7 @@ DO $$ BEGIN
     CREATE TYPE public.visit_to_type AS ENUM ('setor', 'pessoa');
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'visitor_status') THEN
-    CREATE TYPE public.visitor_status AS ENUM ('pending', 'inside', 'outside', 'closed');
+    CREATE TYPE public.visitor_status AS ENUM ('pending', 'inside', 'outside', 'closed', 'expired_unused');
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'visitor_access_type') THEN
     CREATE TYPE public.visitor_access_type AS ENUM ('pedestrian', 'driver');
@@ -657,6 +657,30 @@ BEGIN
   END LOOP;
 END $$;
 
+-- Expire unused visitor passes
+CREATE OR REPLACE FUNCTION public.expire_unused_visitor_passes()
+RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
+DECLARE affected integer;
+BEGIN
+  UPDATE visitors SET status = 'expired_unused', updated_at = now()
+  WHERE status = 'pending' AND valid_until < now()
+    AND id NOT IN (SELECT DISTINCT subject_id FROM access_logs WHERE subject_type = 'visitor');
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  RETURN affected;
+END;
+$$;
+
+-- Cleanup expired sessions
+CREATE OR REPLACE FUNCTION public.cleanup_expired_sessions()
+RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
+DECLARE affected integer;
+BEGIN
+  UPDATE access_sessions SET status = 'expired' WHERE status = 'pending' AND expires_at < now();
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  RETURN affected;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.get_dashboard_stats()
 RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
 DECLARE result JSON;
@@ -666,11 +690,13 @@ BEGIN
     'visitors_inside', (SELECT COUNT(*) FROM visitors WHERE status = 'inside'),
     'visitors_outside', (SELECT COUNT(*) FROM visitors WHERE status IN ('outside', 'closed')),
     'visitors_pending', (SELECT COUNT(*) FROM visitors WHERE status = 'pending'),
+    'visitors_expired_unused', (SELECT COUNT(*) FROM visitors WHERE status = 'expired_unused'),
     'entries_today', (SELECT COUNT(*) FROM access_logs WHERE direction = 'in' AND created_at::date = CURRENT_DATE),
     'exits_today', (SELECT COUNT(*) FROM access_logs WHERE direction = 'out' AND created_at::date = CURRENT_DATE),
     'total_access_today', (SELECT COUNT(*) FROM access_logs WHERE created_at::date = CURRENT_DATE),
     'employees_active', (SELECT COUNT(*) FROM employee_credentials WHERE status = 'allowed' AND type = 'personal'),
     'vehicles_active', (SELECT COUNT(*) FROM employee_credentials WHERE status = 'allowed' AND type = 'vehicle'),
+    'associates_active', (SELECT COUNT(*) FROM associates WHERE status = 'active'),
     'total_users', (SELECT COUNT(*) FROM profiles),
     'entries_yesterday', (SELECT COUNT(*) FROM access_logs WHERE direction = 'in' AND created_at::date = CURRENT_DATE - 1),
     'avg_per_hour', COALESCE(ROUND((SELECT COUNT(*) FROM access_logs WHERE created_at::date = CURRENT_DATE)::numeric / GREATEST(EXTRACT(HOUR FROM now())::numeric, 1), 1), 0)

@@ -26,8 +26,9 @@ const Dashboard = () => {
 
   const s = stats || {
     total_visitors: 0, visitors_inside: 0, visitors_outside: 0, visitors_pending: 0,
-    entries_today: 0, exits_today: 0, total_access_today: 0, employees_active: 0,
-    vehicles_active: 0, total_users: 0, entries_yesterday: 0, avg_per_hour: 0,
+    visitors_expired_unused: 0, entries_today: 0, exits_today: 0, total_access_today: 0,
+    employees_active: 0, vehicles_active: 0, associates_active: 0, total_users: 0,
+    entries_yesterday: 0, avg_per_hour: 0,
   };
 
   return (

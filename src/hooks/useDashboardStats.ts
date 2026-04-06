@@ -6,11 +6,13 @@ export interface DashboardStats {
   visitors_inside: number;
   visitors_outside: number;
   visitors_pending: number;
+  visitors_expired_unused: number;
   entries_today: number;
   exits_today: number;
   total_access_today: number;
   employees_active: number;
   vehicles_active: number;
+  associates_active: number;
   total_users: number;
   entries_yesterday: number;
   avg_per_hour: number;

@@ -66,6 +66,8 @@ const VisitorList = () => {
         return <span className="px-3 py-1 rounded-full text-sm font-medium bg-warning/10 text-warning">Pendente</span>;
       case 'closed':
         return <span className="status-badge-expired">Encerrado</span>;
+      case 'expired_unused':
+        return <span className="px-3 py-1 rounded-full text-sm font-medium bg-muted text-muted-foreground">Expirado (sem uso)</span>;
       default:
         return null;
     }
@@ -113,6 +115,7 @@ const VisitorList = () => {
                     <SelectItem value="outside">Fora</SelectItem>
                     <SelectItem value="pending">Pendente</SelectItem>
                     <SelectItem value="closed">Encerrado</SelectItem>
+                    <SelectItem value="expired_unused">Expirado (sem uso)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

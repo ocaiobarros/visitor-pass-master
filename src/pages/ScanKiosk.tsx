@@ -220,7 +220,7 @@ const ScanKiosk = () => {
             return;
           }
 
-          if (visitor.status === 'closed') {
+          if (visitor.status === 'closed' || visitor.status === 'expired_unused') {
             playBlocked();
             setScanResult({ type: 'visitor', data: visitor, status: 'blocked', direction: 'in' });
             scheduleReset(4000);
@@ -232,7 +232,7 @@ const ScanKiosk = () => {
             scheduleReset(4000);
             return;
           }
-          if (new Date() > visitor.validUntil) {
+          if (new Date() > visitor.validUntil && visitor.status !== 'inside') {
             playBlocked();
             setScanResult({ type: 'visitor', data: visitor, status: 'expired', direction: 'in' });
             scheduleReset(4000);

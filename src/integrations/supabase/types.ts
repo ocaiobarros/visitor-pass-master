@@ -520,6 +520,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cleanup_expired_sessions: { Args: never; Returns: number }
+      expire_unused_visitor_passes: { Args: never; Returns: number }
       get_activity_chart_data: {
         Args: never
         Returns: {
@@ -637,7 +639,12 @@ export type Database = {
       subject_type: "visitor" | "employee"
       visit_to_type: "setor" | "pessoa"
       visitor_access_type: "pedestrian" | "driver"
-      visitor_status: "pending" | "inside" | "outside" | "closed"
+      visitor_status:
+        | "pending"
+        | "inside"
+        | "outside"
+        | "closed"
+        | "expired_unused"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -803,7 +810,13 @@ export const Constants = {
       subject_type: ["visitor", "employee"],
       visit_to_type: ["setor", "pessoa"],
       visitor_access_type: ["pedestrian", "driver"],
-      visitor_status: ["pending", "inside", "outside", "closed"],
+      visitor_status: [
+        "pending",
+        "inside",
+        "outside",
+        "closed",
+        "expired_unused",
+      ],
     },
   },
 } as const

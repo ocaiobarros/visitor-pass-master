@@ -8,11 +8,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Users, UserPlus, Search, Eye, Building2, Ban, CheckCircle } from 'lucide-react';
+import { Users, UserPlus, Search, Eye, Building2, Ban, CheckCircle, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import EditEmployeeModal from '@/components/employee/EditEmployeeModal';
+import { EmployeeCredential } from '@/types/visitor';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,12 +27,15 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 
+
+
 const EmployeeList = () => {
   const navigate = useNavigate();
   const { data: credentials = [], isLoading } = useEmployeeCredentials();
   const updateStatus = useUpdateCredentialStatus();
   const { isAdminOrRh } = useAuth();
   const { toast } = useToast();
+  const [editEmployee, setEditEmployee] = useState<EmployeeCredential | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
   // Filter only personal (employee) credentials
@@ -170,6 +175,18 @@ const EmployeeList = () => {
                           </Button>
                           
                           {isAdminOrRh && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="gap-1"
+                              onClick={() => setEditEmployee(employee)}
+                            >
+                              <Pencil className="w-4 h-4" />
+                              Editar
+                            </Button>
+                          )}
+
+                          {isAdminOrRh && (
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button
@@ -224,6 +241,12 @@ const EmployeeList = () => {
           )}
         </CardContent>
       </Card>
+
+      <EditEmployeeModal
+        employee={editEmployee}
+        open={!!editEmployee}
+        onOpenChange={(open) => { if (!open) setEditEmployee(null); }}
+      />
     </DashboardLayout>
   );
 };

@@ -136,6 +136,12 @@ const RegisterAssociate = () => {
                       <SelectItem value="conjuge">Cônjuge</SelectItem>
                       <SelectItem value="pai">Pai</SelectItem>
                       <SelectItem value="mae">Mãe</SelectItem>
+                      <SelectItem value="filho">Filho</SelectItem>
+                      <SelectItem value="filha">Filha</SelectItem>
+                      <SelectItem value="irmao">Irmão</SelectItem>
+                      <SelectItem value="irma">Irmã</SelectItem>
+                      <SelectItem value="namorado">Namorado</SelectItem>
+                      <SelectItem value="namorada">Namorada</SelectItem>
                       <SelectItem value="motorista_particular">Motorista Particular</SelectItem>
                       <SelectItem value="outro">Outro</SelectItem>
                     </SelectContent>

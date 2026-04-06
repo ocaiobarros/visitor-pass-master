@@ -148,6 +148,45 @@ export const useCreateCredential = () => {
   });
 };
 
+interface UpdateCredentialData {
+  id: string;
+  departmentId?: string | null;
+  jobTitle?: string | null;
+  photoUrl?: string | null;
+}
+
+export const useUpdateCredential = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (data: UpdateCredentialData) => {
+      const updatePayload: Record<string, any> = {};
+      if (data.departmentId !== undefined) updatePayload.department_id = data.departmentId;
+      if (data.jobTitle !== undefined) updatePayload.job_title = data.jobTitle;
+      if (data.photoUrl !== undefined) updatePayload.photo_url = data.photoUrl;
+
+      const { data: result, error } = await supabase
+        .from('employee_credentials')
+        .update(updatePayload)
+        .eq('id', data.id)
+        .select('*, departments(id, name)')
+        .single();
+
+      if (error) throw error;
+      return mapDbToCredential(result);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employee_credentials'] });
+      queryClient.invalidateQueries({ queryKey: ['employee_credential'] });
+      toast({ title: 'Colaborador atualizado!', description: 'Os dados foram salvos com sucesso.' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Erro ao atualizar', description: error.message, variant: 'destructive' });
+    },
+  });
+};
+
 export const useUpdateCredentialStatus = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();

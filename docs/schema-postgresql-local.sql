@@ -530,6 +530,9 @@ ALTER TABLE public.visitors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.employee_credentials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.access_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.associates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.vehicle_authorized_drivers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.access_sessions ENABLE ROW LEVEL SECURITY;
 
 -- Políticas para departments
 DO $$ BEGIN

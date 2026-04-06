@@ -57,27 +57,27 @@ const EmployeeList = () => {
   };
 
   return (
-    <DashboardLayout pageTitle="Funcionários">
+    <DashboardLayout pageTitle="Colaboradores">
       <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
             <Users className="w-8 h-8 text-primary" />
-            Funcionários
+            Colaboradores
           </h1>
           <p className="text-muted-foreground mt-1">Colaboradores internos cadastrados</p>
         </div>
         {isAdminOrRh && (
           <Button onClick={() => navigate('/register/employee')} className="gap-2">
             <UserPlus className="w-4 h-4" />
-            Novo Funcionário
+            Novo Colaborador
           </Button>
         )}
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Lista de Funcionários</CardTitle>
-          <CardDescription>{filteredEmployees.length} funcionário(s) cadastrado(s)</CardDescription>
+          <CardTitle>Lista de Colaboradores</CardTitle>
+          <CardDescription>{filteredEmployees.length} colaborador(es) cadastrado(s)</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Search */}
@@ -97,10 +97,10 @@ const EmployeeList = () => {
           ) : filteredEmployees.length === 0 ? (
             <div className="text-center py-12">
               <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">Nenhum funcionário encontrado</p>
+              <p className="text-muted-foreground">Nenhum colaborador encontrado</p>
               {isAdminOrRh && (
                 <Button onClick={() => navigate('/register/employee')} variant="outline" className="mt-4">
-                  Cadastrar primeiro funcionário
+                  Cadastrar primeiro colaborador
                 </Button>
               )}
             </div>
@@ -197,8 +197,8 @@ const EmployeeList = () => {
                                   </AlertDialogTitle>
                                   <AlertDialogDescription>
                                     {employee.status === 'allowed' 
-                                      ? `O funcionário ${employee.fullName} terá seu acesso bloqueado. O scanner exibirá "ACESSO NEGADO" para este QR Code.`
-                                      : `O funcionário ${employee.fullName} terá seu acesso liberado novamente.`
+                                      ? `O colaborador ${employee.fullName} terá seu acesso bloqueado. O scanner exibirá "ACESSO NEGADO" para este QR Code.`
+                                      : `O colaborador ${employee.fullName} terá seu acesso liberado novamente.`
                                     }
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>

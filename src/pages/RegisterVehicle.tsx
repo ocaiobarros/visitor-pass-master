@@ -132,7 +132,7 @@ const RegisterVehicle = () => {
                   <div className="flex items-center gap-2 text-success">
                     <CheckCircle className="w-4 h-4" />
                     <span className="text-sm font-medium">
-                      {personData.source === 'employee' ? 'Funcionário encontrado' : 'Visitante encontrado'}
+                      {personData.source === 'employee' ? 'Colaborador encontrado' : 'Visitante encontrado'}
                     </span>
                   </div>
                 </div>

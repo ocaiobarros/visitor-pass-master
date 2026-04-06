@@ -28,6 +28,12 @@ const relationshipLabels: Record<string, string> = {
   conjuge: 'Cônjuge',
   pai: 'Pai',
   mae: 'Mãe',
+  filho: 'Filho',
+  filha: 'Filha',
+  irmao: 'Irmão',
+  irma: 'Irmã',
+  namorado: 'Namorado',
+  namorada: 'Namorada',
   motorista_particular: 'Motorista Particular',
   outro: 'Outro',
 };

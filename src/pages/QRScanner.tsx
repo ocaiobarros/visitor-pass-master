@@ -25,7 +25,7 @@ const ANTI_DUP_WINDOW_MS = 10000; // 10 segundos conforme especificação
 // ============================================
 // TIPOS
 // ============================================
-type ScanAction = 'in' | 'out' | 'blocked' | 'expired' | 'closed' | 'duplicate';
+type ScanAction = 'in' | 'out' | 'blocked' | 'expired' | 'closed' | 'duplicate' | 'expired_unused' | 'waiting_second_qr' | 'session_completed' | 'session_denied';
 
 type ScanResult = {
   type: 'visitor';

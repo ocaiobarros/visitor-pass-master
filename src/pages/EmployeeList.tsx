@@ -35,6 +35,7 @@ const EmployeeList = () => {
   const updateStatus = useUpdateCredentialStatus();
   const { isAdminOrRh } = useAuth();
   const { toast } = useToast();
+  const [editEmployee, setEditEmployee] = useState<EmployeeCredential | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
   // Filter only personal (employee) credentials

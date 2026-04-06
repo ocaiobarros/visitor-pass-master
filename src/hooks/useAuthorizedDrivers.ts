@@ -19,7 +19,8 @@ export interface AuthorizedDriver {
   // joined
   driverName?: string;
   driverDocument?: string;
-  vehiclePlate?: string;
+  driverStatus?: string;
+  responsibleEmployeeName?: string;
 }
 
 interface CreateDriverData {
@@ -45,6 +46,8 @@ const mapRow = (row: any): AuthorizedDriver => ({
   createdAt: row.created_at,
   driverName: row.employee_credentials?.full_name || row.associates?.full_name,
   driverDocument: row.employee_credentials?.document || row.associates?.document,
+  driverStatus: row.employee_credentials?.status || row.associates?.status,
+  responsibleEmployeeName: row.associates?.responsible_employee_name,
 });
 
 export const useAuthorizedDrivers = (vehicleCredentialId: string) => {
@@ -53,11 +56,27 @@ export const useAuthorizedDrivers = (vehicleCredentialId: string) => {
     queryFn: async () => {
       const { data, error } = await (supabase
         .from('vehicle_authorized_drivers')
-        .select('*, employee_credentials!vehicle_authorized_drivers_employee_credential_id_fkey(full_name, document), associates!vehicle_authorized_drivers_associate_id_fkey(full_name, document)') as any)
+        .select('*, employee_credentials!vehicle_authorized_drivers_employee_credential_id_fkey(full_name, document, status), associates!vehicle_authorized_drivers_associate_id_fkey(full_name, document, status, employee_credential_id)') as any)
         .eq('vehicle_credential_id', vehicleCredentialId)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map(mapRow);
+
+      // For associates, fetch the responsible employee name
+      const rows = data || [];
+      for (const row of rows) {
+        if (row.driver_type === 'associate' && row.associates?.employee_credential_id) {
+          const { data: emp } = await supabase
+            .from('employee_credentials')
+            .select('full_name')
+            .eq('id', row.associates.employee_credential_id)
+            .maybeSingle();
+          if (emp) {
+            row.associates.responsible_employee_name = emp.full_name;
+          }
+        }
+      }
+
+      return rows.map(mapRow);
     },
     enabled: !!vehicleCredentialId,
   });

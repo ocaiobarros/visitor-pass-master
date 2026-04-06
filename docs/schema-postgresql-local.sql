@@ -212,7 +212,64 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
   user_agent TEXT
 );
 
--- Índices (IF NOT EXISTS para idempotência)
+-- Tabela: associates (Agregados)
+CREATE TABLE IF NOT EXISTS public.associates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  full_name TEXT NOT NULL,
+  document TEXT NOT NULL UNIQUE,
+  phone TEXT,
+  photo_url TEXT,
+  employee_credential_id UUID NOT NULL REFERENCES public.employee_credentials(id) ON DELETE CASCADE,
+  relationship_type TEXT NOT NULL CHECK (relationship_type IN ('spouse', 'father', 'mother', 'private_driver', 'other')),
+  validity_type TEXT NOT NULL DEFAULT 'permanent' CHECK (validity_type IN ('permanent', 'temporary')),
+  valid_from TIMESTAMPTZ,
+  valid_until TIMESTAMPTZ,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'expired')),
+  pass_id TEXT NOT NULL UNIQUE,
+  created_by UUID,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Tabela: vehicle_authorized_drivers
+CREATE TABLE IF NOT EXISTS public.vehicle_authorized_drivers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  vehicle_credential_id UUID NOT NULL REFERENCES public.employee_credentials(id) ON DELETE CASCADE,
+  driver_type TEXT NOT NULL CHECK (driver_type IN ('employee', 'associate')),
+  employee_credential_id UUID REFERENCES public.employee_credentials(id) ON DELETE CASCADE,
+  associate_id UUID REFERENCES public.associates(id) ON DELETE CASCADE,
+  authorization_type TEXT NOT NULL CHECK (authorization_type IN ('owner', 'delegated', 'corporate_pool')),
+  valid_from TIMESTAMPTZ,
+  valid_until TIMESTAMPTZ,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_by UUID,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT check_driver_source CHECK (
+    (driver_type = 'employee' AND employee_credential_id IS NOT NULL AND associate_id IS NULL)
+    OR
+    (driver_type = 'associate' AND associate_id IS NOT NULL AND employee_credential_id IS NULL)
+  )
+);
+
+-- Tabela: access_sessions
+CREATE TABLE IF NOT EXISTS public.access_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_type TEXT NOT NULL CHECK (session_type IN ('visitor_driver', 'employee_vehicle')),
+  visitor_id UUID REFERENCES public.visitors(id),
+  vehicle_credential_id UUID REFERENCES public.employee_credentials(id),
+  person_credential_id UUID REFERENCES public.employee_credentials(id),
+  associate_id UUID REFERENCES public.associates(id),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'denied', 'expired')),
+  first_scan TEXT NOT NULL CHECK (first_scan IN ('person', 'vehicle')),
+  denial_reason TEXT,
+  authorization_type TEXT,
+  expires_at TIMESTAMPTZ NOT NULL,
+  completed_at TIMESTAMPTZ,
+  operator_id UUID,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Índices
 CREATE INDEX IF NOT EXISTS idx_visitors_pass_id ON public.visitors(pass_id);
 CREATE INDEX IF NOT EXISTS idx_visitors_status ON public.visitors(status);
 CREATE INDEX IF NOT EXISTS idx_visitors_valid_until ON public.visitors(valid_until);
@@ -223,6 +280,17 @@ CREATE INDEX IF NOT EXISTS idx_access_logs_subject ON public.access_logs(subject
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON public.audit_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON public.audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action_type ON public.audit_logs(action_type);
+CREATE INDEX IF NOT EXISTS idx_associates_employee ON public.associates(employee_credential_id);
+CREATE INDEX IF NOT EXISTS idx_associates_document ON public.associates(document);
+CREATE INDEX IF NOT EXISTS idx_associates_status ON public.associates(status);
+CREATE INDEX IF NOT EXISTS idx_vad_vehicle ON public.vehicle_authorized_drivers(vehicle_credential_id);
+CREATE INDEX IF NOT EXISTS idx_vad_employee ON public.vehicle_authorized_drivers(employee_credential_id);
+CREATE INDEX IF NOT EXISTS idx_vad_associate ON public.vehicle_authorized_drivers(associate_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_status ON public.access_sessions(status);
+
+-- Índice único parcial: impedir sessões pendentes conflitantes
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_vehicle_session ON public.access_sessions(vehicle_credential_id) WHERE status = 'pending' AND vehicle_credential_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_visitor_session ON public.access_sessions(visitor_id) WHERE status = 'pending' AND visitor_id IS NOT NULL;
 
 -- ============================================================
 -- PARTE 3: FUNÇÕES UTILITÁRIAS

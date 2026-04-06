@@ -1104,7 +1104,16 @@ const QRScanner = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* Session info for waiting states */}
+                {scanResult.action === 'waiting_second_qr' && scanResult.sessionInfo && (
+                  <div className="mt-4 p-4 rounded-lg bg-warning/10 border border-warning/30 animate-pulse">
+                    <p className="text-lg font-bold text-warning">⏳ Aguardando: {scanResult.sessionInfo.waitingFor}</p>
+                    <p className="text-sm text-muted-foreground">Tempo restante: ~{scanResult.sessionInfo.expiresIn}s</p>
+                  </div>
+                )}
               </div>
+            </div>
 
               {recentLogs.length > 0 && (
                 <div className="mt-4 pt-4 border-t">

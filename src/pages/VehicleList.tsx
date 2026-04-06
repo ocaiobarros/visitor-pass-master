@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Car, Plus, Search, Eye, Ban, CheckCircle, User } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { Car, Plus, Search, Eye, Ban, CheckCircle, User, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useAuth } from '@/context/AuthContext';
@@ -32,14 +33,11 @@ const VehicleList = () => {
   const { isAdminOrRh } = useAuth();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedVehicle, setSelectedVehicle] = useState<{ id: string; plate: string } | null>(null);
 
-  // Filter only vehicle credentials
   const vehicles = credentials.filter(c => c.type === 'vehicle');
-  
-  // Get all personal credentials for owner photo lookup
   const employees = credentials.filter(c => c.type === 'personal');
 
-  // Find owner photo by document (CPF)
   const getOwnerPhoto = (document: string): string | null => {
     const owner = employees.find(e => e.document === document);
     return owner?.photoUrl || null;
@@ -90,7 +88,6 @@ const VehicleList = () => {
           <CardDescription>{filteredVehicles.length} veículo(s) cadastrado(s)</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Search */}
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -101,7 +98,6 @@ const VehicleList = () => {
             />
           </div>
 
-          {/* Table */}
           {isLoading ? (
             <p className="text-muted-foreground text-center py-8">Carregando...</p>
           ) : filteredVehicles.length === 0 ? (
@@ -159,17 +155,23 @@ const VehicleList = () => {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              asChild
-                            >
+                            {isAdminOrRh && vehicle.status === 'allowed' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1"
+                                onClick={() => setSelectedVehicle({ id: vehicle.id, plate: vehicle.vehiclePlate || '' })}
+                              >
+                                <Users className="w-4 h-4" />
+                                Condutores
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="sm" asChild>
                               <Link to={`/credential/${vehicle.id}`}>
                                 <Eye className="w-4 h-4 mr-1" />
                                 Crachá
                               </Link>
                             </Button>
-                            
                             {isAdminOrRh && (
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
@@ -179,15 +181,9 @@ const VehicleList = () => {
                                     className="gap-1"
                                   >
                                     {vehicle.status === 'allowed' ? (
-                                      <>
-                                        <Ban className="w-4 h-4" />
-                                        Bloquear
-                                      </>
+                                      <><Ban className="w-4 h-4" /> Bloquear</>
                                     ) : (
-                                      <>
-                                        <CheckCircle className="w-4 h-4" />
-                                        Liberar
-                                      </>
+                                      <><CheckCircle className="w-4 h-4" /> Liberar</>
                                     )}
                                   </Button>
                                 </AlertDialogTrigger>
@@ -197,7 +193,7 @@ const VehicleList = () => {
                                       {vehicle.status === 'allowed' ? 'Bloquear veículo?' : 'Liberar veículo?'}
                                     </AlertDialogTitle>
                                     <AlertDialogDescription>
-                                      {vehicle.status === 'allowed' 
+                                      {vehicle.status === 'allowed'
                                         ? `O veículo ${vehicle.vehiclePlate} terá seu acesso bloqueado. O scanner exibirá "ACESSO NEGADO".`
                                         : `O veículo ${vehicle.vehiclePlate} terá seu acesso liberado novamente.`
                                       }
@@ -227,14 +223,28 @@ const VehicleList = () => {
         </CardContent>
       </Card>
 
-      {/* Authorized Drivers panels per vehicle */}
-      {filteredVehicles.filter(v => v.status === 'allowed').map(vehicle => (
-        <AuthorizedDriversPanel
-          key={vehicle.id}
-          vehicleCredentialId={vehicle.id}
-          vehiclePlate={vehicle.vehiclePlate}
-        />
-      ))}
+      {/* Drawer lateral para gestão de condutores */}
+      <Sheet open={!!selectedVehicle} onOpenChange={(open) => !open && setSelectedVehicle(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <Car className="w-5 h-5" />
+              Condutores — {selectedVehicle?.plate}
+            </SheetTitle>
+            <SheetDescription>
+              Gerencie os condutores autorizados deste veículo
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-6">
+            {selectedVehicle && (
+              <AuthorizedDriversPanel
+                vehicleCredentialId={selectedVehicle.id}
+                vehiclePlate={selectedVehicle.plate}
+              />
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </DashboardLayout>
   );
 };

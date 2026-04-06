@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import AuthorizedDriversPanel from '@/components/vehicle/AuthorizedDriversPanel';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useEmployeeCredentials, useUpdateCredentialStatus } from '@/hooks/useEmployeeCredentials';
 import { Button } from '@/components/ui/button';
@@ -225,6 +226,15 @@ const VehicleList = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Authorized Drivers panels per vehicle */}
+      {filteredVehicles.filter(v => v.status === 'allowed').map(vehicle => (
+        <AuthorizedDriversPanel
+          key={vehicle.id}
+          vehicleCredentialId={vehicle.id}
+          vehiclePlate={vehicle.vehiclePlate}
+        />
+      ))}
     </DashboardLayout>
   );
 };

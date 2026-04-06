@@ -53,6 +53,7 @@ const Dashboard = () => {
           visitorsInside={s.visitors_inside}
           employeesActive={s.employees_active}
           vehiclesActive={s.vehicles_active}
+          associatesActive={s.associates_active}
         />
 
         {/* Activity Chart + Critical Events — 100% server-side */}

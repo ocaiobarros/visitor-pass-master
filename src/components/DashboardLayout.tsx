@@ -38,6 +38,7 @@ const navItems = [
   { href: '/visitors', label: 'Visitantes', icon: ClipboardList },
   { href: '/employees', label: 'Colaboradores', icon: Users },
   { href: '/vehicles', label: 'Veículos', icon: Car },
+  { href: '/associates', label: 'Agregados', icon: Users },
   { href: '/scan', label: 'Scanner QR', icon: QrCode },
   { href: '/audit', label: 'Auditoria', icon: FileText, roles: ['admin'] },
   { href: '/reports', label: 'Relatórios', icon: FileBarChart, roles: ['admin'] },

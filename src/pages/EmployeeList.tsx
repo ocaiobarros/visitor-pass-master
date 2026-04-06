@@ -175,6 +175,18 @@ const EmployeeList = () => {
                           </Button>
                           
                           {isAdminOrRh && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="gap-1"
+                              onClick={() => setEditEmployee(employee)}
+                            >
+                              <Pencil className="w-4 h-4" />
+                              Editar
+                            </Button>
+                          )}
+
+                          {isAdminOrRh && (
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button
@@ -229,6 +241,12 @@ const EmployeeList = () => {
           )}
         </CardContent>
       </Card>
+
+      <EditEmployeeModal
+        employee={editEmployee}
+        open={!!editEmployee}
+        onOpenChange={(open) => { if (!open) setEditEmployee(null); }}
+      />
     </DashboardLayout>
   );
 };

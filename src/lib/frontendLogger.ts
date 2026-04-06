@@ -150,6 +150,7 @@ class FrontendLogger {
   private async sendLogs(entries: LogEntry[]) {
     if (!this.config.enabled || entries.length === 0) return;
     if (!this.isOnline) return;
+    if (!this.config.endpoint) return; // Sem endpoint configurado, só console
 
     // circuit-breaker
     if (Date.now() < this.disabledUntilMs) return;

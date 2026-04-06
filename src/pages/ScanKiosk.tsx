@@ -224,10 +224,10 @@ const ScanKiosk = () => {
     return data;
   };
 
-  const checkAuthorizedDriver = async (vehicleCredentialId: string, driverCredentialId: string | null, associateId: string | null) => {
+  const checkAuthorizedDriver = async (vehicleCredentialId: string, driverCredentialId: string | null, associateId: string | null): Promise<{ authorization_type: string; driver_type: string; driverName?: string } | null> => {
     let query = supabase
       .from('vehicle_authorized_drivers')
-      .select('*')
+      .select('*, employee_credentials(full_name, status), associates(full_name, status, employee_credential_id)')
       .eq('vehicle_credential_id', vehicleCredentialId)
       .eq('is_active', true);
 
@@ -240,7 +240,36 @@ const ScanKiosk = () => {
     }
 
     const { data } = await query.maybeSingle();
-    return data;
+    if (!data) return null;
+
+    // Validate: if driver is an employee, check they're not blocked
+    if (data.driver_type === 'employee' && data.employee_credentials?.status === 'blocked') {
+      return null;
+    }
+
+    // Validate: if driver is an associate, check they're active
+    if (data.driver_type === 'associate') {
+      if (data.associates?.status !== 'active') return null;
+      // Also check the responsible employee is not blocked
+      if (data.associates?.employee_credential_id) {
+        const { data: empCred } = await supabase
+          .from('employee_credentials')
+          .select('status')
+          .eq('id', data.associates.employee_credential_id)
+          .maybeSingle();
+        if (empCred?.status === 'blocked') return null;
+      }
+    }
+
+    // Check validity period
+    if (data.valid_from && new Date(data.valid_from) > new Date()) return null;
+    if (data.valid_until && new Date(data.valid_until) < new Date()) return null;
+
+    return {
+      authorization_type: data.authorization_type,
+      driver_type: data.driver_type,
+      driverName: data.employee_credentials?.full_name || data.associates?.full_name,
+    };
   };
 
   // Process scan

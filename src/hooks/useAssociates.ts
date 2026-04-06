@@ -63,9 +63,9 @@ export const useAssociates = () => {
   return useQuery({
     queryKey: ['associates'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase
         .from('associates')
-        .select('*, employee_credentials(full_name, document)')
+        .select('*, employee_credentials!associates_employee_credential_id_fkey(full_name, document)') as any)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return (data || []).map(mapRow);
@@ -77,9 +77,9 @@ export const useAssociatesByEmployee = (employeeCredentialId: string) => {
   return useQuery({
     queryKey: ['associates', 'employee', employeeCredentialId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase
         .from('associates')
-        .select('*, employee_credentials(full_name, document)')
+        .select('*, employee_credentials!associates_employee_credential_id_fkey(full_name, document)') as any)
         .eq('employee_credential_id', employeeCredentialId)
         .order('created_at', { ascending: false });
       if (error) throw error;

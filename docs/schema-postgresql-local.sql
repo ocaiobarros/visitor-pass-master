@@ -406,9 +406,39 @@ BEGIN
   RETURN EXISTS (
     SELECT 1 FROM public.user_roles
     WHERE user_id = public.current_user_id()
-      AND role IN ('admin', 'rh')
       AND role IN ('admin', 'rh', 'operador_acesso')
   );
+END;
+$$;
+
+-- Gerador de pass_id para agregados
+CREATE OR REPLACE FUNCTION public.generate_associate_pass_id()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path TO 'public'
+AS $$
+BEGIN
+  IF NEW.pass_id IS NULL OR NEW.pass_id = '' THEN
+    NEW.pass_id := 'AG-' || upper(substring(md5(random()::text) from 1 for 8));
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+-- Cascata: colaborador bloqueado → agregados suspensos
+CREATE OR REPLACE FUNCTION public.cascade_employee_deactivation()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+BEGIN
+  IF NEW.status = 'blocked' AND (OLD.status IS NULL OR OLD.status != 'blocked') THEN
+    UPDATE public.associates
+    SET status = 'suspended', updated_at = now()
+    WHERE employee_credential_id = NEW.id;
+  END IF;
+  RETURN NEW;
 END;
 $$;
 

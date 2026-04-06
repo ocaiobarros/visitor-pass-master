@@ -642,9 +642,20 @@ BEGIN
   END IF;
 END $$;
 
--- ============================================================
--- RPCs SERVER-SIDE
--- ============================================================
+-- Adicionar novos valores de auditoria (Fase 2)
+DO $$
+DECLARE v TEXT;
+BEGIN
+  FOREACH v IN ARRAY ARRAY['ASSOCIATE_CREATE','ASSOCIATE_UPDATE','ASSOCIATE_DELETE','ACCESS_SESSION_CREATE','ACCESS_SESSION_COMPLETE','ACCESS_SESSION_DENY','ACCESS_SESSION_EXPIRE']
+  LOOP
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid
+      WHERE t.typname = 'audit_action_type' AND e.enumlabel = v
+    ) THEN
+      EXECUTE format('ALTER TYPE public.audit_action_type ADD VALUE %L', v);
+    END IF;
+  END LOOP;
+END $$;
 
 CREATE OR REPLACE FUNCTION public.get_dashboard_stats()
 RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$

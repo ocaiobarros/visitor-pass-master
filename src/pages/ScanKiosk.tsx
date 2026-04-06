@@ -15,13 +15,15 @@ import { supabase } from '@/integrations/supabase/client';
 type ScanResult = {
   type: 'visitor';
   data: Visitor;
-  status: 'allowed' | 'blocked' | 'expired';
+  status: 'allowed' | 'blocked' | 'expired' | 'waiting_second_qr' | 'expired_unused';
   direction: 'in' | 'out';
+  sessionInfo?: { waitingFor: string; expiresIn: number };
 } | {
   type: 'employee';
   data: EmployeeCredential;
-  status: 'allowed' | 'blocked';
+  status: 'allowed' | 'blocked' | 'waiting_second_qr' | 'session_denied';
   direction: 'in' | 'out';
+  sessionInfo?: { waitingFor: string; expiresIn: number };
 } | {
   type: 'error';
   code: string;

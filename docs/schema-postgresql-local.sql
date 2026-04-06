@@ -66,6 +66,7 @@ DO $$ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'app_role') THEN
     CREATE TYPE public.app_role AS ENUM ('admin', 'rh', 'security');
+    -- operador_acesso adicionado após criação inicial
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'credential_status') THEN
     CREATE TYPE public.credential_status AS ENUM ('allowed', 'blocked');
@@ -123,6 +124,12 @@ CREATE TABLE IF NOT EXISTS public.departments (
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS public.companies (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID NOT NULL UNIQUE,
@@ -146,7 +153,7 @@ CREATE TABLE IF NOT EXISTS public.visitors (
   pass_id TEXT NOT NULL UNIQUE,
   full_name TEXT NOT NULL,
   document TEXT NOT NULL,
-  company TEXT,
+  company_id UUID REFERENCES public.companies(id),
   phone TEXT,
   photo_url TEXT,
   visit_to_type public.visit_to_type NOT NULL DEFAULT 'setor',
@@ -325,6 +332,7 @@ BEGIN
     SELECT 1 FROM public.user_roles
     WHERE user_id = public.current_user_id()
       AND role IN ('admin', 'rh')
+      AND role IN ('admin', 'rh', 'operador_acesso')
   );
 END;
 $$;
@@ -469,6 +477,128 @@ END $$;
 -- ============================================================
 -- PERMISSÕES FINAIS: Garantir acesso às tabelas criadas
 -- ============================================================
+
+-- Adicionar operador_acesso ao enum (se não existir)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid
+    WHERE t.typname = 'app_role' AND e.enumlabel = 'operador_acesso'
+  ) THEN
+    ALTER TYPE public.app_role ADD VALUE 'operador_acesso';
+  END IF;
+END $$;
+
+-- ============================================================
+-- RPCs SERVER-SIDE
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION public.get_dashboard_stats()
+RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
+DECLARE result JSON;
+BEGIN
+  SELECT json_build_object(
+    'total_visitors', (SELECT COUNT(*) FROM visitors),
+    'visitors_inside', (SELECT COUNT(*) FROM visitors WHERE status = 'inside'),
+    'visitors_outside', (SELECT COUNT(*) FROM visitors WHERE status IN ('outside', 'closed')),
+    'visitors_pending', (SELECT COUNT(*) FROM visitors WHERE status = 'pending'),
+    'entries_today', (SELECT COUNT(*) FROM access_logs WHERE direction = 'in' AND created_at::date = CURRENT_DATE),
+    'exits_today', (SELECT COUNT(*) FROM access_logs WHERE direction = 'out' AND created_at::date = CURRENT_DATE),
+    'total_access_today', (SELECT COUNT(*) FROM access_logs WHERE created_at::date = CURRENT_DATE),
+    'employees_active', (SELECT COUNT(*) FROM employee_credentials WHERE status = 'allowed'),
+    'total_users', (SELECT COUNT(*) FROM profiles),
+    'entries_yesterday', (SELECT COUNT(*) FROM access_logs WHERE direction = 'in' AND created_at::date = CURRENT_DATE - 1),
+    'avg_per_hour', COALESCE(ROUND((SELECT COUNT(*) FROM access_logs WHERE created_at::date = CURRENT_DATE)::numeric / GREATEST(EXTRACT(HOUR FROM now())::numeric, 1), 1), 0)
+  ) INTO result;
+  RETURN result;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_today_stats()
+RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
+DECLARE result JSON; v_today_start TIMESTAMPTZ; v_yesterday_start TIMESTAMPTZ; v_yesterday_end TIMESTAMPTZ; v_hours_elapsed NUMERIC;
+BEGIN
+  v_today_start := date_trunc('day', now()); v_yesterday_start := v_today_start - interval '1 day'; v_yesterday_end := v_today_start;
+  v_hours_elapsed := GREATEST(EXTRACT(EPOCH FROM (now() - v_today_start)) / 3600.0, 1);
+  SELECT json_build_object(
+    'total_today', (SELECT COUNT(*) FROM access_logs WHERE created_at >= v_today_start),
+    'entries_today', (SELECT COUNT(*) FROM access_logs WHERE created_at >= v_today_start AND direction = 'in'),
+    'exits_today', (SELECT COUNT(*) FROM access_logs WHERE created_at >= v_today_start AND direction = 'out'),
+    'avg_per_hour', ROUND((SELECT COUNT(*) FROM access_logs WHERE created_at >= v_today_start)::numeric / v_hours_elapsed, 1),
+    'total_yesterday', (SELECT COUNT(*) FROM access_logs WHERE created_at >= v_yesterday_start AND created_at < v_yesterday_end),
+    'trend', (SELECT COUNT(*) FROM access_logs WHERE created_at >= v_today_start) - (SELECT COUNT(*) FROM access_logs WHERE created_at >= v_yesterday_start AND created_at < v_yesterday_end),
+    'trend_percentage', CASE WHEN (SELECT COUNT(*) FROM access_logs WHERE created_at >= v_yesterday_start AND created_at < v_yesterday_end) > 0
+      THEN ROUND(((SELECT COUNT(*) FROM access_logs WHERE created_at >= v_today_start) - (SELECT COUNT(*) FROM access_logs WHERE created_at >= v_yesterday_start AND created_at < v_yesterday_end))::numeric * 100.0 / (SELECT COUNT(*) FROM access_logs WHERE created_at >= v_yesterday_start AND created_at < v_yesterday_end), 0)
+      ELSE 0 END
+  ) INTO result;
+  RETURN result;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_activity_chart_data()
+RETURNS TABLE(day date, day_label text, date_label text, entries bigint, exits bigint)
+LANGUAGE sql SECURITY DEFINER SET search_path TO 'public' AS $$
+  SELECT d::date AS day, to_char(d, 'Dy') AS day_label, to_char(d, 'DD/MM') AS date_label,
+    COUNT(*) FILTER (WHERE al.direction = 'in') AS entries, COUNT(*) FILTER (WHERE al.direction = 'out') AS exits
+  FROM generate_series((CURRENT_DATE - interval '6 days')::date, CURRENT_DATE::date, '1 day'::interval) AS d
+  LEFT JOIN access_logs al ON al.created_at::date = d::date GROUP BY d ORDER BY d;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_critical_events(p_limit integer DEFAULT 10)
+RETURNS TABLE(id uuid, created_at timestamptz, user_id uuid, user_email text, action_type audit_action_type, details jsonb)
+LANGUAGE sql SECURITY DEFINER SET search_path TO 'public' AS $$
+  SELECT al.id, al.created_at, al.user_id, al.user_email, al.action_type, al.details::jsonb
+  FROM audit_logs al WHERE al.action_type IN ('LOGIN_FAILED','USER_CREATE','USER_DELETE','USER_DEACTIVATE','ROLE_UPDATE','PASSWORD_RESET','CONFIG_UPDATE','BACKUP_EXPORT')
+  ORDER BY al.created_at DESC LIMIT p_limit;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_recent_visitors(p_limit integer DEFAULT 5)
+RETURNS TABLE(id uuid, full_name text, status visitor_status, visit_to_type visit_to_type, visit_to_name text, company_name text, company_reason text, created_at timestamptz)
+LANGUAGE sql SECURITY DEFINER SET search_path TO 'public' AS $$
+  SELECT v.id, v.full_name, v.status, v.visit_to_type, v.visit_to_name, c.name AS company_name, v.company_reason, v.created_at
+  FROM visitors v LEFT JOIN companies c ON v.company_id = c.id ORDER BY v.created_at DESC LIMIT p_limit;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_visitors_inside(p_limit integer DEFAULT 10)
+RETURNS TABLE(id uuid, full_name text, visit_to_type visit_to_type, visit_to_name text, company_name text, created_at timestamptz)
+LANGUAGE sql SECURITY DEFINER SET search_path TO 'public' AS $$
+  SELECT v.id, v.full_name, v.visit_to_type, v.visit_to_name, c.name AS company_name, v.created_at
+  FROM visitors v LEFT JOIN companies c ON v.company_id = c.id WHERE v.status = 'inside' ORDER BY v.created_at DESC LIMIT p_limit;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_last_access_direction(p_subject_type subject_type, p_subject_id uuid)
+RETURNS access_direction LANGUAGE sql SECURITY DEFINER SET search_path TO 'public' AS $$
+  SELECT direction FROM access_logs WHERE subject_type = p_subject_type AND subject_id = p_subject_id ORDER BY created_at DESC LIMIT 1;
+$$;
+
+CREATE OR REPLACE FUNCTION public.validate_access_log_subject() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
+BEGIN
+  IF NEW.subject_type = 'visitor' THEN
+    IF NOT EXISTS (SELECT 1 FROM visitors WHERE id = NEW.subject_id) THEN RAISE EXCEPTION 'Visitor % does not exist', NEW.subject_id; END IF;
+  ELSIF NEW.subject_type = 'employee' THEN
+    IF NOT EXISTS (SELECT 1 FROM employee_credentials WHERE id = NEW.subject_id) THEN RAISE EXCEPTION 'Employee % does not exist', NEW.subject_id; END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_validate_access_log_subject ON public.access_logs;
+CREATE TRIGGER trg_validate_access_log_subject BEFORE INSERT ON public.access_logs FOR EACH ROW EXECUTE FUNCTION public.validate_access_log_subject();
+
+CREATE OR REPLACE FUNCTION public.report_access_summary(p_start date, p_end date)
+RETURNS TABLE(day date, total_entries bigint, total_exits bigint, unique_visitors bigint, unique_employees bigint)
+LANGUAGE sql SECURITY DEFINER SET search_path TO 'public' AS $$
+  SELECT created_at::date AS day, COUNT(*) FILTER (WHERE direction = 'in'), COUNT(*) FILTER (WHERE direction = 'out'),
+    COUNT(DISTINCT subject_id) FILTER (WHERE subject_type = 'visitor'), COUNT(DISTINCT subject_id) FILTER (WHERE subject_type = 'employee')
+  FROM access_logs WHERE created_at::date BETWEEN p_start AND p_end GROUP BY created_at::date ORDER BY day DESC;
+$$;
+
+CREATE OR REPLACE FUNCTION public.report_visitors_by_company(p_start date, p_end date)
+RETURNS TABLE(company_name text, total_visitors bigint, visitors_inside bigint, visitors_closed bigint)
+LANGUAGE sql SECURITY DEFINER SET search_path TO 'public' AS $$
+  SELECT COALESCE(c.name, 'Sem empresa'), COUNT(*), COUNT(*) FILTER (WHERE v.status = 'inside'), COUNT(*) FILTER (WHERE v.status = 'closed')
+  FROM visitors v LEFT JOIN companies c ON v.company_id = c.id WHERE v.created_at::date BETWEEN p_start AND p_end GROUP BY c.name ORDER BY 2 DESC;
+$$;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon, authenticated;
 GRANT INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;

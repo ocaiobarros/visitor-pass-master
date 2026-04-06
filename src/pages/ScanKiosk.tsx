@@ -663,6 +663,86 @@ const ScanKiosk = () => {
     );
   }
 
+  // WAITING SECOND QR - Yellow/Warning fullscreen
+  if (scanResult && scanResult.type !== 'error' && scanResult.status === 'waiting_second_qr') {
+    const label = scanResult.type === 'visitor' ? 'VISITANTE CONDUTOR' : 'VEÍCULO DE COLABORADOR';
+    return (
+      <div ref={containerRef} className="min-h-screen flex flex-col items-center justify-center p-8 bg-warning">
+        <div className="absolute top-0 left-0 right-0 py-4 px-8 text-center bg-black/20">
+          <h1 className="text-4xl md:text-5xl font-black tracking-wider text-white">
+            📷 AGUARDANDO SEGUNDO QR
+          </h1>
+        </div>
+        <div className="fixed z-50" style={{ top: 'calc(1rem + env(safe-area-inset-top))', left: 'calc(1rem + env(safe-area-inset-left))' }}>
+          <Button variant="outline" onClick={handleExit} className="gap-2 bg-background/90 shadow-lg border border-border">
+            <ArrowLeft className="w-4 h-4" /> Voltar
+          </Button>
+        </div>
+        <div className="text-center text-white">
+          <Clock className="w-32 h-32 md:w-48 md:h-48 mx-auto mb-8 animate-pulse opacity-90" />
+          <h2 className="text-4xl md:text-5xl font-black mb-4">{label}</h2>
+          <p className="text-3xl font-bold mb-2">{scanResult.data.fullName}</p>
+          {scanResult.sessionInfo && (
+            <div className="mt-8 p-6 rounded-xl bg-black/20">
+              <p className="text-2xl font-bold">Aguardando: {scanResult.sessionInfo.waitingFor}</p>
+              <p className="text-xl mt-2 opacity-80">Tempo restante: ~{scanResult.sessionInfo.expiresIn}s</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // SESSION DENIED - Red fullscreen  
+  if (scanResult && scanResult.type !== 'error' && scanResult.status === 'session_denied') {
+    return (
+      <div ref={containerRef} className="min-h-screen flex flex-col items-center justify-center p-8 bg-kiosk-blocked">
+        <div className="absolute top-0 left-0 right-0 py-4 px-8 text-center bg-black/30">
+          <h1 className="text-4xl md:text-5xl font-black tracking-wider text-white">✕ CONDUTOR NÃO AUTORIZADO</h1>
+        </div>
+        <div className="fixed z-50" style={{ top: 'calc(1rem + env(safe-area-inset-top))', left: 'calc(1rem + env(safe-area-inset-left))' }}>
+          <Button variant="outline" onClick={handleExit} className="gap-2 bg-background/90 shadow-lg border border-border">
+            <ArrowLeft className="w-4 h-4" /> Voltar
+          </Button>
+        </div>
+        <div className="text-center text-white">
+          <XCircle className="w-32 h-32 md:w-48 md:h-48 mx-auto mb-8 opacity-90" />
+          <h2 className="text-4xl md:text-5xl font-black mb-4">CONDUTOR NÃO AUTORIZADO</h2>
+          <p className="text-3xl mb-8">{scanResult.data.fullName}</p>
+          <div className="mt-12 p-6 rounded-xl bg-black/30">
+            <AlertTriangle className="w-12 h-12 mx-auto mb-4" />
+            <p className="text-2xl font-bold">ESTE COLABORADOR NÃO PODE CONDUZIR ESTE VEÍCULO</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // EXPIRED UNUSED - Red fullscreen
+  if (scanResult && scanResult.type === 'visitor' && scanResult.status === 'expired_unused') {
+    return (
+      <div ref={containerRef} className="min-h-screen flex flex-col items-center justify-center p-8 bg-kiosk-blocked">
+        <div className="absolute top-0 left-0 right-0 py-4 px-8 text-center bg-black/30">
+          <h1 className="text-4xl md:text-5xl font-black tracking-wider text-white">✕ PASSE EXPIRADO</h1>
+        </div>
+        <div className="fixed z-50" style={{ top: 'calc(1rem + env(safe-area-inset-top))', left: 'calc(1rem + env(safe-area-inset-left))' }}>
+          <Button variant="outline" onClick={handleExit} className="gap-2 bg-background/90 shadow-lg border border-border">
+            <ArrowLeft className="w-4 h-4" /> Voltar
+          </Button>
+        </div>
+        <div className="text-center text-white">
+          <XCircle className="w-32 h-32 md:w-48 md:h-48 mx-auto mb-8 opacity-90" />
+          <h2 className="text-4xl md:text-5xl font-black mb-4">PASSE EXPIRADO SEM USO</h2>
+          <p className="text-3xl mb-8">{scanResult.data.fullName}</p>
+          <div className="mt-12 p-6 rounded-xl bg-black/30">
+            <AlertTriangle className="w-12 h-12 mx-auto mb-4" />
+            <p className="text-2xl font-bold">PASSE NÃO FOI UTILIZADO DENTRO DA VALIDADE</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // BLOCKED/EXPIRED - Red fullscreen
   if (scanResult && ((scanResult.type === 'visitor' && (scanResult.status === 'blocked' || scanResult.status === 'expired')) ||
       (scanResult.type === 'employee' && scanResult.status === 'blocked') ||

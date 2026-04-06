@@ -39,7 +39,7 @@ interface CreateAssociateData {
   validUntil?: string;
 }
 
-const mapRow = (row: any): Associate => ({
+const mapRow = (row: any, empMap?: Map<string, any>): Associate => ({
   id: row.id,
   employeeCredentialId: row.employee_credential_id,
   fullName: row.full_name,
@@ -55,20 +55,31 @@ const mapRow = (row: any): Associate => ({
   createdBy: row.created_by,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
-  employeeName: row.employee_credentials?.full_name,
-  employeeDocument: row.employee_credentials?.document,
+  employeeName: empMap?.get(row.employee_credential_id)?.full_name,
+  employeeDocument: empMap?.get(row.employee_credential_id)?.document,
 });
 
 export const useAssociates = () => {
   return useQuery({
     queryKey: ['associates'],
     queryFn: async () => {
-      const { data, error } = await (supabase
+      // Fetch associates without joins (avoids PGRST200/403 issues)
+      const { data: rows, error } = await supabase
         .from('associates')
-        .select('*, employee_credentials!associates_employee_credential_id_fkey(full_name, document)') as any)
+        .select('*')
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map(mapRow);
+      if (!rows || rows.length === 0) return [];
+
+      // Batch fetch employee names
+      const empIds = [...new Set(rows.map(r => r.employee_credential_id))];
+      const { data: emps } = await supabase
+        .from('employee_credentials')
+        .select('id, full_name, document')
+        .in('id', empIds);
+      const empMap = new Map((emps || []).map(e => [e.id, e]));
+
+      return rows.map(r => mapRow(r, empMap));
     },
   });
 };
@@ -77,13 +88,23 @@ export const useAssociatesByEmployee = (employeeCredentialId: string) => {
   return useQuery({
     queryKey: ['associates', 'employee', employeeCredentialId],
     queryFn: async () => {
-      const { data, error } = await (supabase
+      const { data: rows, error } = await supabase
         .from('associates')
-        .select('*, employee_credentials!associates_employee_credential_id_fkey(full_name, document)') as any)
+        .select('*')
         .eq('employee_credential_id', employeeCredentialId)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map(mapRow);
+      if (!rows || rows.length === 0) return [];
+
+      // Fetch the employee info
+      const { data: emp } = await supabase
+        .from('employee_credentials')
+        .select('id, full_name, document')
+        .eq('id', employeeCredentialId)
+        .maybeSingle();
+      const empMap = new Map(emp ? [[emp.id, emp]] : []);
+
+      return rows.map(r => mapRow(r, empMap));
     },
     enabled: !!employeeCredentialId,
   });

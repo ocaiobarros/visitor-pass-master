@@ -906,9 +906,9 @@ const QRScanner = () => {
 
     const code = qrCode.toUpperCase().trim();
     
-    if (!code.startsWith('VP-') && !code.startsWith('EC-') && !code.startsWith('VV-')) {
+    if (!code.startsWith('VP-') && !code.startsWith('EC-') && !code.startsWith('VV-') && !code.startsWith('AG-')) {
       playError();
-      setScanError('Código inválido. Use VP-, VV- ou EC-XXXXXXXX.');
+      setScanError('Código inválido. Use VP-, VV-, EC- ou AG-XXXXXXXX.');
       setQrCode('');
       scheduleReset(3000);
       return;
@@ -922,7 +922,7 @@ const QRScanner = () => {
     const normalized = code.toUpperCase().trim();
     clearScan();
     
-    if (normalized.startsWith('VP-') || normalized.startsWith('EC-') || normalized.startsWith('VV-')) {
+    if (normalized.startsWith('VP-') || normalized.startsWith('EC-') || normalized.startsWith('VV-') || normalized.startsWith('AG-')) {
       setSearchCode(normalized);
     } else {
       playError();

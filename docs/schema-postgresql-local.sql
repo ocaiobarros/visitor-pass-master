@@ -81,7 +81,7 @@ DO $$ BEGIN
     CREATE TYPE public.visit_to_type AS ENUM ('setor', 'pessoa');
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'visitor_status') THEN
-    CREATE TYPE public.visitor_status AS ENUM ('pending', 'inside', 'outside', 'closed');
+    CREATE TYPE public.visitor_status AS ENUM ('pending', 'inside', 'outside', 'closed', 'expired_unused');
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'visitor_access_type') THEN
     CREATE TYPE public.visitor_access_type AS ENUM ('pedestrian', 'driver');

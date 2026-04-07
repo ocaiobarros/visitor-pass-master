@@ -1,6 +1,6 @@
 import DashboardLayout from '@/components/DashboardLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import GenericReport, { ReportConfig, directionBadge, statusBadge, personTypeBadge } from '@/components/reports/GenericReport';
+import GenericReport, { ReportConfig, directionBadge, statusBadge, personTypeBadge, opStatusBadge } from '@/components/reports/GenericReport';
 import ExecutiveReport from '@/components/reports/ExecutiveReport';
 import { FileBarChart, Users, ShieldAlert, Clock, Car, BarChart3, UserCheck, UserPlus } from 'lucide-react';
 
@@ -17,12 +17,12 @@ const SESSION_STATUS_OPTIONS = [
   { value: 'expired', label: 'Expirada' },
 ];
 
-const VISITOR_STATUS_OPTIONS = [
-  { value: 'pending', label: 'Pendente' },
-  { value: 'inside', label: 'Dentro' },
-  { value: 'outside', label: 'Fora' },
-  { value: 'closed', label: 'Encerrado' },
-  { value: 'expired_unused', label: 'Expirado' },
+const VISITOR_OP_STATUS_OPTIONS = [
+  { value: 'Finalizado', label: 'Finalizado' },
+  { value: 'Dentro', label: 'Dentro' },
+  { value: 'Expirado sem uso', label: 'Expirado sem uso' },
+  { value: 'Negado', label: 'Negado' },
+  { value: 'Pendente', label: 'Pendente' },
 ];
 
 const CREDENTIAL_STATUS_OPTIONS = [
@@ -36,7 +36,7 @@ const ASSOCIATE_STATUS_OPTIONS = [
   { value: 'expired', label: 'Expirado' },
 ];
 
-/* ── Operational Reports (priority tabs) ── */
+/* ── Operational Reports ── */
 
 const presenceConfig: ReportConfig = {
   title: 'Presença Atual — Quem está dentro agora',
@@ -144,54 +144,52 @@ const timelineConfig: ReportConfig = {
 };
 
 const vehicleConfig: ReportConfig = {
-  title: 'Relatório Veicular',
-  rpcName: 'report_vehicle_activity',
+  title: 'Relatório Veicular — Sessões Consolidadas',
+  rpcName: 'report_vehicle_sessions',
   columns: [
-    { key: 'created_at', label: 'Data/Hora', format: 'datetime' },
     { key: 'vehicle_plate', label: 'Placa' },
     { key: 'vehicle_model', label: 'Veículo' },
     { key: 'person_name', label: 'Condutor' },
     { key: 'person_type', label: 'Tipo', format: 'badge', badgeVariant: personTypeBadge },
-    { key: 'direction', label: 'Direção', format: 'badge', badgeVariant: directionBadge },
     { key: 'gate_id', label: 'Portão' },
-    { key: 'entity_status', label: 'Status', format: 'badge', badgeVariant: statusBadge },
-    { key: 'responsible_name', label: 'Responsável' },
+    { key: 'entry_time', label: 'Entrada', format: 'datetime' },
+    { key: 'exit_time', label: 'Saída', format: 'datetime' },
+    { key: 'duration_minutes', label: 'Permanência', format: 'duration' },
+    { key: 'session_status', label: 'Status', format: 'badge', badgeVariant: opStatusBadge },
   ],
   filters: [
     { key: 'plate', label: 'Placa', type: 'text', placeholder: 'Buscar por placa...', rpcParam: 'p_plate' },
-    { key: 'owner', label: 'Proprietário/Condutor', type: 'text', placeholder: 'Buscar por nome...', rpcParam: 'p_owner' },
+    { key: 'owner', label: 'Condutor', type: 'text', placeholder: 'Buscar por nome...', rpcParam: 'p_owner' },
     { key: 'start', label: 'Data Início', type: 'date', rpcParam: 'p_start' },
     { key: 'end', label: 'Data Fim', type: 'date', rpcParam: 'p_end' },
   ],
 };
 
 const visitorsConfig: ReportConfig = {
-  title: 'Visitantes',
-  rpcName: 'report_visitors_detailed',
+  title: 'Visitantes — Sessões Operacionais',
+  rpcName: 'report_visitors_operational',
   columns: [
     { key: 'full_name', label: 'Nome' },
     { key: 'document', label: 'Documento' },
     { key: 'company_name', label: 'Empresa' },
     { key: 'company_reason', label: 'Motivo' },
     { key: 'visit_to_name', label: 'Destino' },
-    { key: 'status', label: 'Status', format: 'badge', badgeVariant: statusBadge },
     { key: 'access_type', label: 'Acesso' },
-    { key: 'vehicle_plate', label: 'Veículo' },
-    { key: 'valid_from', label: 'Válido De', format: 'datetime' },
-    { key: 'valid_until', label: 'Válido Até', format: 'datetime' },
-    { key: 'entry_count', label: 'Entradas', format: 'number' },
-    { key: 'exit_count', label: 'Saídas', format: 'number' },
-    { key: 'last_access', label: 'Último Acesso', format: 'datetime' },
+    { key: 'gate_id', label: 'Portão' },
+    { key: 'entry_time', label: 'Entrada', format: 'datetime' },
+    { key: 'exit_time', label: 'Saída', format: 'datetime' },
+    { key: 'duration_minutes', label: 'Permanência', format: 'duration' },
+    { key: 'operational_status', label: 'Status', format: 'badge', badgeVariant: opStatusBadge },
   ],
   filters: [
-    { key: 'status', label: 'Status', type: 'select', options: VISITOR_STATUS_OPTIONS, rpcParam: 'p_status' },
+    { key: 'status', label: 'Status', type: 'select', options: VISITOR_OP_STATUS_OPTIONS, rpcParam: 'p_status' },
     { key: 'start', label: 'Data Início', type: 'date', rpcParam: 'p_start' },
     { key: 'end', label: 'Data Fim', type: 'date', rpcParam: 'p_end' },
   ],
 };
 
 const employeesConfig: ReportConfig = {
-  title: 'Colaboradores',
+  title: 'Colaboradores — Cadastro e Operação',
   rpcName: 'report_employees_detailed',
   columns: [
     { key: 'full_name', label: 'Nome' },
@@ -200,9 +198,11 @@ const employeesConfig: ReportConfig = {
     { key: 'department_name', label: 'Setor' },
     { key: 'job_title', label: 'Cargo' },
     { key: 'status', label: 'Status', format: 'badge', badgeVariant: statusBadge },
-    { key: 'created_at', label: 'Cadastro', format: 'date' },
+    { key: 'current_state', label: 'Estado Atual', format: 'badge', badgeVariant: opStatusBadge },
+    { key: 'last_entry', label: 'Última Entrada', format: 'datetime' },
+    { key: 'last_exit', label: 'Última Saída', format: 'datetime' },
+    { key: 'duration_minutes', label: 'Permanência', format: 'duration' },
     { key: 'access_count', label: 'Acessos', format: 'number' },
-    { key: 'last_access', label: 'Último Acesso', format: 'datetime' },
     { key: 'vehicle_count', label: 'Veículos', format: 'number' },
     { key: 'associate_count', label: 'Agregados', format: 'number' },
   ],
@@ -215,7 +215,7 @@ const employeesConfig: ReportConfig = {
 };
 
 const associatesConfig: ReportConfig = {
-  title: 'Agregados',
+  title: 'Agregados — Cadastro e Operação',
   rpcName: 'report_associates_detailed',
   columns: [
     { key: 'full_name', label: 'Nome' },
@@ -224,11 +224,11 @@ const associatesConfig: ReportConfig = {
     { key: 'relationship_type', label: 'Vínculo' },
     { key: 'responsible_name', label: 'Responsável' },
     { key: 'status', label: 'Status', format: 'badge', badgeVariant: statusBadge },
-    { key: 'validity_type', label: 'Validade' },
-    { key: 'valid_from', label: 'Válido De', format: 'date' },
-    { key: 'valid_until', label: 'Válido Até', format: 'date' },
+    { key: 'current_state', label: 'Estado Atual', format: 'badge', badgeVariant: opStatusBadge },
+    { key: 'last_entry', label: 'Última Entrada', format: 'datetime' },
+    { key: 'last_exit', label: 'Última Saída', format: 'datetime' },
+    { key: 'duration_minutes', label: 'Permanência', format: 'duration' },
     { key: 'access_count', label: 'Acessos', format: 'number' },
-    { key: 'last_access', label: 'Último Acesso', format: 'datetime' },
     { key: 'vehicle_auth_count', label: 'Veículos', format: 'number' },
   ],
   filters: [
@@ -238,7 +238,7 @@ const associatesConfig: ReportConfig = {
   ],
 };
 
-/* ── Tab groups with icons ── */
+/* ── Tab groups ── */
 const OPERATIONAL_TABS = [
   { id: 'presence', label: 'Presença Atual', icon: Users, config: presenceConfig },
   { id: 'permanence', label: 'Permanência', icon: Clock, config: permanenceConfig },

@@ -26,24 +26,27 @@ export interface PDFReportOptions {
   filters?: string;
   summary?: SummaryItem[];
   generatedBy?: string;
-  /** Report-specific accent color [R, G, B] */
   accentColor?: [number, number, number];
-  /** Additional sections after main table */
   extraSections?: { title: string; data: any[]; columns: ExportColumn[] }[];
 }
 
 /* ══════════════════════════════════════════════
-   Constants
+   Corporate Green Palette
    ══════════════════════════════════════════════ */
 
 const SYSTEM_NAME = 'GUARDA OPERACIONAL';
-const BRAND_BLUE: [number, number, number] = [30, 58, 138];
-const BRAND_DARK: [number, number, number] = [15, 23, 42];
-const LIGHT_BG: [number, number, number] = [245, 247, 250];
-const MUTED_TEXT: [number, number, number] = [100, 116, 139];
+const BRAND_GREEN: [number, number, number] = [22, 101, 52];   // #166534
+const ACCENT_GREEN: [number, number, number] = [34, 197, 94];  // #22c55e
+const BRAND_DARK: [number, number, number] = [31, 41, 55];     // #1f2937
+const LIGHT_BG: [number, number, number] = [243, 244, 246];    // #f3f4f6
+const MUTED_TEXT: [number, number, number] = [107, 114, 128];  // #6b7280
+const CARD_BORDER: [number, number, number] = [229, 231, 235]; // #e5e7eb
+const ALT_ROW: [number, number, number] = [249, 250, 251];     // #f9fafb
+const RED: [number, number, number] = [220, 38, 38];           // #dc2626
+const GREEN_TEXT: [number, number, number] = [22, 163, 74];    // #16a34a
 
 /* ══════════════════════════════════════════════
-   CSV / Excel (unchanged)
+   CSV / Excel
    ══════════════════════════════════════════════ */
 
 export const exportCSV = (data: any[], columns: ExportColumn[], filename: string) => {
@@ -75,17 +78,11 @@ export const exportExcel = (data: any[], columns: ExportColumn[], filename: stri
 };
 
 /* ══════════════════════════════════════════════
-   Legacy exportPDF (backwards compat)
+   Legacy wrapper
    ══════════════════════════════════════════════ */
 
 export const exportPDF = (data: any[], columns: ExportColumn[], title: string, filename: string, filters?: string) => {
-  exportProfessionalPDF({
-    title,
-    filename,
-    columns,
-    data,
-    filters,
-  });
+  exportProfessionalPDF({ title, filename, columns, data, filters });
 };
 
 /* ══════════════════════════════════════════════
@@ -95,7 +92,7 @@ export const exportPDF = (data: any[], columns: ExportColumn[], title: string, f
 export const exportProfessionalPDF = (opts: PDFReportOptions) => {
   const {
     title, subtitle, filename, columns, data, filters,
-    summary, generatedBy, accentColor = BRAND_BLUE, extraSections,
+    summary, generatedBy, accentColor = BRAND_GREEN, extraSections,
   } = opts;
 
   const isLandscape = columns.length > 6;
@@ -107,12 +104,12 @@ export const exportProfessionalPDF = (opts: PDFReportOptions) => {
 
   let cursorY = 0;
 
-  /* ─── Header band ─── */
+  /* ─── Header ─── */
   cursorY = drawHeader(doc, pageW, title, subtitle, now, filters, generatedBy, accentColor);
 
   /* ─── Summary cards ─── */
   if (summary && summary.length > 0) {
-    cursorY = drawSummaryBlock(doc, cursorY, pageW, margin, summary, accentColor);
+    cursorY = drawSummaryCards(doc, cursorY, pageW, margin, summary, accentColor);
   }
 
   /* ─── Main table ─── */
@@ -121,12 +118,8 @@ export const exportProfessionalPDF = (opts: PDFReportOptions) => {
   /* ─── Extra sections ─── */
   if (extraSections) {
     for (const section of extraSections) {
-      // Add section title
       cursorY += 6;
-      if (cursorY > pageH - 40) {
-        doc.addPage();
-        cursorY = 20;
-      }
+      if (cursorY > pageH - 40) { doc.addPage(); cursorY = 20; }
       doc.setFontSize(11);
       doc.setTextColor(...BRAND_DARK);
       doc.setFont('helvetica', 'bold');
@@ -136,14 +129,13 @@ export const exportProfessionalPDF = (opts: PDFReportOptions) => {
     }
   }
 
-  /* ─── Footer on all pages ─── */
+  /* ─── Footer ─── */
   drawFooter(doc, pageW, pageH);
-
   doc.save(`${filename}.pdf`);
 };
 
 /* ══════════════════════════════════════════════
-   Internal drawing helpers
+   Drawing helpers
    ══════════════════════════════════════════════ */
 
 function drawHeader(
@@ -151,48 +143,45 @@ function drawHeader(
   dateStr: string, filters: string | undefined, generatedBy: string | undefined,
   accent: [number, number, number],
 ): number {
-  // Top color band
+  // Green header band
   doc.setFillColor(...accent);
-  doc.rect(0, 0, pageW, 28, 'F');
+  doc.rect(0, 0, pageW, 26, 'F');
 
-  // System name
+  // System name (small, white)
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(8);
+  doc.setFontSize(7);
   doc.setFont('helvetica', 'normal');
-  doc.text(SYSTEM_NAME, 14, 8);
+  doc.text(SYSTEM_NAME, 14, 7);
 
-  // Report title
-  doc.setFontSize(16);
+  // Report title (large, white, bold)
+  doc.setFontSize(15);
   doc.setFont('helvetica', 'bold');
-  doc.text(title, 14, 18);
+  doc.text(title, 14, 16);
 
-  // Subtitle if any
+  // Subtitle
   if (subtitle) {
-    doc.setFontSize(9);
+    doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
-    doc.text(subtitle, 14, 24);
+    doc.text(subtitle, 14, 22);
   }
 
-  // Meta block below band
-  let metaY = 34;
-  doc.setFontSize(8);
+  // Date on the right
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  const dateW = doc.getTextWidth(dateStr);
+  doc.text(dateStr, pageW - 14 - dateW, 7);
+
+  // Meta below band
+  let metaY = 32;
+  doc.setFontSize(7.5);
   doc.setTextColor(...MUTED_TEXT);
   doc.setFont('helvetica', 'normal');
 
-  const metaLines: string[] = [];
-  metaLines.push(`Gerado em: ${dateStr}`);
-  if (generatedBy) metaLines.push(`Usuário: ${generatedBy}`);
-  if (filters) metaLines.push(`Filtros: ${filters}`);
-  // total is added by caller via filters or summary
+  if (generatedBy) { doc.text(`Usuário: ${generatedBy}`, 14, metaY); metaY += 4; }
+  if (filters) { doc.text(`Filtros: ${filters}`, 14, metaY); metaY += 4; }
 
-  metaLines.forEach(line => {
-    doc.text(line, 14, metaY);
-    metaY += 4;
-  });
-
-  // Separator line
-  metaY += 2;
-  doc.setDrawColor(220, 220, 220);
+  // Thin separator
+  doc.setDrawColor(...CARD_BORDER);
   doc.setLineWidth(0.3);
   doc.line(14, metaY, pageW - 14, metaY);
   metaY += 4;
@@ -200,41 +189,43 @@ function drawHeader(
   return metaY;
 }
 
-function drawSummaryBlock(
+function drawSummaryCards(
   doc: jsPDF, startY: number, pageW: number, margin: number,
   items: SummaryItem[], accent: [number, number, number],
 ): number {
   const usableW = pageW - margin * 2;
   const cols = Math.min(items.length, 5);
-  const cardW = usableW / cols;
+  const cardW = usableW / cols - 2;
   const cardH = 18;
-  const gap = 3;
-
-  // Background for summary area
-  doc.setFillColor(...LIGHT_BG);
-  doc.roundedRect(margin, startY, usableW, cardH + 4, 2, 2, 'F');
+  const gap = 2;
 
   items.slice(0, 10).forEach((item, i) => {
     const row = Math.floor(i / cols);
     const col = i % cols;
-    const x = margin + col * cardW + gap;
-    const y = startY + 2 + row * (cardH + 4);
+    const x = margin + col * (cardW + gap);
+    const y = startY + row * (cardH + 4);
 
-    // Value
+    // White card with border
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(...CARD_BORDER);
+    doc.setLineWidth(0.4);
+    doc.roundedRect(x, y, cardW, cardH, 1.5, 1.5, 'FD');
+
+    // Value in green
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...accent);
-    doc.text(String(item.value ?? 0), x + 4, y + 8);
+    doc.text(String(item.value ?? 0), x + 4, y + 9);
 
-    // Label
-    doc.setFontSize(7);
+    // Label in gray
+    doc.setFontSize(6.5);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...MUTED_TEXT);
-    doc.text(item.label, x + 4, y + 14);
+    doc.text(item.label, x + 4, y + 14.5);
   });
 
   const rows = Math.ceil(items.length / cols);
-  return startY + rows * (cardH + 4) + 4;
+  return startY + rows * (cardH + 4) + 2;
 }
 
 function drawTable(
@@ -258,8 +249,8 @@ function drawTable(
     })),
     styles: {
       fontSize: 7,
-      cellPadding: 2.5,
-      lineColor: [230, 230, 230],
+      cellPadding: 3,
+      lineColor: CARD_BORDER,
       lineWidth: 0.2,
       textColor: [30, 30, 30],
     },
@@ -268,23 +259,37 @@ function drawTable(
       textColor: [255, 255, 255],
       fontStyle: 'bold',
       fontSize: 7.5,
-      cellPadding: 3,
+      cellPadding: 3.5,
     },
     alternateRowStyles: {
-      fillColor: [250, 251, 252],
+      fillColor: ALT_ROW,
     },
     margin: { left: margin, right: margin },
-    tableLineColor: [230, 230, 230],
+    tableLineColor: CARD_BORDER,
     tableLineWidth: 0.2,
     didParseCell: (hookData) => {
-      // Highlight critical status cells
       const text = String(hookData.cell.raw || '');
       if (hookData.section === 'body') {
-        if (['Dentro', 'Negado', 'Bloqueado', 'Suspenso'].includes(text)) {
-          hookData.cell.styles.textColor = [220, 38, 38];
+        // Red statuses
+        if (['Dentro', 'Negado', 'Bloqueado', 'Suspenso', 'Inconsistente', 'Incompleto', 'denied', 'blocked'].includes(text)) {
+          hookData.cell.styles.textColor = RED;
           hookData.cell.styles.fontStyle = 'bold';
-        } else if (['Finalizado', 'Ativo', 'Concluída'].includes(text)) {
-          hookData.cell.styles.textColor = [22, 163, 74];
+        }
+        // Green statuses
+        else if (['Finalizado', 'Ativo', 'Concluída', 'Fora', 'allowed', 'active', 'completed'].includes(text)) {
+          hookData.cell.styles.textColor = GREEN_TEXT;
+          hookData.cell.styles.fontStyle = 'bold';
+        }
+        // Muted statuses
+        else if (['Expirado sem uso', 'Pendente', 'Sem registro', 'expired_unused', 'pending'].includes(text)) {
+          hookData.cell.styles.textColor = MUTED_TEXT;
+        }
+        // Direction
+        else if (text === 'in') {
+          hookData.cell.styles.textColor = GREEN_TEXT;
+          hookData.cell.styles.fontStyle = 'bold';
+        } else if (text === 'out') {
+          hookData.cell.styles.textColor = MUTED_TEXT;
         }
       }
     },
@@ -297,28 +302,28 @@ function drawFooter(doc: jsPDF, pageW: number, pageH: number) {
   const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
-    
-    // Footer separator
-    doc.setDrawColor(220, 220, 220);
-    doc.setLineWidth(0.3);
-    doc.line(14, pageH - 16, pageW - 14, pageH - 16);
 
-    doc.setFontSize(7);
+    // Thin separator
+    doc.setDrawColor(...CARD_BORDER);
+    doc.setLineWidth(0.3);
+    doc.line(14, pageH - 14, pageW - 14, pageH - 14);
+
+    doc.setFontSize(6.5);
     doc.setTextColor(...MUTED_TEXT);
     doc.setFont('helvetica', 'normal');
 
-    // Left: system name + date
-    doc.text(`${SYSTEM_NAME} — ${formatLocalDateTime(new Date())}`, 14, pageH - 10);
+    // Left
+    doc.text(SYSTEM_NAME, 14, pageH - 9);
 
-    // Center: confidential
+    // Center
     const confText = 'Documento de uso interno';
     const confW = doc.getTextWidth(confText);
-    doc.text(confText, (pageW - confW) / 2, pageH - 10);
+    doc.text(confText, (pageW - confW) / 2, pageH - 9);
 
-    // Right: page X of Y
+    // Right
     const pageText = `Página ${i} de ${pageCount}`;
     const ptW = doc.getTextWidth(pageText);
-    doc.text(pageText, pageW - 14 - ptW, pageH - 10);
+    doc.text(pageText, pageW - 14 - ptW, pageH - 9);
   }
 }
 

@@ -73,19 +73,19 @@ $function$;
 DO $$
 DECLARE
   tbl TEXT;
-  trigger_name TEXT;
+  v_trigger_name TEXT;
 BEGIN
   FOREACH tbl IN ARRAY ARRAY['visitors','employee_credentials','access_logs','associates','access_sessions','departments'] LOOP
-    trigger_name := 'audit_' || tbl || '_trigger';
+    v_trigger_name := 'audit_' || tbl || '_trigger';
     IF NOT EXISTS (
-      SELECT 1 FROM information_schema.triggers
-      WHERE event_object_table = tbl AND trigger_name = trigger_name
+      SELECT 1 FROM information_schema.triggers t
+      WHERE t.event_object_table = tbl AND t.trigger_name = v_trigger_name
     ) THEN
       EXECUTE format(
         'CREATE TRIGGER %I AFTER INSERT OR UPDATE OR DELETE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func()',
-        trigger_name, tbl
+        v_trigger_name, tbl
       );
-      RAISE NOTICE 'Trigger % criado para %', trigger_name, tbl;
+      RAISE NOTICE 'Trigger % criado para %', v_trigger_name, tbl;
     END IF;
   END LOOP;
 END $$;

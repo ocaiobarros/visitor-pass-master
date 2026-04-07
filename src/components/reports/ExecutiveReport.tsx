@@ -60,7 +60,7 @@ const ExecutiveReport = () => {
       extraSections.push({
         title: 'Top Portões',
         columns: [{ key: 'gate_id', label: 'Portão' }, { key: 'total', label: 'Total' }],
-        data: stats.top_gates,
+        data: stats.top_gates.map((g: any) => ({ ...g, gate_id: resolveGate(g.gate_id) })),
       });
     }
     if (stats.top_departments?.length) {
@@ -149,7 +149,7 @@ const ExecutiveReport = () => {
             <CardContent>
               {stats.top_gates.map((g: any) => (
                 <div key={g.gate_id} className="flex justify-between py-1 text-sm border-b last:border-0">
-                  <span>{g.gate_id}</span><Badge variant="outline">{g.total}</Badge>
+                  <span>{resolveGate(g.gate_id)}</span><Badge variant="outline">{g.total}</Badge>
                 </div>
               ))}
             </CardContent>

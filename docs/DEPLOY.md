@@ -125,7 +125,27 @@ docker compose exec -T postgres psql -U postgres guarda_operacional < backup.sql
 
 # Atualizar para nova versão
 git pull
+docker compose down
 docker compose up -d --build
+# ⚠️ O serviço 'migrate' aplica automaticamente migrations pendentes no startup.
+# Não é necessário executar SQL manualmente.
+```
+
+### ⚙️ Como funciona a atualização de banco
+
+O projeto usa **migrations versionadas automáticas**:
+
+1. Arquivos SQL em `docker/migrations/` são nomeados com prefixo numérico (ex: `001_report_rpcs.sql`)
+2. No `docker compose up`, o serviço `migrate` roda antes do PostgREST
+3. Cada migration é aplicada **uma única vez** (rastreada na tabela `schema_migrations`)
+4. Após aplicar, o PostgREST recebe `NOTIFY pgrst, 'reload schema'` automaticamente
+
+**Para adicionar novas migrations**: crie um arquivo `docker/migrations/NNN_descricao.sql` com o próximo número sequencial.
+
+**Para verificar migrations aplicadas**:
+```bash
+docker compose exec postgres psql -U postgres -d guarda_operacional \
+  -c "SELECT version, applied_at FROM schema_migrations ORDER BY version;"
 ```
 
 ## 🔒 Configuração HTTPS (Produção)

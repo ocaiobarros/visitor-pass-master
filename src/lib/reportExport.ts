@@ -183,7 +183,7 @@ function drawHeader(
   metaLines.push(`Gerado em: ${dateStr}`);
   if (generatedBy) metaLines.push(`Usuário: ${generatedBy}`);
   if (filters) metaLines.push(`Filtros: ${filters}`);
-  metaLines.push(`Total de registros: ${data.length ?? 0}`);
+  // total is added by caller via filters or summary
 
   metaLines.forEach(line => {
     doc.text(line, 14, metaY);

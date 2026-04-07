@@ -647,7 +647,7 @@ const ScanKiosk = () => {
                 subject_type: 'associate' as any,
                 subject_id: assocData.id,
                 direction: assocDir,
-                gate_id: 'GUARITA_01',
+                gate_id: userGateCode,
                 operator_id: user.user?.id || null,
               });
 
@@ -692,7 +692,7 @@ const ScanKiosk = () => {
             subject_type: 'associate' as any,
             subject_id: assocData.id,
             direction,
-            gate_id: 'GUARITA_01',
+            gate_id: userGateCode,
             operator_id: user.user?.id || null,
           });
 

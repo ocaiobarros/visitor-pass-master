@@ -667,10 +667,14 @@ export type Database = {
         Returns: {
           access_count: number
           created_at: string
+          current_state: string
           document: string
+          duration_minutes: number
           full_name: string
           id: string
           last_access: string
+          last_entry: string
+          last_exit: string
           pass_id: string
           relationship_type: string
           responsible_document: string
@@ -715,12 +719,16 @@ export type Database = {
           associate_count: number
           created_at: string
           credential_id: string
+          current_state: string
           department_name: string
           document: string
+          duration_minutes: number
           full_name: string
           id: string
           job_title: string
           last_access: string
+          last_entry: string
+          last_exit: string
           status: string
           vehicle_count: number
         }[]
@@ -843,6 +851,28 @@ export type Database = {
           vehicle_plate: string
         }[]
       }
+      report_vehicle_sessions: {
+        Args: {
+          p_end?: string
+          p_limit?: number
+          p_offset?: number
+          p_owner?: string
+          p_plate?: string
+          p_start?: string
+        }
+        Returns: {
+          document: string
+          duration_minutes: number
+          entry_time: string
+          exit_time: string
+          gate_id: string
+          person_name: string
+          person_type: string
+          session_status: string
+          vehicle_model: string
+          vehicle_plate: string
+        }[]
+      }
       report_visitors_by_company: {
         Args: { p_end: string; p_start: string }
         Returns: {
@@ -875,6 +905,32 @@ export type Database = {
           valid_from: string
           valid_until: string
           vehicle_plate: string
+          visit_to_name: string
+          visit_to_type: string
+        }[]
+      }
+      report_visitors_operational: {
+        Args: {
+          p_end?: string
+          p_limit?: number
+          p_offset?: number
+          p_start?: string
+          p_status?: string
+        }
+        Returns: {
+          access_type: string
+          company_name: string
+          company_reason: string
+          document: string
+          duration_minutes: number
+          entry_time: string
+          exit_time: string
+          full_name: string
+          gate_id: string
+          id: string
+          operational_status: string
+          valid_from: string
+          valid_until: string
           visit_to_name: string
           visit_to_type: string
         }[]

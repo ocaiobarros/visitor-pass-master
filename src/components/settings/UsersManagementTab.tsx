@@ -96,6 +96,7 @@ const UsersManagementTab = () => {
         const gate = (profile as any).gates;
         return {
           ...profile,
+          gate_id: gate?.id || null,
           gate_name: gate?.name || null,
           roles: (roles || [])
             .filter(r => r.user_id === profile.user_id)

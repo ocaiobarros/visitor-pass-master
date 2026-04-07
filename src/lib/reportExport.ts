@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { format } from 'date-fns';
+import { formatLocalDateTime } from '@/lib/dateUtils';
 
 export interface ExportColumn {
   key: string;
@@ -42,7 +42,7 @@ export const exportPDF = (data: any[], columns: ExportColumn[], title: string, f
   doc.text(title, 14, 20);
   doc.setFontSize(9);
   doc.setTextColor(100);
-  doc.text(`Gerado em: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 27);
+  doc.text(`Gerado em: ${formatLocalDateTime(new Date())}`, 14, 27);
   if (filters) doc.text(`Filtros: ${filters}`, 14, 33);
 
   autoTable(doc, {

@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { exportPDF } from '@/lib/reportExport';
+import { formatLocalDate, formatLocalDateTime } from '@/lib/dateUtils';
 import { format, subDays } from 'date-fns';
 import { Users, Car, ShieldAlert, Clock, TrendingUp, Building2, FileText, LogIn, LogOut } from 'lucide-react';
 
@@ -25,7 +26,7 @@ const ExecutiveReport = () => {
   const cards = [
     { label: 'Entradas', value: stats.total_entries, icon: LogIn, color: 'text-green-600' },
     { label: 'Saídas', value: stats.total_exits, icon: LogOut, color: 'text-blue-600' },
-    { label: 'Dentro Agora', value: stats.currently_inside, icon: Users, color: 'text-orange-600' },
+    { label: 'Dentro Agora', value: stats.currently_inside, icon: Users, color: 'text-destructive' },
     { label: 'Visitantes', value: stats.unique_visitors, icon: Users, color: 'text-primary' },
     { label: 'Colaboradores', value: stats.unique_employees, icon: Users, color: 'text-primary' },
     { label: 'Agregados', value: stats.unique_associates, icon: Users, color: 'text-primary' },
@@ -128,7 +129,7 @@ const ExecutiveReport = () => {
                 <tbody>
                   {stats.daily_breakdown.map((d: any) => (
                     <tr key={d.day} className="border-b last:border-0">
-                      <td className="py-1">{format(new Date(d.day), 'dd/MM/yyyy')}</td>
+                      <td className="py-1">{formatLocalDate(d.day)}</td>
                       <td className="text-right">{d.entries}</td>
                       <td className="text-right">{d.exits}</td>
                       <td className="text-right">{d.unique_people}</td>

@@ -10,8 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuditLogs, AuditActionType, AuditLogFilters } from '@/hooks/useAuditLogs';
 import { exportCSV, exportExcel, exportPDF, ExportColumn } from '@/lib/reportExport';
 import { FileText, Download, ChevronLeft, ChevronRight, Filter, Search, Calendar, FileSpreadsheet } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { formatLocalDateTime } from '@/lib/dateUtils';
 
 const PAGE_SIZE = 20;
 

@@ -203,7 +203,11 @@ const GenericReport = ({ config }: { config: ReportConfig }) => {
   });
 
   const formatCell = (row: any, col: ColumnDef) => {
-    const value = row[col.key];
+    let value = row[col.key];
+    // Resolve gate codes to readable names
+    if (col.key === 'gate_id' && value && gateNameMap[value]) {
+      value = gateNameMap[value];
+    }
     if (value === null || value === undefined) return <span className="text-muted-foreground">-</span>;
     switch (col.format) {
       case 'datetime': return formatLocalDateTime(value);

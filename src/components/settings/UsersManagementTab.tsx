@@ -80,7 +80,7 @@ const UsersManagementTab = () => {
     queryFn: async () => {
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('*')
+        .select('*, gates:gate_id(id, name)')
         .order('created_at', { ascending: false });
 
       if (profilesError) throw profilesError;
@@ -91,12 +91,16 @@ const UsersManagementTab = () => {
 
       if (rolesError) throw rolesError;
 
-      return (profiles || []).map(profile => ({
-        ...profile,
-        roles: (roles || [])
-          .filter(r => r.user_id === profile.user_id)
-          .map(r => r.role as AppRole),
-      })) as UserProfile[];
+      return (profiles || []).map(profile => {
+        const gate = (profile as any).gates;
+        return {
+          ...profile,
+          gate_name: gate?.name || null,
+          roles: (roles || [])
+            .filter(r => r.user_id === profile.user_id)
+            .map(r => r.role as AppRole),
+        };
+      }) as UserProfile[];
     },
   });
 

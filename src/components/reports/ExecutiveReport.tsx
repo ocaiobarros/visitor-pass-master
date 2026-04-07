@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { exportPDF } from '@/lib/reportExport';
+import { exportProfessionalPDF, ExportColumn } from '@/lib/reportExport';
 import { formatLocalDate, formatLocalDateTime } from '@/lib/dateUtils';
 import { format, subDays } from 'date-fns';
 import { Users, Car, ShieldAlert, Clock, TrendingUp, Building2, FileText, LogIn, LogOut } from 'lucide-react';
@@ -37,9 +37,54 @@ const ExecutiveReport = () => {
   ];
 
   const handleExport = () => {
-    const rows = cards.map(c => ({ metric: c.label, value: String(c.value ?? 0) }));
-    exportPDF(rows, [{ key: 'metric', label: 'Métrica' }, { key: 'value', label: 'Valor' }],
-      'Resumo Executivo', `executivo_${format(new Date(), 'yyyy-MM-dd')}`);
+    const summaryItems = cards.map(c => ({ label: c.label, value: c.value ?? 0 }));
+
+    const mainCols: ExportColumn[] = [{ key: 'metric', label: 'Métrica' }, { key: 'value', label: 'Valor' }];
+    const mainRows = cards.map(c => ({ metric: c.label, value: String(c.value ?? 0) }));
+
+    const extraSections: { title: string; data: any[]; columns: ExportColumn[] }[] = [];
+
+    if (stats.top_gates?.length) {
+      extraSections.push({
+        title: 'Top Portões',
+        columns: [{ key: 'gate_id', label: 'Portão' }, { key: 'total', label: 'Total' }],
+        data: stats.top_gates,
+      });
+    }
+    if (stats.top_departments?.length) {
+      extraSections.push({
+        title: 'Top Departamentos',
+        columns: [{ key: 'department', label: 'Departamento' }, { key: 'total', label: 'Total' }],
+        data: stats.top_departments,
+      });
+    }
+    if (stats.daily_breakdown?.length) {
+      extraSections.push({
+        title: 'Detalhamento Diário',
+        columns: [
+          { key: 'day', label: 'Data' },
+          { key: 'entries', label: 'Entradas' },
+          { key: 'exits', label: 'Saídas' },
+          { key: 'unique_people', label: 'Pessoas' },
+        ],
+        data: stats.daily_breakdown.map((d: any) => ({
+          ...d,
+          day: formatLocalDate(d.day),
+        })),
+      });
+    }
+
+    exportProfessionalPDF({
+      title: 'Resumo Executivo',
+      subtitle: 'Visão consolidada de controle de acesso',
+      filename: `executivo_${format(new Date(), 'yyyy-MM-dd')}`,
+      columns: mainCols,
+      data: mainRows,
+      filters: `Período: ${formatLocalDate(start)} a ${formatLocalDate(end)}`,
+      summary: summaryItems,
+      accentColor: [15, 23, 42],
+      extraSections,
+    });
   };
 
   return (

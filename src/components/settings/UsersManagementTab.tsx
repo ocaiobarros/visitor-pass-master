@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useActiveGates } from '@/hooks/useGates';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -53,12 +54,15 @@ interface UserProfile {
   created_at: string;
   is_active: boolean;
   roles: AppRole[];
+  gate_id: string | null;
+  gate_name: string | null;
 }
 
 const UsersManagementTab = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { data: activeGates } = useActiveGates();
   
   const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
   const [newUserEmail, setNewUserEmail] = useState('');
@@ -77,7 +81,7 @@ const UsersManagementTab = () => {
     queryFn: async () => {
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('*')
+        .select('*, gates:gate_id(id, name)')
         .order('created_at', { ascending: false });
 
       if (profilesError) throw profilesError;
@@ -88,12 +92,16 @@ const UsersManagementTab = () => {
 
       if (rolesError) throw rolesError;
 
-      return (profiles || []).map(profile => ({
-        ...profile,
-        roles: (roles || [])
-          .filter(r => r.user_id === profile.user_id)
-          .map(r => r.role as AppRole),
-      })) as UserProfile[];
+      return (profiles || []).map(profile => {
+        const gate = (profile as any).gates;
+        return {
+          ...profile,
+          gate_name: gate?.name || null,
+          roles: (roles || [])
+            .filter(r => r.user_id === profile.user_id)
+            .map(r => r.role as AppRole),
+        };
+      }) as UserProfile[];
     },
   });
 
@@ -246,6 +254,25 @@ const UsersManagementTab = () => {
       toast({ 
         title: variables.isActive ? 'Usuário ativado!' : 'Usuário desativado!' 
       });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  // Assign gate to user
+  const assignGate = useMutation({
+    mutationFn: async ({ userId, gateId, userName }: { userId: string; gateId: string | null; userName: string }) => {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ gate_id: gateId })
+        .eq('user_id', userId);
+      if (error) throw error;
+      await logAuditAction('CONFIG_UPDATE', { action: 'gate_assign', target_user: userName, gate_id: gateId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      toast({ title: 'Guarita vinculada!' });
     },
     onError: (error: any) => {
       toast({ title: 'Erro', description: error.message, variant: 'destructive' });
@@ -418,6 +445,7 @@ const UsersManagementTab = () => {
                   <TableHead>Status</TableHead>
                   <TableHead>Permissão</TableHead>
                   <TableHead>Alterar</TableHead>
+                  <TableHead>Guarita</TableHead>
                   <TableHead>Cadastro</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
@@ -455,6 +483,26 @@ const UsersManagementTab = () => {
                           <SelectItem value="admin">Admin</SelectItem>
                           <SelectItem value="operador_acesso">Operador de Acesso</SelectItem>
                           <SelectItem value="security">Segurança</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      <Select
+                        value={u.gate_id || 'none'}
+                        onValueChange={(v) => assignGate.mutate({
+                          userId: u.user_id,
+                          gateId: v === 'none' ? null : v,
+                          userName: u.full_name,
+                        })}
+                      >
+                        <SelectTrigger className="w-36">
+                          <SelectValue placeholder="Sem guarita" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Sem guarita</SelectItem>
+                          {activeGates?.map(g => (
+                            <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </TableCell>

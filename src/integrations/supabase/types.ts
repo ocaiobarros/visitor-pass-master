@@ -27,7 +27,7 @@ export type Database = {
         Insert: {
           created_at?: string
           direction: Database["public"]["Enums"]["access_direction"]
-          gate_id?: string
+          gate_id: string
           id?: string
           operator_id?: string | null
           subject_id: string
@@ -314,10 +314,41 @@ export type Database = {
           },
         ]
       }
+      gates: {
+        Row: {
+          code: string
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
           full_name: string
+          gate_id: string | null
           id: string
           is_active: boolean
           must_change_password: boolean
@@ -327,6 +358,7 @@ export type Database = {
         Insert: {
           created_at?: string
           full_name: string
+          gate_id?: string | null
           id?: string
           is_active?: boolean
           must_change_password?: boolean
@@ -336,13 +368,22 @@ export type Database = {
         Update: {
           created_at?: string
           full_name?: string
+          gate_id?: string | null
           id?: string
           is_active?: boolean
           must_change_password?: boolean
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_gate_id_fkey"
+            columns: ["gate_id"]
+            isOneToOne: false
+            referencedRelation: "gates"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {

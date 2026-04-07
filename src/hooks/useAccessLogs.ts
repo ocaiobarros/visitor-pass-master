@@ -68,7 +68,7 @@ export const useCreateAccessLog = () => {
           subject_type: data.subjectType,
           subject_id: data.subjectId,
           direction: data.direction,
-          gate_id: data.gateId || 'GUARITA_01',
+          gate_id: data.gateId || 'SEM_GUARITA',
           operator_id: user.user?.id,
         })
         .select()

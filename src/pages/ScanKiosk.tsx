@@ -11,6 +11,7 @@ import BrandLogo from '@/components/BrandLogo';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/context/AuthContext';
 
 type ScanResult = {
   type: 'visitor';
@@ -94,6 +95,8 @@ const ScanKiosk = () => {
   const printRef = useRef<HTMLDivElement>(null);
   
   const navigate = useNavigate();
+  const { user: authUser } = useAuth();
+  const userGateCode = authUser?.gateCode || 'SEM_GUARITA';
   const { playSuccess, playError, playBlocked } = useScanFeedback();
   const updateVisitorStatus = useUpdateVisitorStatus();
   const createAccessLog = useCreateAccessLog();
@@ -644,7 +647,7 @@ const ScanKiosk = () => {
                 subject_type: 'associate' as any,
                 subject_id: assocData.id,
                 direction: assocDir,
-                gate_id: 'GUARITA_01',
+                gate_id: userGateCode,
                 operator_id: user.user?.id || null,
               });
 
@@ -689,7 +692,7 @@ const ScanKiosk = () => {
             subject_type: 'associate' as any,
             subject_id: assocData.id,
             direction,
-            gate_id: 'GUARITA_01',
+            gate_id: userGateCode,
             operator_id: user.user?.id || null,
           });
 

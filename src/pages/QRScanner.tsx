@@ -15,6 +15,7 @@ import { Visitor, EmployeeCredential, AccessDirection } from '@/types/visitor';
 import { supabase } from '@/integrations/supabase/client';
 import CameraScannerModal from '@/components/CameraScannerModal';
 import { logAuditAction } from '@/hooks/useAuditLogs';
+import { useAuth } from '@/context/AuthContext';
 
 // ============================================
 // GLOBAL STATE: Anti-duplicação por janela de tempo
@@ -81,6 +82,8 @@ const QRScanner = () => {
   const processingRef = useRef(false); // Mutex local
   
   const { toast } = useToast();
+  const { user: authUser } = useAuth();
+  const userGateCode = authUser?.gateCode || 'SEM_GUARITA';
   const { playSuccess, playError, playBlocked } = useScanFeedback();
   const updateVisitorStatus = useUpdateVisitorStatus();
 
@@ -211,7 +214,7 @@ const QRScanner = () => {
         subject_type: subjectType,
         subject_id: subjectId,
         direction: nextDirection,
-        gate_id: 'GUARITA_01',
+        gate_id: userGateCode,
         operator_id: user.user?.id || null,
       });
 

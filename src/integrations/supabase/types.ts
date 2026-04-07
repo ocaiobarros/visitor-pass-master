@@ -517,7 +517,31 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      access_events_enriched: {
+        Row: {
+          company_name: string | null
+          company_reason: string | null
+          created_at: string | null
+          credential_id: string | null
+          department_name: string | null
+          direction: string | null
+          document: string | null
+          entity_status: string | null
+          gate_id: string | null
+          id: string | null
+          job_title: string | null
+          operator_id: string | null
+          person_name: string | null
+          person_type: string | null
+          relationship_type: string | null
+          responsible_name: string | null
+          subject_id: string | null
+          vehicle_model: string | null
+          vehicle_plate: string | null
+          visit_to_name: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       cleanup_expired_sessions: { Args: never; Returns: number }
@@ -591,6 +615,193 @@ export type Database = {
           unique_visitors: number
         }[]
       }
+      report_associates_detailed: {
+        Args: {
+          p_end?: string
+          p_limit?: number
+          p_offset?: number
+          p_start?: string
+          p_status?: string
+        }
+        Returns: {
+          access_count: number
+          created_at: string
+          document: string
+          full_name: string
+          id: string
+          last_access: string
+          pass_id: string
+          relationship_type: string
+          responsible_document: string
+          responsible_name: string
+          status: string
+          valid_from: string
+          valid_until: string
+          validity_type: string
+          vehicle_auth_count: number
+        }[]
+      }
+      report_denials: {
+        Args: {
+          p_end?: string
+          p_limit?: number
+          p_offset?: number
+          p_start?: string
+        }
+        Returns: {
+          created_at: string
+          denial_reason: string
+          document: string
+          id: string
+          operator_name: string
+          person_name: string
+          person_type: string
+          session_type: string
+          vehicle_plate: string
+        }[]
+      }
+      report_employees_detailed: {
+        Args: {
+          p_department?: string
+          p_end?: string
+          p_limit?: number
+          p_offset?: number
+          p_start?: string
+          p_status?: string
+        }
+        Returns: {
+          access_count: number
+          associate_count: number
+          created_at: string
+          credential_id: string
+          department_name: string
+          document: string
+          full_name: string
+          id: string
+          job_title: string
+          last_access: string
+          status: string
+          vehicle_count: number
+        }[]
+      }
+      report_executive_summary: {
+        Args: { p_end?: string; p_start?: string }
+        Returns: Json
+      }
+      report_permanence: {
+        Args: {
+          p_document?: string
+          p_end?: string
+          p_limit?: number
+          p_offset?: number
+          p_person_type?: string
+          p_start?: string
+        }
+        Returns: {
+          document: string
+          duration_minutes: number
+          entry_time: string
+          exit_time: string
+          gate_id: string
+          person_name: string
+          person_type: string
+          subject_id: string
+          vehicle_plate: string
+        }[]
+      }
+      report_person_timeline: {
+        Args: {
+          p_document?: string
+          p_end?: string
+          p_limit?: number
+          p_name?: string
+          p_offset?: number
+          p_person_type?: string
+          p_start?: string
+        }
+        Returns: {
+          company_name: string
+          company_reason: string
+          created_at: string
+          department_name: string
+          direction: string
+          document: string
+          entity_status: string
+          gate_id: string
+          id: string
+          person_name: string
+          person_type: string
+          relationship_type: string
+          responsible_name: string
+          vehicle_model: string
+          vehicle_plate: string
+          visit_to_name: string
+        }[]
+      }
+      report_presence_now: {
+        Args: { p_limit?: number; p_offset?: number }
+        Returns: {
+          department_name: string
+          document: string
+          duration_minutes: number
+          entry_time: string
+          gate_id: string
+          person_name: string
+          person_type: string
+          responsible_name: string
+          subject_id: string
+          vehicle_plate: string
+        }[]
+      }
+      report_sessions: {
+        Args: {
+          p_end?: string
+          p_limit?: number
+          p_offset?: number
+          p_session_type?: string
+          p_start?: string
+          p_status?: string
+        }
+        Returns: {
+          authorization_type: string
+          completed_at: string
+          created_at: string
+          denial_reason: string
+          expires_at: string
+          first_scan: string
+          id: string
+          person_name: string
+          person_type: string
+          session_type: string
+          status: string
+          vehicle_model: string
+          vehicle_plate: string
+          visitor_name: string
+        }[]
+      }
+      report_vehicle_activity: {
+        Args: {
+          p_end?: string
+          p_limit?: number
+          p_offset?: number
+          p_owner?: string
+          p_plate?: string
+          p_start?: string
+        }
+        Returns: {
+          created_at: string
+          direction: string
+          document: string
+          entity_status: string
+          gate_id: string
+          id: string
+          person_name: string
+          person_type: string
+          responsible_name: string
+          vehicle_model: string
+          vehicle_plate: string
+        }[]
+      }
       report_visitors_by_company: {
         Args: { p_end: string; p_start: string }
         Returns: {
@@ -598,6 +809,33 @@ export type Database = {
           total_visitors: number
           visitors_closed: number
           visitors_inside: number
+        }[]
+      }
+      report_visitors_detailed: {
+        Args: {
+          p_end?: string
+          p_limit?: number
+          p_offset?: number
+          p_start?: string
+          p_status?: string
+        }
+        Returns: {
+          access_type: string
+          company_name: string
+          company_reason: string
+          created_at: string
+          document: string
+          entry_count: number
+          exit_count: number
+          full_name: string
+          id: string
+          last_access: string
+          status: string
+          valid_from: string
+          valid_until: string
+          vehicle_plate: string
+          visit_to_name: string
+          visit_to_type: string
         }[]
       }
     }

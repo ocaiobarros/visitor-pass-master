@@ -2,7 +2,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import GenericReport, { ReportConfig, directionBadge, statusBadge, personTypeBadge } from '@/components/reports/GenericReport';
 import ExecutiveReport from '@/components/reports/ExecutiveReport';
-import { FileBarChart } from 'lucide-react';
+import { FileBarChart, Users, ShieldAlert, Clock, Car, BarChart3, UserCheck, UserPlus } from 'lucide-react';
 
 const PERSON_TYPE_OPTIONS = [
   { value: 'visitor', label: 'Visitante' },
@@ -36,8 +36,91 @@ const ASSOCIATE_STATUS_OPTIONS = [
   { value: 'expired', label: 'Expirado' },
 ];
 
+/* ── Operational Reports (priority tabs) ── */
+
+const presenceConfig: ReportConfig = {
+  title: 'Presença Atual — Quem está dentro agora',
+  rpcName: 'report_presence_now',
+  columns: [
+    { key: 'person_name', label: 'Nome' },
+    { key: 'document', label: 'Documento' },
+    { key: 'person_type', label: 'Tipo', format: 'badge', badgeVariant: personTypeBadge },
+    { key: 'entry_time', label: 'Entrada', format: 'datetime' },
+    { key: 'duration_minutes', label: 'Permanência', format: 'duration' },
+    { key: 'gate_id', label: 'Portão' },
+    { key: 'vehicle_plate', label: 'Veículo' },
+    { key: 'responsible_name', label: 'Responsável' },
+    { key: 'department_name', label: 'Setor' },
+  ],
+  filters: [],
+};
+
+const permanenceConfig: ReportConfig = {
+  title: 'Sessões de Permanência',
+  rpcName: 'report_permanence',
+  columns: [
+    { key: 'person_name', label: 'Nome' },
+    { key: 'document', label: 'Documento' },
+    { key: 'person_type', label: 'Tipo', format: 'badge', badgeVariant: personTypeBadge },
+    { key: 'entry_time', label: 'Entrada', format: 'datetime' },
+    { key: 'exit_time', label: 'Saída', format: 'datetime' },
+    { key: 'duration_minutes', label: 'Duração', format: 'duration' },
+    { key: 'gate_id', label: 'Portão' },
+    { key: 'vehicle_plate', label: 'Veículo' },
+  ],
+  filters: [
+    { key: 'document', label: 'CPF/Documento', type: 'text', placeholder: 'Buscar...', rpcParam: 'p_document' },
+    { key: 'person_type', label: 'Tipo', type: 'select', options: PERSON_TYPE_OPTIONS, rpcParam: 'p_person_type' },
+    { key: 'start', label: 'Data Início', type: 'date', rpcParam: 'p_start' },
+    { key: 'end', label: 'Data Fim', type: 'date', rpcParam: 'p_end' },
+  ],
+};
+
+const sessionsConfig: ReportConfig = {
+  title: 'Sessões de Acesso',
+  rpcName: 'report_sessions',
+  columns: [
+    { key: 'created_at', label: 'Abertura', format: 'datetime' },
+    { key: 'session_type', label: 'Tipo Sessão' },
+    { key: 'status', label: 'Status', format: 'session_status' },
+    { key: 'person_name', label: 'Pessoa' },
+    { key: 'person_type', label: 'Tipo', format: 'badge', badgeVariant: personTypeBadge },
+    { key: 'visitor_name', label: 'Visitante' },
+    { key: 'vehicle_plate', label: 'Placa' },
+    { key: 'authorization_type', label: 'Autorização' },
+    { key: 'denial_reason', label: 'Motivo Negativa' },
+    { key: 'completed_at', label: 'Conclusão', format: 'datetime' },
+  ],
+  filters: [
+    { key: 'status', label: 'Status', type: 'select', options: SESSION_STATUS_OPTIONS, rpcParam: 'p_status' },
+    { key: 'start', label: 'Data Início', type: 'date', rpcParam: 'p_start' },
+    { key: 'end', label: 'Data Fim', type: 'date', rpcParam: 'p_end' },
+  ],
+};
+
+const denialsConfig: ReportConfig = {
+  title: 'Negativas / Bloqueios',
+  rpcName: 'report_denials',
+  columns: [
+    { key: 'created_at', label: 'Data/Hora', format: 'datetime' },
+    { key: 'person_name', label: 'Pessoa' },
+    { key: 'person_type', label: 'Tipo', format: 'badge', badgeVariant: personTypeBadge },
+    { key: 'document', label: 'Documento' },
+    { key: 'vehicle_plate', label: 'Veículo' },
+    { key: 'denial_reason', label: 'Motivo' },
+    { key: 'session_type', label: 'Tipo Sessão' },
+    { key: 'operator_name', label: 'Operador' },
+  ],
+  filters: [
+    { key: 'start', label: 'Data Início', type: 'date', rpcParam: 'p_start' },
+    { key: 'end', label: 'Data Fim', type: 'date', rpcParam: 'p_end' },
+  ],
+};
+
+/* ── Detailed / Tactical Reports ── */
+
 const timelineConfig: ReportConfig = {
-  title: 'Timeline por Pessoa',
+  title: 'Timeline de Acesso',
   rpcName: 'report_person_timeline',
   columns: [
     { key: 'created_at', label: 'Data/Hora', format: 'datetime' },
@@ -77,85 +160,6 @@ const vehicleConfig: ReportConfig = {
   filters: [
     { key: 'plate', label: 'Placa', type: 'text', placeholder: 'Buscar por placa...', rpcParam: 'p_plate' },
     { key: 'owner', label: 'Proprietário/Condutor', type: 'text', placeholder: 'Buscar por nome...', rpcParam: 'p_owner' },
-    { key: 'start', label: 'Data Início', type: 'date', rpcParam: 'p_start' },
-    { key: 'end', label: 'Data Fim', type: 'date', rpcParam: 'p_end' },
-  ],
-};
-
-const sessionsConfig: ReportConfig = {
-  title: 'Sessões Veiculares',
-  rpcName: 'report_sessions',
-  columns: [
-    { key: 'created_at', label: 'Data/Hora', format: 'datetime' },
-    { key: 'session_type', label: 'Tipo Sessão' },
-    { key: 'status', label: 'Status', format: 'badge', badgeVariant: statusBadge },
-    { key: 'person_name', label: 'Condutor' },
-    { key: 'person_type', label: 'Tipo', format: 'badge', badgeVariant: personTypeBadge },
-    { key: 'visitor_name', label: 'Visitante' },
-    { key: 'vehicle_plate', label: 'Placa' },
-    { key: 'authorization_type', label: 'Autorização' },
-    { key: 'denial_reason', label: 'Motivo Negativa' },
-    { key: 'completed_at', label: 'Conclusão', format: 'datetime' },
-  ],
-  filters: [
-    { key: 'status', label: 'Status', type: 'select', options: SESSION_STATUS_OPTIONS, rpcParam: 'p_status' },
-    { key: 'start', label: 'Data Início', type: 'date', rpcParam: 'p_start' },
-    { key: 'end', label: 'Data Fim', type: 'date', rpcParam: 'p_end' },
-  ],
-};
-
-const denialsConfig: ReportConfig = {
-  title: 'Negativas / Bloqueios',
-  rpcName: 'report_denials',
-  columns: [
-    { key: 'created_at', label: 'Data/Hora', format: 'datetime' },
-    { key: 'person_name', label: 'Pessoa' },
-    { key: 'person_type', label: 'Tipo', format: 'badge', badgeVariant: personTypeBadge },
-    { key: 'document', label: 'Documento' },
-    { key: 'vehicle_plate', label: 'Veículo' },
-    { key: 'denial_reason', label: 'Motivo' },
-    { key: 'session_type', label: 'Tipo Sessão' },
-    { key: 'operator_name', label: 'Operador' },
-  ],
-  filters: [
-    { key: 'start', label: 'Data Início', type: 'date', rpcParam: 'p_start' },
-    { key: 'end', label: 'Data Fim', type: 'date', rpcParam: 'p_end' },
-  ],
-};
-
-const presenceConfig: ReportConfig = {
-  title: 'Presença Atual',
-  rpcName: 'report_presence_now',
-  columns: [
-    { key: 'person_name', label: 'Nome' },
-    { key: 'document', label: 'Documento' },
-    { key: 'person_type', label: 'Tipo', format: 'badge', badgeVariant: personTypeBadge },
-    { key: 'entry_time', label: 'Entrada', format: 'datetime' },
-    { key: 'duration_minutes', label: 'Permanência', format: 'duration' },
-    { key: 'gate_id', label: 'Portão' },
-    { key: 'vehicle_plate', label: 'Veículo' },
-    { key: 'responsible_name', label: 'Responsável' },
-    { key: 'department_name', label: 'Setor' },
-  ],
-  filters: [],
-};
-
-const permanenceConfig: ReportConfig = {
-  title: 'Permanência',
-  rpcName: 'report_permanence',
-  columns: [
-    { key: 'person_name', label: 'Nome' },
-    { key: 'document', label: 'Documento' },
-    { key: 'person_type', label: 'Tipo', format: 'badge', badgeVariant: personTypeBadge },
-    { key: 'entry_time', label: 'Entrada', format: 'datetime' },
-    { key: 'exit_time', label: 'Saída', format: 'datetime' },
-    { key: 'duration_minutes', label: 'Duração', format: 'duration' },
-    { key: 'gate_id', label: 'Portão' },
-    { key: 'vehicle_plate', label: 'Veículo' },
-  ],
-  filters: [
-    { key: 'document', label: 'CPF/Documento', type: 'text', placeholder: 'Buscar...', rpcParam: 'p_document' },
-    { key: 'person_type', label: 'Tipo', type: 'select', options: PERSON_TYPE_OPTIONS, rpcParam: 'p_person_type' },
     { key: 'start', label: 'Data Início', type: 'date', rpcParam: 'p_start' },
     { key: 'end', label: 'Data Fim', type: 'date', rpcParam: 'p_end' },
   ],
@@ -234,18 +238,24 @@ const associatesConfig: ReportConfig = {
   ],
 };
 
-const TABS = [
+/* ── Tab groups with icons ── */
+const OPERATIONAL_TABS = [
+  { id: 'presence', label: 'Presença Atual', icon: Users, config: presenceConfig },
+  { id: 'permanence', label: 'Permanência', icon: Clock, config: permanenceConfig },
+  { id: 'sessions', label: 'Sessões', icon: BarChart3, config: sessionsConfig },
+  { id: 'denials', label: 'Negativas', icon: ShieldAlert, config: denialsConfig },
+] as const;
+
+const DETAILED_TABS = [
   { id: 'timeline', label: 'Timeline', config: timelineConfig },
-  { id: 'vehicle', label: 'Veicular', config: vehicleConfig },
-  { id: 'sessions', label: 'Sessões', config: sessionsConfig },
-  { id: 'denials', label: 'Negativas', config: denialsConfig },
-  { id: 'presence', label: 'Presença', config: presenceConfig },
-  { id: 'permanence', label: 'Permanência', config: permanenceConfig },
-  { id: 'visitors', label: 'Visitantes', config: visitorsConfig },
-  { id: 'employees', label: 'Colaboradores', config: employeesConfig },
+  { id: 'vehicle', label: 'Veicular', icon: Car, config: vehicleConfig },
+  { id: 'visitors', label: 'Visitantes', icon: UserPlus, config: visitorsConfig },
+  { id: 'employees', label: 'Colaboradores', icon: UserCheck, config: employeesConfig },
   { id: 'associates', label: 'Agregados', config: associatesConfig },
   { id: 'executive', label: 'Executivo', config: null },
 ] as const;
+
+const ALL_TABS = [...OPERATIONAL_TABS, ...DETAILED_TABS];
 
 const Reports = () => {
   return (
@@ -254,21 +264,31 @@ const Reports = () => {
         <div>
           <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
             <FileBarChart className="w-8 h-8 text-primary" />
-            Relatórios
+            Relatórios Operacionais
           </h1>
           <p className="text-muted-foreground mt-1">
-            Relatórios operacionais e táticos com dados reais do sistema
+            Relatórios baseados em sessões consolidadas — entrada, saída, permanência e negativas
           </p>
         </div>
 
-        <Tabs defaultValue="timeline" className="w-full">
+        <Tabs defaultValue="presence" className="w-full">
           <TabsList className="flex flex-wrap h-auto gap-1">
-            {TABS.map(t => (
-              <TabsTrigger key={t.id} value={t.id} className="text-xs">{t.label}</TabsTrigger>
+            {OPERATIONAL_TABS.map(t => (
+              <TabsTrigger key={t.id} value={t.id} className="text-xs gap-1">
+                {t.icon && <t.icon className="w-3 h-3" />}
+                {t.label}
+              </TabsTrigger>
+            ))}
+            <span className="w-px h-6 bg-border mx-1 self-center" />
+            {DETAILED_TABS.map(t => (
+              <TabsTrigger key={t.id} value={t.id} className="text-xs gap-1">
+                {'icon' in t && t.icon && <t.icon className="w-3 h-3" />}
+                {t.label}
+              </TabsTrigger>
             ))}
           </TabsList>
 
-          {TABS.map(t => (
+          {ALL_TABS.map(t => (
             <TabsContent key={t.id} value={t.id}>
               {t.id === 'executive' ? (
                 <ExecutiveReport />

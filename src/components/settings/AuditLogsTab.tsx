@@ -10,8 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuditLogs, AuditActionType, AuditLogFilters } from '@/hooks/useAuditLogs';
 import { exportCSV, exportExcel, exportPDF, ExportColumn } from '@/lib/reportExport';
 import { FileText, Download, ChevronLeft, ChevronRight, Filter, Search, Calendar, FileSpreadsheet } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { formatLocalDateTime } from '@/lib/dateUtils';
 
 const PAGE_SIZE = 20;
 
@@ -96,12 +95,12 @@ const AuditLogsTab = () => {
 
   const exportData = logs.map(log => ({
     ...log,
-    created_at_fmt: format(new Date(log.created_at), 'dd/MM/yyyy HH:mm:ss'),
+    created_at_fmt: formatLocalDateTime(log.created_at),
     action_type_label: ACTION_LABELS[log.action_type] || log.action_type,
     details_fmt: formatDetails(log.details),
   }));
 
-  const fname = `audit_logs_${format(new Date(), 'yyyy-MM-dd_HH-mm')}`;
+  const fname = `audit_logs_${new Date().toISOString().slice(0, 16).replace(':', '-')}`;
 
   return (
     <Card>
@@ -190,7 +189,7 @@ const AuditLogsTab = () => {
                 {logs.map(log => (
                   <TableRow key={log.id}>
                     <TableCell className="text-sm whitespace-nowrap">
-                      {format(new Date(log.created_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}
+                      {formatLocalDateTime(log.created_at)}
                     </TableCell>
                     <TableCell className="text-sm">
                       {log.user_email || <span className="text-muted-foreground">Sistema</span>}

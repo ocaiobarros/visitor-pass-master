@@ -38,11 +38,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchUserProfile = useCallback(async (authUser: SupabaseUser): Promise<User | null> => {
     try {
-      // Fetch profile and roles in parallel
+      // Fetch profile, roles, and gate in parallel
       const [profileResult, rolesResult] = await Promise.all([
         supabase
           .from('profiles')
-          .select('*')
+          .select('*, gates:gate_id(id, code, name, is_active)')
           .eq('user_id', authUser.id)
           .maybeSingle(),
         supabase
@@ -61,21 +61,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       const profile = profileResult.data;
       const roles = (rolesResult.data || []).map(r => r.role as AppRole);
+      const gate = profile?.gates as any;
 
       return {
         id: authUser.id,
         email: authUser.email || '',
         fullName: profile?.full_name || authUser.user_metadata?.full_name || authUser.email || '',
         roles: roles.length > 0 ? roles : ['security'],
+        gateId: gate?.id || null,
+        gateName: gate?.name || null,
+        gateCode: gate?.code || null,
       };
     } catch (error) {
       console.error('Error fetching user profile:', error);
-      // Fallback: não bloquear login por falha de profile/roles
       return {
         id: authUser.id,
         email: authUser.email || '',
         fullName: authUser.user_metadata?.full_name || authUser.email || '',
         roles: ['security'],
+        gateId: null,
+        gateName: null,
+        gateCode: null,
       };
     }
   }, []);

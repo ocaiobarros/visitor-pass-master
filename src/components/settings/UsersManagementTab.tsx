@@ -63,8 +63,6 @@ const UsersManagementTab = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: activeGates } = useActiveGates();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
   
   const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
   const [newUserEmail, setNewUserEmail] = useState('');

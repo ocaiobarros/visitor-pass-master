@@ -263,11 +263,11 @@ const UsersManagementTab = () => {
 
   // Assign gate to user
   const assignGate = useMutation({
-    mutationFn: async ({ userId, gateId, userName }: { userId: string; gateId: string | null; userName: string }) => {
+    mutationFn: async ({ profileId, gateId, userName }: { profileId: string; gateId: string | null; userName: string }) => {
       const { data, error } = await supabase
         .from('profiles')
         .update({ gate_id: gateId })
-        .eq('user_id', userId)
+        .eq('id', profileId)
         .select('user_id, gate_id, gate:gates!profiles_gate_id_fkey(id, name)')
         .maybeSingle();
 
@@ -277,7 +277,8 @@ const UsersManagementTab = () => {
       await logAuditAction('CONFIG_UPDATE', { action: 'gate_assign', target_user: userName, gate_id: gateId });
 
       return {
-        userId,
+        profileId,
+        userId: data.user_id,
         gateId: data.gate_id,
         gateName: (data as any).gate?.name || null,
       };
@@ -285,9 +286,10 @@ const UsersManagementTab = () => {
     onSuccess: (result) => {
       queryClient.setQueryData(['admin-users'], (current: UserProfile[] | undefined) =>
         current?.map((profile) =>
-          profile.user_id === result.userId
+          profile.id === result.profileId
             ? {
                 ...profile,
+                user_id: result.userId,
                 gate_id: result.gateId,
                 gate_name: result.gateName,
               }
@@ -514,7 +516,7 @@ const UsersManagementTab = () => {
                       <Select
                         value={u.gate_id || 'none'}
                         onValueChange={(v) => assignGate.mutate({
-                          userId: u.user_id,
+                          profileId: u.id,
                           gateId: v === 'none' ? null : v,
                           userName: u.full_name,
                         })}

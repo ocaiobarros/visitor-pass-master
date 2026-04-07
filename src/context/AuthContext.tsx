@@ -38,11 +38,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchUserProfile = useCallback(async (authUser: SupabaseUser): Promise<User | null> => {
     try {
-      // Fetch profile, roles, and gate in parallel
+      // Fetch profile and roles in parallel (no PostgREST joins to avoid on-prem issues)
       const [profileResult, rolesResult] = await Promise.all([
         supabase
           .from('profiles')
-          .select('*, gates:gate_id(id, code, name, is_active)')
+          .select('*')
           .eq('user_id', authUser.id)
           .maybeSingle(),
         supabase
@@ -61,7 +61,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       const profile = profileResult.data;
       const roles = (rolesResult.data || []).map(r => r.role as AppRole);
-      const gate = profile?.gates as any;
+
+      // Fetch gate separately to avoid PostgREST join issues on-prem
+      let gate: { id: string; code: string; name: string } | null = null;
+      if (profile?.gate_id) {
+        const { data: gateData } = await supabase
+          .from('gates')
+          .select('id, code, name')
+          .eq('id', profile.gate_id)
+          .maybeSingle();
+        gate = gateData;
+      }
 
       return {
         id: authUser.id,

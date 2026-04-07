@@ -144,6 +144,19 @@ function buildPdfSummary(rpcName: string, rows: any[]): SummaryItem[] {
 const GenericReport = ({ config }: { config: ReportConfig }) => {
   const [page, setPage] = useState(0);
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  const { data: gates } = useGates();
+
+  // Build a map from gate code → gate name for display
+  const gateNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (gates) {
+      gates.forEach(g => {
+        map[g.code] = g.name;
+        map[g.id] = g.name;
+      });
+    }
+    return map;
+  }, [gates]);
 
   const rpcParams = useMemo(() => {
     const params: Record<string, any> = { p_limit: PAGE_SIZE, p_offset: page * PAGE_SIZE };

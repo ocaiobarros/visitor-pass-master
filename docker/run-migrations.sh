@@ -131,7 +131,7 @@ fi
 # ==========================================
 log "Validando RPCs críticas..."
 
-CRITICAL_RPCS="report_person_timeline report_sessions report_presence_now report_denials report_permanence report_executive_summary report_employees_detailed report_visitors_detailed report_associates_detailed report_vehicle_activity"
+CRITICAL_RPCS="report_person_timeline report_sessions report_presence_now report_denials report_permanence report_executive_summary report_employees_detailed report_visitors_detailed report_associates_detailed report_vehicle_activity report_vehicle_sessions report_visitors_operational"
 MISSING_RPCS=""
 
 for rpc in $CRITICAL_RPCS; do

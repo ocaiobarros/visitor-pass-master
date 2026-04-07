@@ -24,7 +24,14 @@ export type AuditActionType =
   | 'DEPARTMENT_CREATE'
   | 'DEPARTMENT_DELETE'
   | 'BACKUP_EXPORT'
-  | 'ACCESS_SCAN';
+  | 'ACCESS_SCAN'
+  | 'ASSOCIATE_CREATE'
+  | 'ASSOCIATE_UPDATE'
+  | 'ASSOCIATE_DELETE'
+  | 'ACCESS_SESSION_CREATE'
+  | 'ACCESS_SESSION_COMPLETE'
+  | 'ACCESS_SESSION_DENY'
+  | 'ACCESS_SESSION_EXPIRE';
 
 export interface AuditLog {
   id: string;

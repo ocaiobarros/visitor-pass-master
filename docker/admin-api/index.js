@@ -203,6 +203,89 @@ app.post('/admin/create-user', requireAdmin, async (req, res) => {
 });
 
 // ==========================================
+// POST /admin/assign-gate
+// ==========================================
+app.post('/admin/assign-gate', requireAdmin, async (req, res) => {
+  try {
+    const { profile_id, gate_id = null } = req.body;
+
+    if (!profile_id) {
+      return res.status(400).json({ error: 'profile_id é obrigatório' });
+    }
+
+    if (gate_id) {
+      const { data: gate, error: gateError } = await supabaseAdmin
+        .from('gates')
+        .select('id, name')
+        .eq('id', gate_id)
+        .maybeSingle();
+
+      if (gateError) {
+        logger.logError('Erro ao validar guarita', gateError, { profileId: profile_id, gateId: gate_id });
+        return res.status(500).json({ error: 'Erro ao validar guarita' });
+      }
+
+      if (!gate) {
+        return res.status(404).json({ error: 'Guarita não encontrada' });
+      }
+    }
+
+    const { data: profile, error: updateError } = await supabaseAdmin
+      .from('profiles')
+      .update({ gate_id })
+      .eq('id', profile_id)
+      .select('id, user_id, full_name, gate_id')
+      .maybeSingle();
+
+    if (updateError) {
+      logger.logError('Erro ao salvar guarita do usuário', updateError, { profileId: profile_id, gateId: gate_id });
+      return res.status(500).json({ error: 'Erro ao salvar guarita: ' + updateError.message });
+    }
+
+    if (!profile) {
+      return res.status(404).json({ error: 'Perfil não encontrado' });
+    }
+
+    const gateName = gate_id
+      ? (await supabaseAdmin.from('gates').select('name').eq('id', gate_id).maybeSingle()).data?.name || null
+      : null;
+
+    await supabaseAdmin.from('audit_logs').insert({
+      user_id: req.adminUser.id,
+      user_email: req.adminUser.email,
+      action_type: 'CONFIG_UPDATE',
+      details: {
+        action: 'gate_assign',
+        target_user: profile.full_name,
+        profile_id,
+        gate_id,
+      },
+    });
+
+    logger.info('Guarita salva com sucesso', {
+      profileId: profile_id,
+      userId: profile.user_id,
+      gateId: gate_id,
+      adminEmail: req.adminUser.email,
+    });
+
+    return res.status(200).json({
+      success: true,
+      profile: {
+        id: profile.id,
+        user_id: profile.user_id,
+        full_name: profile.full_name,
+        gate_id: profile.gate_id,
+        gate_name: gateName,
+      },
+    });
+  } catch (error) {
+    logger.logError('Erro interno ao salvar guarita', error);
+    return res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// ==========================================
 // POST /logs - Recebe logs do frontend
 // ==========================================
 app.post('/logs', (req, res) => {

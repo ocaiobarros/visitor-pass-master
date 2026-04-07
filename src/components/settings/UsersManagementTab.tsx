@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useActiveGates } from '@/hooks/useGates';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -53,6 +54,8 @@ interface UserProfile {
   created_at: string;
   is_active: boolean;
   roles: AppRole[];
+  gate_id: string | null;
+  gate_name: string | null;
 }
 
 const UsersManagementTab = () => {

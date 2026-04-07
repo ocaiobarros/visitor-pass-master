@@ -13,6 +13,17 @@ import { Users, Car, ShieldAlert, Clock, TrendingUp, Building2, FileText, LogIn,
 const ExecutiveReport = () => {
   const [start, setStart] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
   const [end, setEnd] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const { data: gates } = useGates();
+
+  const gateNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (gates) {
+      gates.forEach(g => { map[g.code] = g.name; map[g.id] = g.name; });
+    }
+    return map;
+  }, [gates]);
+
+  const resolveGate = (code: string) => gateNameMap[code] || code;
 
   const { data, isLoading } = useReport('report_executive_summary', {
     p_start: `${start}T00:00:00`,

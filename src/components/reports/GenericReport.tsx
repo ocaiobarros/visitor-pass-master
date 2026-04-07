@@ -180,7 +180,11 @@ const GenericReport = ({ config }: { config: ReportConfig }) => {
   const exportRows = rows.map(row => {
     const processed: Record<string, any> = {};
     config.columns.forEach(c => {
-      const val = row[c.key];
+      let val = row[c.key];
+      // Resolve gate codes to readable names
+      if (c.key === 'gate_id' && val && gateNameMap[val]) {
+        val = gateNameMap[val];
+      }
       if (val === null || val === undefined) {
         processed[c.key] = '-';
       } else if (c.format === 'datetime') {

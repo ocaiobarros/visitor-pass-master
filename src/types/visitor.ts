@@ -12,6 +12,9 @@ export interface User {
   email: string;
   fullName: string;
   roles: AppRole[];
+  gateId?: string | null;
+  gateName?: string | null;
+  gateCode?: string | null;
 }
 
 export interface Department {

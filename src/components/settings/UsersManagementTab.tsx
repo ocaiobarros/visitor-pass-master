@@ -486,6 +486,26 @@ const UsersManagementTab = () => {
                         </SelectContent>
                       </Select>
                     </TableCell>
+                    <TableCell>
+                      <Select
+                        value={u.gate_id || 'none'}
+                        onValueChange={(v) => assignGate.mutate({
+                          userId: u.user_id,
+                          gateId: v === 'none' ? null : v,
+                          userName: u.full_name,
+                        })}
+                      >
+                        <SelectTrigger className="w-36">
+                          <SelectValue placeholder="Sem guarita" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Sem guarita</SelectItem>
+                          {activeGates?.map(g => (
+                            <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {format(new Date(u.created_at), 'dd/MM/yyyy', { locale: ptBR })}
                     </TableCell>

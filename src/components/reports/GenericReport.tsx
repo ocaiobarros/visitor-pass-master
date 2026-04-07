@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useReport } from '@/hooks/useReports';
+import { useGates } from '@/hooks/useGates';
 import { exportCSV, exportExcel, exportProfessionalPDF, ExportColumn, SummaryItem } from '@/lib/reportExport';
 import { formatLocalDateTime, formatLocalDate, formatDuration, permanenceLevel } from '@/lib/dateUtils';
 import { Button } from '@/components/ui/button';
@@ -143,6 +144,19 @@ function buildPdfSummary(rpcName: string, rows: any[]): SummaryItem[] {
 const GenericReport = ({ config }: { config: ReportConfig }) => {
   const [page, setPage] = useState(0);
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  const { data: gates } = useGates();
+
+  // Build a map from gate code → gate name for display
+  const gateNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (gates) {
+      gates.forEach(g => {
+        map[g.code] = g.name;
+        map[g.id] = g.name;
+      });
+    }
+    return map;
+  }, [gates]);
 
   const rpcParams = useMemo(() => {
     const params: Record<string, any> = { p_limit: PAGE_SIZE, p_offset: page * PAGE_SIZE };
@@ -166,7 +180,11 @@ const GenericReport = ({ config }: { config: ReportConfig }) => {
   const exportRows = rows.map(row => {
     const processed: Record<string, any> = {};
     config.columns.forEach(c => {
-      const val = row[c.key];
+      let val = row[c.key];
+      // Resolve gate codes to readable names
+      if (c.key === 'gate_id' && val && gateNameMap[val]) {
+        val = gateNameMap[val];
+      }
       if (val === null || val === undefined) {
         processed[c.key] = '-';
       } else if (c.format === 'datetime') {
@@ -185,7 +203,11 @@ const GenericReport = ({ config }: { config: ReportConfig }) => {
   });
 
   const formatCell = (row: any, col: ColumnDef) => {
-    const value = row[col.key];
+    let value = row[col.key];
+    // Resolve gate codes to readable names
+    if (col.key === 'gate_id' && value && gateNameMap[value]) {
+      value = gateNameMap[value];
+    }
     if (value === null || value === undefined) return <span className="text-muted-foreground">-</span>;
     switch (col.format) {
       case 'datetime': return formatLocalDateTime(value);

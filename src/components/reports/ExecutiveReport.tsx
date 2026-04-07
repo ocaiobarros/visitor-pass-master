@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useReport } from '@/hooks/useReports';
+import { useGates } from '@/hooks/useGates';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -12,6 +13,17 @@ import { Users, Car, ShieldAlert, Clock, TrendingUp, Building2, FileText, LogIn,
 const ExecutiveReport = () => {
   const [start, setStart] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
   const [end, setEnd] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const { data: gates } = useGates();
+
+  const gateNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (gates) {
+      gates.forEach(g => { map[g.code] = g.name; map[g.id] = g.name; });
+    }
+    return map;
+  }, [gates]);
+
+  const resolveGate = (code: string) => gateNameMap[code] || code;
 
   const { data, isLoading } = useReport('report_executive_summary', {
     p_start: `${start}T00:00:00`,
@@ -48,7 +60,7 @@ const ExecutiveReport = () => {
       extraSections.push({
         title: 'Top Portões',
         columns: [{ key: 'gate_id', label: 'Portão' }, { key: 'total', label: 'Total' }],
-        data: stats.top_gates,
+        data: stats.top_gates.map((g: any) => ({ ...g, gate_id: resolveGate(g.gate_id) })),
       });
     }
     if (stats.top_departments?.length) {
@@ -137,7 +149,7 @@ const ExecutiveReport = () => {
             <CardContent>
               {stats.top_gates.map((g: any) => (
                 <div key={g.gate_id} className="flex justify-between py-1 text-sm border-b last:border-0">
-                  <span>{g.gate_id}</span><Badge variant="outline">{g.total}</Badge>
+                  <span>{resolveGate(g.gate_id)}</span><Badge variant="outline">{g.total}</Badge>
                 </div>
               ))}
             </CardContent>

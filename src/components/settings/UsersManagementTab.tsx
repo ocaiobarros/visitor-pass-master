@@ -264,23 +264,65 @@ const UsersManagementTab = () => {
   // Assign gate to user
   const assignGate = useMutation({
     mutationFn: async ({ profileId, gateId, userName }: { profileId: string; gateId: string | null; userName: string }) => {
-      const { data, error } = await supabase
+      const gateName = gateId ? activeGates?.find((gate) => gate.id === gateId)?.name || null : null;
+
+      if (apiConfig.adminApiUrl) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+
+        if (!token) {
+          throw new Error('Sessão expirada. Faça login novamente.');
+        }
+
+        const response = await fetch(`${apiConfig.adminApiUrl}/admin/assign-gate`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            profile_id: profileId,
+            gate_id: gateId,
+          }),
+        });
+
+        const result = await response.json().catch(() => null);
+
+        if (!response.ok) {
+          throw new Error(result?.error || 'Não foi possível salvar a guarita para este usuário.');
+        }
+
+        return {
+          profileId: result.profile.id,
+          userId: result.profile.user_id,
+          gateId: result.profile.gate_id,
+          gateName: result.profile.gate_name ?? gateName,
+        };
+      }
+
+      const { error } = await supabase
         .from('profiles')
         .update({ gate_id: gateId })
-        .eq('id', profileId)
-        .select('user_id, gate_id, gate:gates!profiles_gate_id_fkey(id, name)')
-        .maybeSingle();
+        .eq('id', profileId);
 
       if (error) throw error;
-      if (!data) throw new Error('Não foi possível salvar a guarita para este usuário.');
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('user_id, gate_id')
+        .eq('id', profileId)
+        .maybeSingle();
+
+      if (profileError) throw profileError;
+      if (!profile) throw new Error('Não foi possível salvar a guarita para este usuário.');
 
       await logAuditAction('CONFIG_UPDATE', { action: 'gate_assign', target_user: userName, gate_id: gateId });
 
       return {
         profileId,
-        userId: data.user_id,
-        gateId: data.gate_id,
-        gateName: (data as any).gate?.name || null,
+        userId: profile.user_id,
+        gateId: profile.gate_id,
+        gateName,
       };
     },
     onSuccess: (result) => {

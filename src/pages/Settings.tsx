@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Settings as SettingsIcon, Users, Activity, Plus, Trash2, Building2, HardDrive, FileText, FileBarChart } from 'lucide-react';
+import { Settings as SettingsIcon, Users, Activity, Plus, Trash2, Building2, HardDrive, FileText, FileBarChart, DoorOpen } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Navigate } from 'react-router-dom';
@@ -20,6 +20,7 @@ import BackupRestoreTab from '@/components/settings/BackupRestoreTab';
 import AuditLogsTab from '@/components/settings/AuditLogsTab';
 import UsersManagementTab from '@/components/settings/UsersManagementTab';
 import ReportsTab from '@/components/settings/ReportsTab';
+import GatesManagementTab from '@/components/settings/GatesManagementTab';
 
 const Settings = () => {
   const { hasRole } = useAuth();
@@ -115,6 +116,10 @@ const Settings = () => {
               <Building2 className="w-4 h-4" />
               Setores
             </TabsTrigger>
+            <TabsTrigger value="gates" className="gap-2">
+              <DoorOpen className="w-4 h-4" />
+              Guaritas
+            </TabsTrigger>
             <TabsTrigger value="logs" className="gap-2">
               <Activity className="w-4 h-4" />
               Logs de Acesso
@@ -187,6 +192,11 @@ const Settings = () => {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Gates Tab */}
+          <TabsContent value="gates">
+            <GatesManagementTab />
           </TabsContent>
 
           {/* Access Logs Tab */}

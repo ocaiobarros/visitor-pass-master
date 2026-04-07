@@ -260,6 +260,25 @@ const UsersManagementTab = () => {
     },
   });
 
+  // Assign gate to user
+  const assignGate = useMutation({
+    mutationFn: async ({ userId, gateId, userName }: { userId: string; gateId: string | null; userName: string }) => {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ gate_id: gateId })
+        .eq('user_id', userId);
+      if (error) throw error;
+      await logAuditAction('CONFIG_UPDATE', { action: 'gate_assign', target_user: userName, gate_id: gateId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      toast({ title: 'Guarita vinculada!' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+    },
+  });
+
   // Request password reset
   const handlePasswordReset = async (email: string) => {
     try {
@@ -426,6 +445,7 @@ const UsersManagementTab = () => {
                   <TableHead>Status</TableHead>
                   <TableHead>Permissão</TableHead>
                   <TableHead>Alterar</TableHead>
+                  <TableHead>Guarita</TableHead>
                   <TableHead>Cadastro</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>

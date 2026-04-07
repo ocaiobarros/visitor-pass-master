@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useReport } from '@/hooks/useReports';
+import { useGates } from '@/hooks/useGates';
 import { exportCSV, exportExcel, exportProfessionalPDF, ExportColumn, SummaryItem } from '@/lib/reportExport';
 import { formatLocalDateTime, formatLocalDate, formatDuration, permanenceLevel } from '@/lib/dateUtils';
 import { Button } from '@/components/ui/button';

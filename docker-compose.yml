@@ -49,6 +49,29 @@ services:
       - guarda-internal
 
   # ==========================================
+  # Migration Runner - Aplica migrations incrementais
+  # ==========================================
+  migrate:
+    image: postgres:15-alpine
+    container_name: guarda-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME:-guarda_operacional}
+    volumes:
+      - ./docker/run-migrations.sh:/run-migrations.sh:ro
+      - ./docker/migrations:/migrations:ro
+    entrypoint: ["sh", "/run-migrations.sh"]
+    restart: "no"
+    networks:
+      - guarda-internal
+
+  # ==========================================
   # PostgREST - API REST automática
   # ==========================================
   postgrest:
@@ -63,6 +86,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       PGRST_DB_URI: postgres://${DB_USER:-postgres}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-guarda_operacional}
       PGRST_DB_SCHEMA: public

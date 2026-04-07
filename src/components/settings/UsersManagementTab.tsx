@@ -81,7 +81,7 @@ const UsersManagementTab = () => {
     queryFn: async () => {
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('*, gates:gate_id(id, name)')
+        .select('id, user_id, full_name, created_at, is_active, gate_id, gate:gates!profiles_gate_id_fkey(id, name)')
         .order('created_at', { ascending: false });
 
       if (profilesError) throw profilesError;
@@ -93,10 +93,10 @@ const UsersManagementTab = () => {
       if (rolesError) throw rolesError;
 
       return (profiles || []).map(profile => {
-        const gate = (profile as any).gates;
+        const gate = (profile as any).gate;
         return {
           ...profile,
-          gate_id: gate?.id || null,
+          gate_id: profile.gate_id ?? gate?.id ?? null,
           gate_name: gate?.name || null,
           roles: (roles || [])
             .filter(r => r.user_id === profile.user_id)
@@ -264,14 +264,37 @@ const UsersManagementTab = () => {
   // Assign gate to user
   const assignGate = useMutation({
     mutationFn: async ({ userId, gateId, userName }: { userId: string; gateId: string | null; userName: string }) => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .update({ gate_id: gateId })
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .select('user_id, gate_id, gate:gates!profiles_gate_id_fkey(id, name)')
+        .maybeSingle();
+
       if (error) throw error;
+      if (!data) throw new Error('Não foi possível salvar a guarita para este usuário.');
+
       await logAuditAction('CONFIG_UPDATE', { action: 'gate_assign', target_user: userName, gate_id: gateId });
+
+      return {
+        userId,
+        gateId: data.gate_id,
+        gateName: (data as any).gate?.name || null,
+      };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      queryClient.setQueryData(['admin-users'], (current: UserProfile[] | undefined) =>
+        current?.map((profile) =>
+          profile.user_id === result.userId
+            ? {
+                ...profile,
+                gate_id: result.gateId,
+                gate_name: result.gateName,
+              }
+            : profile,
+        ),
+      );
+
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
       toast({ title: 'Guarita vinculada!' });
     },

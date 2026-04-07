@@ -169,7 +169,30 @@ const GenericReport = ({ config }: { config: ReportConfig }) => {
           <Button size="sm" variant="outline" onClick={() => exportExcel(exportRows, exportCols, fname)} disabled={!rows.length}>
             <FileSpreadsheet className="w-3 h-3 mr-1" />Excel
           </Button>
-          <Button size="sm" variant="outline" onClick={() => exportPDF(exportRows, exportCols, config.title, fname)} disabled={!rows.length}>
+          <Button size="sm" variant="outline" onClick={() => {
+            // Build active filters string
+            const activeFilters = config.filters
+              .filter(f => filterValues[f.key] && filterValues[f.key] !== 'all' && filterValues[f.key] !== '')
+              .map(f => {
+                const opt = f.options?.find(o => o.value === filterValues[f.key]);
+                return `${f.label}: ${opt?.label || filterValues[f.key]}`;
+              })
+              .join(' | ') || undefined;
+
+            // Build summary from data
+            const pdfSummary: SummaryItem[] = [
+              { label: 'Total de Registros', value: rows.length },
+            ];
+
+            exportProfessionalPDF({
+              title: config.title,
+              filename: fname,
+              columns: exportCols,
+              data: exportRows,
+              filters: activeFilters,
+              summary: pdfSummary,
+            });
+          }} disabled={!rows.length}>
             <FileText className="w-3 h-3 mr-1" />PDF
           </Button>
         </div>

@@ -25,7 +25,7 @@ const ExecutiveReport = () => {
 
   const cards = [
     { label: 'Entradas', value: stats.total_entries, icon: LogIn, color: 'text-green-600' },
-    { label: 'Saídas', value: stats.total_exits, icon: LogOut, color: 'text-blue-600' },
+    { label: 'Saídas', value: stats.total_exits, icon: LogOut, color: 'text-muted-foreground' },
     { label: 'Dentro Agora', value: stats.currently_inside, icon: Users, color: 'text-destructive' },
     { label: 'Visitantes', value: stats.unique_visitors, icon: Users, color: 'text-primary' },
     { label: 'Colaboradores', value: stats.unique_employees, icon: Users, color: 'text-primary' },
@@ -82,7 +82,7 @@ const ExecutiveReport = () => {
       data: mainRows,
       filters: `Período: ${formatLocalDate(start)} a ${formatLocalDate(end)}`,
       summary: summaryItems,
-      accentColor: [15, 23, 42],
+      accentColor: [22, 101, 52],
       extraSections,
     });
   };

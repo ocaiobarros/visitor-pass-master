@@ -43,6 +43,11 @@ const statusBadge = (v: string) => {
   return 'secondary' as const;
 };
 const personTypeBadge = (_v: string) => 'outline' as const;
+const opStatusBadge = (v: string) => {
+  if (['Finalizado', 'Fora', 'allowed', 'active'].includes(v)) return 'default' as const;
+  if (['Dentro', 'Inconsistente', 'Incompleto', 'Negado', 'denied', 'blocked'].includes(v)) return 'destructive' as const;
+  return 'secondary' as const;
+};
 
 const sessionStatusLabel: Record<string, string> = {
   inside: 'Dentro',
@@ -52,7 +57,88 @@ const sessionStatusLabel: Record<string, string> = {
   expired: 'Expirado',
 };
 
-export { directionBadge, statusBadge, personTypeBadge };
+export { directionBadge, statusBadge, personTypeBadge, opStatusBadge };
+
+/* ── Build per-report PDF summary ── */
+function buildPdfSummary(rpcName: string, rows: any[]): SummaryItem[] {
+  const total = rows.length;
+
+  switch (rpcName) {
+    case 'report_vehicle_sessions':
+      return [
+        { label: 'Total de Sessões', value: total },
+        { label: 'Finalizados', value: rows.filter(r => r.session_status === 'Finalizado').length },
+        { label: 'Dentro', value: rows.filter(r => r.session_status === 'Dentro').length },
+        { label: 'Inconsistentes', value: rows.filter(r => ['Inconsistente', 'Incompleto'].includes(r.session_status)).length },
+      ];
+
+    case 'report_visitors_operational':
+      return [
+        { label: 'Total de Visitas', value: total },
+        { label: 'Finalizadas', value: rows.filter(r => r.operational_status === 'Finalizado').length },
+        { label: 'Dentro', value: rows.filter(r => r.operational_status === 'Dentro').length },
+        { label: 'Expirados', value: rows.filter(r => r.operational_status === 'Expirado sem uso').length },
+        { label: 'Negados', value: rows.filter(r => r.operational_status === 'Negado').length },
+      ];
+
+    case 'report_employees_detailed':
+      return [
+        { label: 'Total de Colaboradores', value: total },
+        { label: 'Dentro', value: rows.filter(r => r.current_state === 'Dentro').length },
+        { label: 'Fora', value: rows.filter(r => r.current_state === 'Fora').length },
+        { label: 'Sem Registro', value: rows.filter(r => r.current_state === 'Sem registro').length },
+      ];
+
+    case 'report_associates_detailed':
+      return [
+        { label: 'Total de Agregados', value: total },
+        { label: 'Dentro', value: rows.filter(r => r.current_state === 'Dentro').length },
+        { label: 'Fora', value: rows.filter(r => r.current_state === 'Fora').length },
+        { label: 'Sem Registro', value: rows.filter(r => r.current_state === 'Sem registro').length },
+      ];
+
+    case 'report_presence_now':
+      return [
+        { label: 'Pessoas Dentro', value: total },
+      ];
+
+    case 'report_permanence': {
+      const withExit = rows.filter(r => r.exit_time);
+      const stillInside = rows.filter(r => !r.exit_time);
+      return [
+        { label: 'Total de Sessões', value: total },
+        { label: 'Concluídas', value: withExit.length },
+        { label: 'Ainda Dentro', value: stillInside.length },
+      ];
+    }
+
+    case 'report_sessions':
+      return [
+        { label: 'Total', value: total },
+        { label: 'Concluídas', value: rows.filter(r => r.status === 'completed').length },
+        { label: 'Negadas', value: rows.filter(r => r.status === 'denied').length },
+        { label: 'Pendentes', value: rows.filter(r => r.status === 'pending').length },
+      ];
+
+    case 'report_denials':
+      return [
+        { label: 'Total de Negativas', value: total },
+      ];
+
+    case 'report_person_timeline': {
+      const entries = rows.filter(r => r.direction === 'in').length;
+      const exits = rows.filter(r => r.direction === 'out').length;
+      return [
+        { label: 'Total de Eventos', value: total },
+        { label: 'Entradas', value: entries },
+        { label: 'Saídas', value: exits },
+      ];
+    }
+
+    default:
+      return [{ label: 'Total de Registros', value: total }];
+  }
+}
 
 const GenericReport = ({ config }: { config: ReportConfig }) => {
   const [page, setPage] = useState(0);
@@ -74,11 +160,9 @@ const GenericReport = ({ config }: { config: ReportConfig }) => {
   const { data, isLoading } = useReport(config.rpcName, rpcParams);
   const rows = (data as any[]) || [];
 
-  // Build export columns with local timezone conversion
   const exportCols: ExportColumn[] = config.columns.map(c => ({ key: c.key, label: c.label }));
   const fname = `${config.rpcName}_${format(new Date(), 'yyyy-MM-dd_HH-mm')}`;
 
-  // Pre-process rows for export: convert dates to local timezone strings
   const exportRows = rows.map(row => {
     const processed: Record<string, any> = {};
     config.columns.forEach(c => {
@@ -170,7 +254,6 @@ const GenericReport = ({ config }: { config: ReportConfig }) => {
             <FileSpreadsheet className="w-3 h-3 mr-1" />Excel
           </Button>
           <Button size="sm" variant="outline" onClick={() => {
-            // Build active filters string
             const activeFilters = config.filters
               .filter(f => filterValues[f.key] && filterValues[f.key] !== 'all' && filterValues[f.key] !== '')
               .map(f => {
@@ -179,18 +262,13 @@ const GenericReport = ({ config }: { config: ReportConfig }) => {
               })
               .join(' | ') || undefined;
 
-            // Build summary from data
-            const pdfSummary: SummaryItem[] = [
-              { label: 'Total de Registros', value: rows.length },
-            ];
-
             exportProfessionalPDF({
               title: config.title,
               filename: fname,
               columns: exportCols,
               data: exportRows,
               filters: activeFilters,
-              summary: pdfSummary,
+              summary: buildPdfSummary(config.rpcName, rows),
             });
           }} disabled={!rows.length}>
             <FileText className="w-3 h-3 mr-1" />PDF

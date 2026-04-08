@@ -83,6 +83,8 @@ const UsersManagementTab = () => {
   const [editName, setEditName] = useState('');
   const [editRole, setEditRole] = useState<AppRole>('security');
   const [editGateId, setEditGateId] = useState<string | null>(null);
+  const [editPassword, setEditPassword] = useState('');
+  const [editMustChangePassword, setEditMustChangePassword] = useState(true);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Deactivate confirmation

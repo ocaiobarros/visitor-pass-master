@@ -96,7 +96,8 @@ const ScanKiosk = () => {
   
   const navigate = useNavigate();
   const { user: authUser } = useAuth();
-  const userGateCode = authUser?.gateCode || 'SEM_GUARITA';
+  const userGateCode = authUser?.gateCode;
+  const hasGate = !!userGateCode;
   const { playSuccess, playError, playBlocked } = useScanFeedback();
   const updateVisitorStatus = useUpdateVisitorStatus();
   const createAccessLog = useCreateAccessLog();
@@ -306,6 +307,11 @@ const ScanKiosk = () => {
   // Process scan
   useEffect(() => {
     if (!searchCode || isProcessing) return;
+
+    if (!hasGate) {
+      setScanResult({ type: 'error', code: 'SEM_GUARITA' });
+      return;
+    }
 
     const processScan = async () => {
       setIsProcessing(true);
@@ -990,8 +996,13 @@ const ScanKiosk = () => {
       reason = 'CADASTRO BLOQUEADO';
       subReason = scanResult.data.fullName;
     } else if (scanResult.type === 'error') {
-      reason = 'QR NÃO CADASTRADO';
-      subReason = scanResult.code;
+      if (scanResult.code === 'SEM_GUARITA') {
+        reason = 'SEM GUARITA VINCULADA';
+        subReason = 'Solicite ao administrador que vincule sua conta a uma guarita';
+      } else {
+        reason = 'QR NÃO CADASTRADO';
+        subReason = scanResult.code;
+      }
     }
 
     return (

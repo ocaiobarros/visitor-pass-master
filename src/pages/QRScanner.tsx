@@ -83,7 +83,8 @@ const QRScanner = () => {
   
   const { toast } = useToast();
   const { user: authUser } = useAuth();
-  const userGateCode = authUser?.gateCode || 'SEM_GUARITA';
+  const userGateCode = authUser?.gateCode;
+  const hasGate = !!userGateCode;
   const { playSuccess, playError, playBlocked } = useScanFeedback();
   const updateVisitorStatus = useUpdateVisitorStatus();
 
@@ -434,6 +435,12 @@ const QRScanner = () => {
   useEffect(() => {
     if (!searchCode) return;
     if (processingRef.current) return;
+
+    if (!hasGate) {
+      setScanError('Usuário sem guarita vinculada. Solicite ao administrador que vincule sua conta a uma guarita antes de operar o scanner.');
+      playError();
+      return;
+    }
 
     const process = async () => {
       if (processingRef.current) return;

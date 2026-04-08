@@ -511,8 +511,9 @@ const UsersManagementTab = () => {
                     <TableHead>Status</TableHead>
                     <TableHead>Permissão</TableHead>
                     <TableHead>Guarita</TableHead>
-                    <TableHead>Cadastro</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
+                     <TableHead>Cadastro</TableHead>
+                     <TableHead>Último Login</TableHead>
+                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -537,6 +538,15 @@ const UsersManagementTab = () => {
                       <TableCell className="text-sm">{u.gate_name || '—'}</TableCell>
                       <TableCell className="text-muted-foreground text-sm">
                         {format(new Date(u.created_at), 'dd/MM/yyyy', { locale: ptBR })}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {u.last_login 
+                          ? new Date(u.last_login).toLocaleString('pt-BR', { 
+                              timeZone: 'America/Campo_Grande',
+                              day: '2-digit', month: '2-digit', year: 'numeric',
+                              hour: '2-digit', minute: '2-digit'
+                            })
+                          : '—'}
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-2">

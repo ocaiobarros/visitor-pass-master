@@ -163,13 +163,13 @@ const App = () => (
                       } />
                       
                       <Route path="/scan" element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRoles={['admin', 'security']}>
                           <QRScanner />
                         </ProtectedRoute>
                       } />
                       
                       <Route path="/scan/kiosk" element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requiredRoles={['admin', 'security']}>
                           <ScanKiosk />
                         </ProtectedRoute>
                       } />

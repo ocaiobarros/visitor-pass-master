@@ -229,6 +229,8 @@ const GenericReport = ({ config }: { config: ReportConfig }) => {
         processed[c.key] = formatDuration(val);
       } else if (c.format === 'session_status') {
         processed[c.key] = sessionStatusLabel[val] || val;
+      } else if (c.format === 'badge') {
+        processed[c.key] = translateValue(String(val), c.key);
       } else {
         processed[c.key] = val;
       }
@@ -246,7 +248,10 @@ const GenericReport = ({ config }: { config: ReportConfig }) => {
     switch (col.format) {
       case 'datetime': return formatLocalDateTime(value);
       case 'date': return formatLocalDate(value);
-      case 'badge': return <Badge variant={col.badgeVariant?.(value) || 'outline'}>{value}</Badge>;
+      case 'badge': {
+        const displayValue = translateValue(String(value), col.key);
+        return <Badge variant={col.badgeVariant?.(value) || 'outline'}>{displayValue}</Badge>;
+      }
       case 'duration': {
         const level = permanenceLevel(value);
         return (

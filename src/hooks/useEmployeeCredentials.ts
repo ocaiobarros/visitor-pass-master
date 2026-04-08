@@ -153,6 +153,8 @@ interface UpdateCredentialData {
   departmentId?: string | null;
   jobTitle?: string | null;
   photoUrl?: string | null;
+  vehiclePlate?: string | null;
+  vehicleMakeModel?: string | null;
 }
 
 export const useUpdateCredential = () => {

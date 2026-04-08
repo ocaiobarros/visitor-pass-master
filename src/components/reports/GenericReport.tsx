@@ -58,6 +58,40 @@ const sessionStatusLabel: Record<string, string> = {
   expired: 'Expirado',
 };
 
+/** Human-readable labels for raw DB values */
+const directionLabel: Record<string, string> = {
+  in: 'Entrada',
+  out: 'Saída',
+};
+
+const personTypeLabel: Record<string, string> = {
+  employee: 'Colaborador',
+  visitor: 'Visitante',
+  associate: 'Agregado',
+  vehicle: 'Veículo',
+};
+
+const statusLabel: Record<string, string> = {
+  allowed: 'Ativo',
+  blocked: 'Bloqueado',
+  active: 'Ativo',
+  inside: 'Dentro',
+  outside: 'Fora',
+  closed: 'Finalizado',
+  pending: 'Pendente',
+  expired_unused: 'Expirado',
+  denied: 'Negado',
+  suspended: 'Suspenso',
+};
+
+/** Translate a raw value using a label map, fallback to original */
+const translateValue = (value: string, key: string): string => {
+  if (key === 'direction') return directionLabel[value] || value;
+  if (key === 'person_type') return personTypeLabel[value] || value;
+  if (key === 'entity_status') return statusLabel[value] || value;
+  return value;
+};
+
 export { directionBadge, statusBadge, personTypeBadge, opStatusBadge };
 
 /* ── Build per-report PDF summary ── */
@@ -195,6 +229,8 @@ const GenericReport = ({ config }: { config: ReportConfig }) => {
         processed[c.key] = formatDuration(val);
       } else if (c.format === 'session_status') {
         processed[c.key] = sessionStatusLabel[val] || val;
+      } else if (c.format === 'badge') {
+        processed[c.key] = translateValue(String(val), c.key);
       } else {
         processed[c.key] = val;
       }
@@ -212,7 +248,10 @@ const GenericReport = ({ config }: { config: ReportConfig }) => {
     switch (col.format) {
       case 'datetime': return formatLocalDateTime(value);
       case 'date': return formatLocalDate(value);
-      case 'badge': return <Badge variant={col.badgeVariant?.(value) || 'outline'}>{value}</Badge>;
+      case 'badge': {
+        const displayValue = translateValue(String(value), col.key);
+        return <Badge variant={col.badgeVariant?.(value) || 'outline'}>{displayValue}</Badge>;
+      }
       case 'duration': {
         const level = permanenceLevel(value);
         return (

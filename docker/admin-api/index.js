@@ -286,6 +286,108 @@ app.post('/admin/assign-gate', requireAdmin, async (req, res) => {
 });
 
 // ==========================================
+// POST /admin/reset-password
+// ==========================================
+app.post('/admin/reset-password', requireAdmin, async (req, res) => {
+  try {
+    const { user_id, new_password, must_change_password = false } = req.body;
+
+    if (!user_id || !new_password) {
+      return res.status(400).json({ error: 'user_id e new_password são obrigatórios' });
+    }
+
+    if (new_password.length < 6) {
+      return res.status(400).json({ error: 'Senha deve ter pelo menos 6 caracteres' });
+    }
+
+    // Get target user info for logging
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('full_name, email')
+      .eq('user_id', user_id)
+      .maybeSingle();
+
+    // Update password via admin API
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(user_id, {
+      password: new_password,
+    });
+
+    if (updateError) {
+      logger.logError('Erro ao resetar senha', updateError, { userId: user_id });
+      return res.status(500).json({ error: 'Erro ao alterar senha: ' + updateError.message });
+    }
+
+    // Update must_change_password flag
+    const { error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .update({ must_change_password })
+      .eq('user_id', user_id);
+
+    if (profileError) {
+      logger.logError('Erro ao atualizar flag must_change_password', profileError, { userId: user_id });
+    }
+
+    // Audit log
+    await supabaseAdmin.from('audit_logs').insert({
+      user_id: req.adminUser.id,
+      user_email: req.adminUser.email,
+      action_type: 'PASSWORD_RESET',
+      details: {
+        target_user: profile?.email || profile?.full_name || user_id,
+        must_change_password,
+      },
+    });
+
+    logger.info('Senha resetada com sucesso', {
+      targetUserId: user_id,
+      targetUser: profile?.email || profile?.full_name,
+      mustChangePassword: must_change_password,
+      adminEmail: req.adminUser.email,
+    });
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    logger.logError('Erro interno ao resetar senha', error);
+    return res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// ==========================================
+// POST /admin/update-profile
+// ==========================================
+app.post('/admin/update-profile', requireAdmin, async (req, res) => {
+  try {
+    const { user_id, full_name } = req.body;
+
+    if (!user_id || !full_name) {
+      return res.status(400).json({ error: 'user_id e full_name são obrigatórios' });
+    }
+
+    const { error } = await supabaseAdmin
+      .from('profiles')
+      .update({ full_name })
+      .eq('user_id', user_id);
+
+    if (error) {
+      logger.logError('Erro ao atualizar perfil', error, { userId: user_id });
+      return res.status(500).json({ error: 'Erro ao atualizar perfil: ' + error.message });
+    }
+
+    await supabaseAdmin.from('audit_logs').insert({
+      user_id: req.adminUser.id,
+      user_email: req.adminUser.email,
+      action_type: 'USER_UPDATE',
+      details: { target_user_id: user_id, new_name: full_name },
+    });
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    logger.logError('Erro interno ao atualizar perfil', error);
+    return res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// ==========================================
 // POST /logs - Recebe logs do frontend
 // ==========================================
 app.post('/logs', (req, res) => {

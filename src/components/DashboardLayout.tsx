@@ -39,7 +39,7 @@ const navItems = [
   { href: '/employees', label: 'Colaboradores', icon: Users },
   { href: '/vehicles', label: 'Veículos', icon: Car },
   { href: '/associates', label: 'Agregados', icon: Users },
-  { href: '/scan', label: 'Scanner QR', icon: QrCode },
+  { href: '/scan', label: 'Scanner QR', icon: QrCode, roles: ['admin', 'security'] },
   { href: '/audit', label: 'Auditoria', icon: FileText, roles: ['admin'] },
   { href: '/reports', label: 'Relatórios', icon: FileBarChart, roles: ['admin'] },
   { href: '/settings', label: 'Configurações', icon: Settings, roles: ['admin'] },

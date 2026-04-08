@@ -8,6 +8,8 @@ import ActivityChart from '@/components/dashboard/ActivityChart';
 import StatusWidgets from '@/components/dashboard/StatusWidgets';
 import CriticalEventsList from '@/components/dashboard/CriticalEventsList';
 import TodayStats from '@/components/dashboard/TodayStats';
+import RecentAccessList from '@/components/dashboard/RecentAccessList';
+import OperationalOverview from '@/components/dashboard/OperationalOverview';
 
 const Dashboard = () => {
   const { data: stats, isLoading: isLoadingStats } = useDashboardStats();
@@ -42,10 +44,10 @@ const Dashboard = () => {
           </p>
         </div>
 
-        {/* Today Stats — 100% server-side */}
+        {/* Today Stats */}
         <TodayStats />
 
-        {/* Status Widgets — server-side stats */}
+        {/* Status Widgets */}
         <StatusWidgets
           totalUsers={s.total_users}
           activeGates={1}
@@ -56,185 +58,181 @@ const Dashboard = () => {
           associatesActive={s.associates_active}
         />
 
-        {/* Activity Chart + Critical Events — 100% server-side */}
+        {/* Activity Chart + Critical Events */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <ActivityChart />
           <CriticalEventsList />
         </div>
 
-        {/* Stats Cards — server-side aggregated */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          <Card className="card-stats">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total de Visitantes</p>
-                  <p className="text-3xl font-bold text-foreground">{s.total_visitors}</p>
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <Users className="w-6 h-6 text-primary" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="card-stats border-success/30 bg-success/5">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Dentro da Empresa</p>
-                  <p className="text-3xl font-bold text-success">{s.visitors_inside}</p>
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-success/10 flex items-center justify-center">
-                  <UserCheck className="w-6 h-6 text-success" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="card-stats">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Saídas/Encerrados</p>
-                  <p className="text-3xl font-bold text-foreground">{s.visitors_outside}</p>
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
-                  <UserX className="w-6 h-6 text-muted-foreground" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="card-stats border-warning/30 bg-warning/5">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Aguardando Entrada</p>
-                  <p className="text-3xl font-bold text-warning">{s.visitors_pending}</p>
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-warning/10 flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-warning" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="card-stats border-destructive/30 bg-destructive/5">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Expirados (Sem Uso)</p>
-                  <p className="text-3xl font-bold text-destructive">{s.visitors_expired_unused}</p>
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-destructive/10 flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-destructive" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Operational Overview + Recent Access */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-1">
+            <OperationalOverview />
+          </div>
+          <div className="lg:col-span-2">
+            <RecentAccessList />
+          </div>
         </div>
 
-        {/* Two Columns — server-side JOINs */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Currently Inside */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-success" />
-                Visitantes Dentro da Empresa
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isLoadingInside ? (
-                <p className="text-muted-foreground text-center py-8">Carregando...</p>
-              ) : insideVisitors.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">Nenhum visitante dentro da empresa</p>
-              ) : (
-                <div className="space-y-3">
-                  {insideVisitors.map((visitor) => (
-                    <div key={visitor.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <span className="text-sm font-medium text-primary">{visitor.full_name.charAt(0)}</span>
-                        </div>
-                        <div>
-                          <p className="font-medium text-sm">{visitor.full_name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {visitor.visit_to_type === 'setor' ? '📍' : '👤'} {visitor.visit_to_name}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className="status-badge-inside">Dentro</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <StatsCard label="Total de Visitantes" value={s.total_visitors} icon={Users} variant="default" />
+          <StatsCard label="Dentro da Empresa" value={s.visitors_inside} icon={UserCheck} variant="success" />
+          <StatsCard label="Saídas/Encerrados" value={s.visitors_outside} icon={UserX} variant="default" />
+          <StatsCard label="Aguardando Entrada" value={s.visitors_pending} icon={Clock} variant="warning" />
+          <StatsCard label="Expirados (Sem Uso)" value={s.visitors_expired_unused} icon={Clock} variant="destructive" />
+        </div>
 
-          {/* Recent Visitors */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CalendarDays className="w-5 h-5 text-primary" />
-                Visitantes Recentes
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isLoadingRecent ? (
-                <p className="text-muted-foreground text-center py-8">Carregando...</p>
-              ) : recentVisitors.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">Nenhum visitante registrado</p>
-              ) : (
-                <div className="space-y-3">
-                  {recentVisitors.map((visitor) => (
-                    <div key={visitor.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
-                          <span className="text-sm font-medium">{visitor.full_name.charAt(0)}</span>
-                        </div>
-                        <div>
-                          <p className="font-medium text-sm">{visitor.full_name}</p>
-                          <p className="text-xs text-muted-foreground">{visitor.company_name || visitor.company_reason || 'Sem empresa'}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span
-                          className={
-                            visitor.status === 'inside'
-                              ? 'status-badge-inside'
-                              : visitor.status === 'outside'
-                              ? 'status-badge-outside'
-                              : visitor.status === 'closed'
-                              ? 'status-badge-expired'
-                              : 'status-badge-outside'
-                          }
-                        >
-                          {visitor.status === 'inside'
-                            ? 'Dentro'
-                            : visitor.status === 'outside'
-                            ? 'Fora'
-                            : visitor.status === 'pending'
-                            ? 'Pendente'
-                            : 'Encerrado'}
-                        </span>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {format(new Date(visitor.created_at), 'dd/MM HH:mm')}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        {/* Visitors Inside + Recent Visitors */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <VisitorsInsideCard visitors={insideVisitors} isLoading={isLoadingInside} />
+          <RecentVisitorsCard visitors={recentVisitors} isLoading={isLoadingRecent} />
         </div>
       </div>
     </DashboardLayout>
   );
 };
+
+/* ---------- Sub-components ---------- */
+
+interface StatsCardProps {
+  label: string;
+  value: number;
+  icon: React.ElementType;
+  variant: 'default' | 'success' | 'warning' | 'destructive';
+}
+
+const variantStyles: Record<string, { card: string; text: string; iconBg: string; iconText: string }> = {
+  default:     { card: 'card-stats', text: 'text-foreground', iconBg: 'bg-primary/10', iconText: 'text-primary' },
+  success:     { card: 'card-stats border-success/30 bg-success/5', text: 'text-success', iconBg: 'bg-success/10', iconText: 'text-success' },
+  warning:     { card: 'card-stats border-warning/30 bg-warning/5', text: 'text-warning', iconBg: 'bg-warning/10', iconText: 'text-warning' },
+  destructive: { card: 'card-stats border-destructive/30 bg-destructive/5', text: 'text-destructive', iconBg: 'bg-destructive/10', iconText: 'text-destructive' },
+};
+
+const StatsCard = ({ label, value, icon: Icon, variant }: StatsCardProps) => {
+  const v = variantStyles[variant];
+  return (
+    <Card className={v.card}>
+      <CardContent className="pt-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">{label}</p>
+            <p className={`text-3xl font-bold ${v.text}`}>{value}</p>
+          </div>
+          <div className={`w-12 h-12 rounded-xl ${v.iconBg} flex items-center justify-center`}>
+            <Icon className={`w-6 h-6 ${v.iconText}`} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+interface InsideVisitor {
+  id: string;
+  full_name: string;
+  visit_to_type: string;
+  visit_to_name: string;
+  company_name: string | null;
+  created_at: string;
+}
+
+const VisitorsInsideCard = ({ visitors, isLoading }: { visitors: InsideVisitor[]; isLoading: boolean }) => (
+  <Card>
+    <CardHeader>
+      <CardTitle className="flex items-center gap-2">
+        <TrendingUp className="w-5 h-5 text-success" />
+        Visitantes Dentro da Empresa
+      </CardTitle>
+    </CardHeader>
+    <CardContent>
+      {isLoading ? (
+        <p className="text-muted-foreground text-center py-8">Carregando...</p>
+      ) : visitors.length === 0 ? (
+        <p className="text-muted-foreground text-center py-8">Nenhum visitante dentro da empresa</p>
+      ) : (
+        <div className="space-y-3">
+          {visitors.map((visitor) => (
+            <div key={visitor.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-sm font-medium text-primary">{visitor.full_name.charAt(0)}</span>
+                </div>
+                <div>
+                  <p className="font-medium text-sm">{visitor.full_name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {visitor.visit_to_type === 'setor' ? '📍' : '👤'} {visitor.visit_to_name}
+                  </p>
+                </div>
+              </div>
+              <span className="status-badge-inside">Dentro</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </CardContent>
+  </Card>
+);
+
+interface RecentVisitor {
+  id: string;
+  full_name: string;
+  status: string;
+  visit_to_type: string;
+  visit_to_name: string;
+  company_name: string | null;
+  company_reason: string;
+  created_at: string;
+}
+
+const RecentVisitorsCard = ({ visitors, isLoading }: { visitors: RecentVisitor[]; isLoading: boolean }) => (
+  <Card>
+    <CardHeader>
+      <CardTitle className="flex items-center gap-2">
+        <CalendarDays className="w-5 h-5 text-primary" />
+        Visitantes Recentes
+      </CardTitle>
+    </CardHeader>
+    <CardContent>
+      {isLoading ? (
+        <p className="text-muted-foreground text-center py-8">Carregando...</p>
+      ) : visitors.length === 0 ? (
+        <p className="text-muted-foreground text-center py-8">Nenhum visitante registrado</p>
+      ) : (
+        <div className="space-y-3">
+          {visitors.map((visitor) => (
+            <div key={visitor.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
+                  <span className="text-sm font-medium">{visitor.full_name.charAt(0)}</span>
+                </div>
+                <div>
+                  <p className="font-medium text-sm">{visitor.full_name}</p>
+                  <p className="text-xs text-muted-foreground">{visitor.company_name || visitor.company_reason || 'Sem empresa'}</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className={
+                  visitor.status === 'inside' ? 'status-badge-inside'
+                    : visitor.status === 'outside' ? 'status-badge-outside'
+                    : visitor.status === 'closed' ? 'status-badge-expired'
+                    : 'status-badge-outside'
+                }>
+                  {visitor.status === 'inside' ? 'Dentro'
+                    : visitor.status === 'outside' ? 'Fora'
+                    : visitor.status === 'pending' ? 'Pendente'
+                    : 'Encerrado'}
+                </span>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {format(new Date(visitor.created_at), 'dd/MM HH:mm')}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </CardContent>
+  </Card>
+);
 
 export default Dashboard;

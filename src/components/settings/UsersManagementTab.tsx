@@ -59,6 +59,7 @@ interface UserProfile {
   roles: AppRole[];
   gate_id: string | null;
   gate_name: string | null;
+  last_login: string | null;
 }
 
 const UsersManagementTab = () => {
@@ -107,6 +108,21 @@ const UsersManagementTab = () => {
 
       if (rolesError) throw rolesError;
 
+      // Fetch last login from audit_logs
+      const { data: loginLogs } = await supabase
+        .from('audit_logs')
+        .select('user_id, created_at')
+        .eq('action_type', 'LOGIN')
+        .order('created_at', { ascending: false });
+
+      // Build a map of user_id -> last login date
+      const lastLoginMap: Record<string, string> = {};
+      (loginLogs || []).forEach(log => {
+        if (log.user_id && !lastLoginMap[log.user_id]) {
+          lastLoginMap[log.user_id] = log.created_at;
+        }
+      });
+
       return (profiles || []).map(profile => {
         const gate = (profile as any).gate;
         return {
@@ -117,6 +133,7 @@ const UsersManagementTab = () => {
           roles: (roles || [])
             .filter(r => r.user_id === profile.user_id)
             .map(r => r.role as AppRole),
+          last_login: lastLoginMap[profile.user_id] || null,
         };
       }) as UserProfile[];
     },
@@ -494,8 +511,9 @@ const UsersManagementTab = () => {
                     <TableHead>Status</TableHead>
                     <TableHead>Permissão</TableHead>
                     <TableHead>Guarita</TableHead>
-                    <TableHead>Cadastro</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
+                     <TableHead>Cadastro</TableHead>
+                     <TableHead>Último Login</TableHead>
+                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -520,6 +538,15 @@ const UsersManagementTab = () => {
                       <TableCell className="text-sm">{u.gate_name || '—'}</TableCell>
                       <TableCell className="text-muted-foreground text-sm">
                         {format(new Date(u.created_at), 'dd/MM/yyyy', { locale: ptBR })}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {u.last_login 
+                          ? new Date(u.last_login).toLocaleString('pt-BR', { 
+                              timeZone: 'America/Campo_Grande',
+                              day: '2-digit', month: '2-digit', year: 'numeric',
+                              hour: '2-digit', minute: '2-digit'
+                            })
+                          : '—'}
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-2">

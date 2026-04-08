@@ -224,6 +224,8 @@ const UsersManagementTab = () => {
     setEditName(u.full_name);
     setEditRole(u.roles[0] || 'security');
     setEditGateId(u.gate_id);
+    setEditPassword('');
+    setEditMustChangePassword(true);
   };
 
   // Save all edits

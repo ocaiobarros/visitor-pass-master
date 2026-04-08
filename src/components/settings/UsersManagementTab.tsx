@@ -32,6 +32,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { logAuditAction } from '@/hooks/useAuditLogs';
 import { apiConfig } from '@/config/branding';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Shield, 
   UserPlus, 
@@ -42,6 +43,7 @@ import {
   UserCheck,
   Filter,
   Pencil,
+  KeyRound,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -81,6 +83,8 @@ const UsersManagementTab = () => {
   const [editName, setEditName] = useState('');
   const [editRole, setEditRole] = useState<AppRole>('security');
   const [editGateId, setEditGateId] = useState<string | null>(null);
+  const [editPassword, setEditPassword] = useState('');
+  const [editMustChangePassword, setEditMustChangePassword] = useState(true);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Deactivate confirmation
@@ -220,6 +224,8 @@ const UsersManagementTab = () => {
     setEditName(u.full_name);
     setEditRole(u.roles[0] || 'security');
     setEditGateId(u.gate_id);
+    setEditPassword('');
+    setEditMustChangePassword(true);
   };
 
   // Save all edits
@@ -286,6 +292,34 @@ const UsersManagementTab = () => {
         }
         await logAuditAction('CONFIG_UPDATE', { action: 'gate_assign', target_user: editingUser.full_name, gate_name: gateName });
         changes.push('guarita');
+      }
+
+      // Reset password if provided
+      if (editPassword.trim().length > 0) {
+        if (editPassword.trim().length < 6) {
+          toast({ title: 'Senha muito curta', description: 'Mínimo 6 caracteres.', variant: 'destructive' });
+          setIsSavingEdit(false);
+          return;
+        }
+
+        if (apiConfig.adminApiUrl) {
+          const response = await fetch(`${apiConfig.adminApiUrl}/admin/reset-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ user_id: editingUser.user_id, new_password: editPassword.trim(), must_change_password: editMustChangePassword }),
+          });
+          if (!response.ok) {
+            const result = await response.json().catch(() => null);
+            throw new Error(result?.error || 'Erro ao alterar senha');
+          }
+        } else {
+          const response = await supabase.functions.invoke('admin-reset-password', {
+            body: { user_id: editingUser.user_id, new_password: editPassword.trim(), must_change_password: editMustChangePassword },
+          });
+          if (response.error) throw new Error(response.error.message || 'Erro ao alterar senha');
+          if (response.data?.error) throw new Error(response.data.error);
+        }
+        changes.push('senha');
       }
 
       if (changes.length > 0) {
@@ -574,6 +608,36 @@ const UsersManagementTab = () => {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Password Reset Section */}
+              <div className="border-t pt-4 space-y-3">
+                <Label className="flex items-center gap-2 text-sm font-medium">
+                  <KeyRound className="w-4 h-4" />
+                  Alterar Senha
+                </Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="password"
+                    placeholder="Deixe vazio para não alterar"
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                {editPassword.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="must-change-password"
+                      checked={editMustChangePassword}
+                      onCheckedChange={(checked) => setEditMustChangePassword(!!checked)}
+                    />
+                    <Label htmlFor="must-change-password" className="text-sm font-normal cursor-pointer">
+                      Exigir troca de senha no próximo login
+                    </Label>
+                  </div>
+                )}
               </div>
             </div>
           )}

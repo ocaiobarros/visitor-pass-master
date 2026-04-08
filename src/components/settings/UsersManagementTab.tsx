@@ -32,6 +32,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { logAuditAction } from '@/hooks/useAuditLogs';
 import { apiConfig } from '@/config/branding';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Shield, 
   UserPlus, 
@@ -42,6 +43,7 @@ import {
   UserCheck,
   Filter,
   Pencil,
+  KeyRound,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';

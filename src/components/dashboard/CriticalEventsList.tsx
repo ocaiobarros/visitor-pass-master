@@ -68,14 +68,14 @@ const CriticalEventsList = () => {
   const { data: criticalLogs = [], isLoading } = useCriticalEvents(10);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+    <Card className="h-full max-h-[500px] flex flex-col">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
           <AlertTriangle className="w-5 h-5 text-warning" />
           Últimos 10 Eventos Críticos
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1 overflow-y-auto">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
@@ -83,7 +83,7 @@ const CriticalEventsList = () => {
         ) : criticalLogs.length === 0 ? (
           <p className="text-muted-foreground text-center py-8">Nenhum evento crítico registrado</p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {criticalLogs.map((log) => (
               <div
                 key={log.id}

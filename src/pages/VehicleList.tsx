@@ -259,6 +259,11 @@ const VehicleList = () => {
           </div>
         </SheetContent>
       </Sheet>
+      <EditVehicleModal
+        vehicle={editingVehicle}
+        open={!!editingVehicle}
+        onOpenChange={(open) => !open && setEditingVehicle(null)}
+      />
     </DashboardLayout>
   );
 };

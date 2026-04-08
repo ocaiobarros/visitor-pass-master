@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -26,7 +27,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
@@ -38,13 +38,10 @@ import {
   Mail, 
   Lock, 
   Search, 
-  RotateCcw, 
   UserX, 
   UserCheck,
   Filter,
   Pencil,
-  Check,
-  X
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -78,8 +75,16 @@ const UsersManagementTab = () => {
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
-  const [editingUserId, setEditingUserId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState('');
+
+  // Edit modal state
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editRole, setEditRole] = useState<AppRole>('security');
+  const [editGateId, setEditGateId] = useState<string | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Deactivate confirmation
+  const [confirmUser, setConfirmUser] = useState<UserProfile | null>(null);
 
   // Fetch all users with their profiles and roles
   const { data: usersData, isLoading: isLoadingUsers } = useQuery({
@@ -144,13 +149,9 @@ const UsersManagementTab = () => {
         throw new Error('Sessão expirada. Faça login novamente.');
       }
 
-      // Check if admin-api is available (self-hosted)
       const adminApiUrl = apiConfig.adminApiUrl;
       
-      let result;
-      
       if (adminApiUrl) {
-        // Use local admin-api (self-hosted Docker)
         const response = await fetch(`${adminApiUrl}/admin/create-user`, {
           method: 'POST',
           headers: {
@@ -165,13 +166,12 @@ const UsersManagementTab = () => {
           }),
         });
 
-        result = await response.json();
+        const result = await response.json();
 
         if (!response.ok) {
           throw new Error(result.error || 'Erro ao criar usuário');
         }
       } else {
-        // Use Supabase edge function (Cloud)
         const response = await supabase.functions.invoke('admin-create-user', {
           body: {
             email: newUserEmail,
@@ -188,8 +188,6 @@ const UsersManagementTab = () => {
         if (response.data?.error) {
           throw new Error(response.data.error);
         }
-
-        result = response.data;
       }
 
       toast({
@@ -216,206 +214,108 @@ const UsersManagementTab = () => {
     }
   };
 
-  // Update user role
-  const updateRole = useMutation({
-    mutationFn: async ({ userId, role, userEmail }: { userId: string; role: AppRole; userEmail: string }) => {
-      await supabase
-        .from('user_roles')
-        .delete()
-        .eq('user_id', userId);
+  // Open edit modal
+  const openEditModal = (u: UserProfile) => {
+    setEditingUser(u);
+    setEditName(u.full_name);
+    setEditRole(u.roles[0] || 'security');
+    setEditGateId(u.gate_id);
+  };
 
-      const { error } = await supabase
-        .from('user_roles')
-        .insert({ user_id: userId, role });
+  // Save all edits
+  const handleSaveEdit = async () => {
+    if (!editingUser || !editName.trim()) return;
+    setIsSavingEdit(true);
 
-      if (error) throw error;
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) throw new Error('Sessão expirada.');
 
-      await logAuditAction('ROLE_UPDATE', { 
-        target_user: userEmail, 
-        new_role: role 
-      });
-    },
-    onSuccess: () => {
+      const changes: string[] = [];
+
+      // Update name if changed
+      if (editName.trim() !== editingUser.full_name) {
+        if (apiConfig.adminApiUrl) {
+          const response = await fetch(`${apiConfig.adminApiUrl}/admin/update-profile`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ user_id: editingUser.user_id, full_name: editName.trim() }),
+          });
+          if (response.status === 404) {
+            const { error } = await supabase.from('profiles').update({ full_name: editName.trim() }).eq('user_id', editingUser.user_id);
+            if (error) throw error;
+          } else if (!response.ok) {
+            const result = await response.json().catch(() => null);
+            throw new Error(result?.error || 'Erro ao atualizar nome');
+          }
+        } else {
+          const { error } = await supabase.from('profiles').update({ full_name: editName.trim() }).eq('user_id', editingUser.user_id);
+          if (error) throw error;
+        }
+        await logAuditAction('USER_UPDATE', { target_user: editingUser.email || editingUser.full_name, new_name: editName.trim() });
+        changes.push('nome');
+      }
+
+      // Update role if changed
+      if (editRole !== (editingUser.roles[0] || 'security')) {
+        await supabase.from('user_roles').delete().eq('user_id', editingUser.user_id);
+        const { error } = await supabase.from('user_roles').insert({ user_id: editingUser.user_id, role: editRole });
+        if (error) throw error;
+        await logAuditAction('ROLE_UPDATE', { target_user: editingUser.email || editingUser.full_name, new_role: editRole });
+        changes.push('permissão');
+      }
+
+      // Update gate if changed
+      if (editGateId !== editingUser.gate_id) {
+        const gateName = editGateId ? activeGates?.find(g => g.id === editGateId)?.name || null : null;
+
+        if (apiConfig.adminApiUrl) {
+          const response = await fetch(`${apiConfig.adminApiUrl}/admin/assign-gate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ profile_id: editingUser.id, gate_id: editGateId }),
+          });
+          if (!response.ok) {
+            const result = await response.json().catch(() => null);
+            throw new Error(result?.error || 'Erro ao vincular guarita');
+          }
+        } else {
+          const { error } = await supabase.from('profiles').update({ gate_id: editGateId }).eq('id', editingUser.id);
+          if (error) throw error;
+        }
+        await logAuditAction('CONFIG_UPDATE', { action: 'gate_assign', target_user: editingUser.full_name, gate_name: gateName });
+        changes.push('guarita');
+      }
+
+      if (changes.length > 0) {
+        toast({ title: 'Usuário atualizado!', description: `Alterações: ${changes.join(', ')}.` });
+      } else {
+        toast({ title: 'Nenhuma alteração realizada.' });
+      }
+
+      setEditingUser(null);
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
-      toast({ title: 'Permissão atualizada!' });
-    },
-    onError: (error: any) => {
+    } catch (error: any) {
       toast({ title: 'Erro', description: error.message, variant: 'destructive' });
-    },
-  });
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
 
   // Toggle user active status
-  const toggleUserStatus = useMutation({
-    mutationFn: async ({ userId, isActive, userEmail }: { userId: string; isActive: boolean; userEmail: string }) => {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ is_active: isActive })
-        .eq('user_id', userId);
-
-      if (error) throw error;
-
-      await logAuditAction(isActive ? 'USER_ACTIVATE' : 'USER_DEACTIVATE', { 
-        target_user: userEmail 
-      });
-    },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
-      toast({ 
-        title: variables.isActive ? 'Usuário ativado!' : 'Usuário desativado!' 
-      });
-    },
-    onError: (error: any) => {
-      toast({ title: 'Erro', description: error.message, variant: 'destructive' });
-    },
-  });
-
-  // Assign gate to user
-  const assignGate = useMutation({
-    mutationFn: async ({ profileId, gateId, userName }: { profileId: string; gateId: string | null; userName: string }) => {
-      const gateName = gateId ? activeGates?.find((gate) => gate.id === gateId)?.name || null : null;
-
-      if (apiConfig.adminApiUrl) {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const token = sessionData?.session?.access_token;
-
-        if (!token) {
-          throw new Error('Sessão expirada. Faça login novamente.');
-        }
-
-        const response = await fetch(`${apiConfig.adminApiUrl}/admin/assign-gate`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            profile_id: profileId,
-            gate_id: gateId,
-          }),
-        });
-
-        const result = await response.json().catch(() => null);
-
-        if (!response.ok) {
-          throw new Error(result?.error || 'Não foi possível salvar a guarita para este usuário.');
-        }
-
-        return {
-          profileId: result.profile.id,
-          userId: result.profile.user_id,
-          gateId: result.profile.gate_id,
-          gateName: result.profile.gate_name ?? gateName,
-        };
-      }
-
-      const { error } = await supabase
-        .from('profiles')
-        .update({ gate_id: gateId })
-        .eq('id', profileId);
-
-      if (error) throw error;
-
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('user_id, gate_id')
-        .eq('id', profileId)
-        .maybeSingle();
-
-      if (profileError) throw profileError;
-      if (!profile) throw new Error('Não foi possível salvar a guarita para este usuário.');
-
-      await logAuditAction('CONFIG_UPDATE', { action: 'gate_assign', target_user: userName, gate_id: gateId });
-
-      return {
-        profileId,
-        userId: profile.user_id,
-        gateId: profile.gate_id,
-        gateName,
-      };
-    },
-    onSuccess: (result) => {
-      queryClient.setQueryData(['admin-users'], (current: UserProfile[] | undefined) =>
-        current?.map((profile) =>
-          profile.id === result.profileId
-            ? {
-                ...profile,
-                user_id: result.userId,
-                gate_id: result.gateId,
-                gate_name: result.gateName,
-              }
-            : profile,
-        ),
-      );
-
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
-      toast({ title: 'Guarita vinculada!' });
-    },
-    onError: (error: any) => {
-      toast({ title: 'Erro', description: error.message, variant: 'destructive' });
-    },
-  });
-
-  // Update user full name
-  const updateName = useMutation({
-    mutationFn: async ({ userId, fullName, userEmail }: { userId: string; fullName: string; userEmail: string }) => {
-      if (apiConfig.adminApiUrl) {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const token = sessionData?.session?.access_token;
-        if (!token) throw new Error('Sessão expirada.');
-
-        const response = await fetch(`${apiConfig.adminApiUrl}/admin/update-profile`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ user_id: userId, full_name: fullName }),
-        });
-        
-        // Fallback to direct update if admin-api doesn't support this endpoint
-        if (response.status === 404) {
-          const { error } = await supabase.from('profiles').update({ full_name: fullName }).eq('user_id', userId);
-          if (error) throw error;
-        } else if (!response.ok) {
-          const result = await response.json().catch(() => null);
-          throw new Error(result?.error || 'Erro ao atualizar nome');
-        }
-      } else {
-        const { error } = await supabase.from('profiles').update({ full_name: fullName }).eq('user_id', userId);
-        if (error) throw error;
-      }
-
-      await logAuditAction('USER_UPDATE', { target_user: userEmail, new_name: fullName });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
-      setEditingUserId(null);
-      toast({ title: 'Nome atualizado!' });
-    },
-    onError: (error: any) => {
-      toast({ title: 'Erro', description: error.message, variant: 'destructive' });
-    },
-  });
-
-  // Request password reset
-  const handlePasswordReset = async (email: string) => {
+  const handleToggleStatus = async (u: UserProfile) => {
+    const isActive = u.is_active === false;
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/login`,
-      });
-
+      const { error } = await supabase.from('profiles').update({ is_active: isActive }).eq('user_id', u.user_id);
       if (error) throw error;
-
-      await logAuditAction('PASSWORD_RESET', { target_user: email });
-
-      toast({
-        title: 'Email enviado!',
-        description: `Link de reset de senha enviado para ${email}.`,
-      });
+      await logAuditAction(isActive ? 'USER_ACTIVATE' : 'USER_DEACTIVATE', { target_user: u.email || u.full_name });
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      toast({ title: isActive ? 'Usuário ativado!' : 'Usuário desativado!' });
     } catch (error: any) {
-      toast({
-        title: 'Erro ao enviar email',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Erro', description: error.message, variant: 'destructive' });
     }
+    setConfirmUser(null);
   };
 
   const roleColors: Record<AppRole, string> = {
@@ -431,317 +331,284 @@ const UsersManagementTab = () => {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="w-5 h-5" />
-              Gerenciar Usuários
-            </CardTitle>
-            <CardDescription>
-              Crie novos usuários e gerencie permissões
-            </CardDescription>
-          </div>
-          <Dialog open={isCreateUserOpen} onOpenChange={setIsCreateUserOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <UserPlus className="w-4 h-4" />
-                Novo Usuário
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Criar Novo Usuário</DialogTitle>
-                <DialogDescription>
-                  Adicione um novo usuário ao sistema GUARDA OPERACIONAL
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="new-user-name">Nome Completo</Label>
-                  <Input
-                    id="new-user-name"
-                    placeholder="Nome do usuário"
-                    value={newUserName}
-                    onChange={(e) => setNewUserName(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="new-user-email">Email</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="new-user-email"
-                      type="email"
-                      placeholder="usuario@empresa.com"
-                      value={newUserEmail}
-                      onChange={(e) => setNewUserEmail(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="new-user-password">Senha</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="new-user-password"
-                      type="password"
-                      placeholder="Mínimo 6 caracteres"
-                      value={newUserPassword}
-                      onChange={(e) => setNewUserPassword(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Permissão</Label>
-                  <Select value={newUserRole} onValueChange={(v) => setNewUserRole(v as AppRole)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">Admin (acesso total)</SelectItem>
-                      <SelectItem value="operador_acesso">Operador de Acesso (cadastros)</SelectItem>
-                      <SelectItem value="security">Segurança (scanner)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button onClick={handleCreateUser} className="w-full" disabled={isCreatingUser}>
-                  {isCreatingUser ? 'Criando...' : 'Criar Usuário'}
+    <>
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="w-5 h-5" />
+                Gerenciar Usuários
+              </CardTitle>
+              <CardDescription>
+                Crie novos usuários e gerencie permissões
+              </CardDescription>
+            </div>
+            <Dialog open={isCreateUserOpen} onOpenChange={setIsCreateUserOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2">
+                  <UserPlus className="w-4 h-4" />
+                  Novo Usuário
                 </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-4 p-4 rounded-lg bg-muted/50">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por nome ou email..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Criar Novo Usuário</DialogTitle>
+                  <DialogDescription>
+                    Adicione um novo usuário ao sistema GUARDA OPERACIONAL
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="new-user-name">Nome Completo</Label>
+                    <Input
+                      id="new-user-name"
+                      placeholder="Nome do usuário"
+                      value={newUserName}
+                      onChange={(e) => setNewUserName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="new-user-email">Email</Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="new-user-email"
+                        type="email"
+                        placeholder="usuario@empresa.com"
+                        value={newUserEmail}
+                        onChange={(e) => setNewUserEmail(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="new-user-password">Senha</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="new-user-password"
+                        type="password"
+                        placeholder="Mínimo 6 caracteres"
+                        value={newUserPassword}
+                        onChange={(e) => setNewUserPassword(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Permissão</Label>
+                    <Select value={newUserRole} onValueChange={(v) => setNewUserRole(v as AppRole)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="admin">Admin (acesso total)</SelectItem>
+                        <SelectItem value="operador_acesso">Operador de Acesso (cadastros)</SelectItem>
+                        <SelectItem value="security">Segurança (scanner)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button onClick={handleCreateUser} className="w-full" disabled={isCreatingUser}>
+                    {isCreatingUser ? 'Criando...' : 'Criar Usuário'}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-muted-foreground" />
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'all' | 'active' | 'inactive')}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="active">Ativos</SelectItem>
-                <SelectItem value="inactive">Inativos</SelectItem>
-              </SelectContent>
-            </Select>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row gap-4 p-4 rounded-lg bg-muted/50">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nome ou email..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-muted-foreground" />
+              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'all' | 'active' | 'inactive')}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="active">Ativos</SelectItem>
+                  <SelectItem value="inactive">Inativos</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-        </div>
 
-        {/* Results count */}
-        <div className="text-sm text-muted-foreground">
-          {filteredUsers.length} usuário(s) encontrado(s)
-        </div>
+          <div className="text-sm text-muted-foreground">
+            {filteredUsers.length} usuário(s) encontrado(s)
+          </div>
 
-        {/* Table */}
-        {isLoadingUsers ? (
-          <p className="text-muted-foreground">Carregando...</p>
-        ) : (
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Login (Email)</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Permissão</TableHead>
-                  <TableHead>Alterar</TableHead>
-                  <TableHead>Guarita</TableHead>
-                  <TableHead>Cadastro</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredUsers.map((u) => (
-                  <TableRow key={u.id} className={u.is_active === false ? 'opacity-50' : ''}>
-                    <TableCell className="font-medium">
-                      {editingUserId === u.user_id ? (
-                        <div className="flex items-center gap-1">
-                          <Input
-                            value={editingName}
-                            onChange={(e) => setEditingName(e.target.value)}
-                            className="h-8 w-40"
-                            autoFocus
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' && editingName.trim()) {
-                                updateName.mutate({ userId: u.user_id, fullName: editingName.trim(), userEmail: u.email || u.full_name });
-                              }
-                              if (e.key === 'Escape') setEditingUserId(null);
-                            }}
-                          />
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => {
-                              if (editingName.trim()) {
-                                updateName.mutate({ userId: u.user_id, fullName: editingName.trim(), userEmail: u.email || u.full_name });
-                              }
-                            }}
-                          >
-                            <Check className="h-3 w-3" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingUserId(null)}>
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1 group">
-                          <span>{u.full_name}</span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => { setEditingUserId(u.user_id); setEditingName(u.full_name); }}
-                          >
-                            <Pencil className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {u.email || '—'}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={u.is_active !== false ? 'default' : 'secondary'}>
-                        {u.is_active !== false ? 'Ativo' : 'Inativo'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        {u.roles.map((role: AppRole) => (
-                          <Badge key={role} className={roleColors[role]}>
-                            {roleLabels[role] || role.toUpperCase()}
-                          </Badge>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={u.roles[0] || 'security'}
-                        onValueChange={(value) =>
-                          updateRole.mutate({ userId: u.user_id, role: value as AppRole, userEmail: u.full_name })
-                        }
-                        disabled={u.user_id === user?.id}
-                      >
-                        <SelectTrigger className="w-28">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="operador_acesso">Operador de Acesso</SelectItem>
-                          <SelectItem value="security">Segurança</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={u.gate_id || 'none'}
-                        onValueChange={(v) => assignGate.mutate({
-                          profileId: u.id,
-                          gateId: v === 'none' ? null : v,
-                          userName: u.full_name,
-                        })}
-                      >
-                        <SelectTrigger className="w-36">
-                          <SelectValue placeholder="Sem guarita" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Sem guarita</SelectItem>
-                          {activeGates?.map(g => (
-                            <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {format(new Date(u.created_at), 'dd/MM/yyyy', { locale: ptBR })}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1"
-                          onClick={() => handlePasswordReset(u.email || u.full_name)}
-                          disabled={u.user_id === user?.id}
-                        >
-                          <RotateCcw className="w-3 h-3" />
-                          Reset
-                        </Button>
-                        
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              variant={u.is_active !== false ? 'destructive' : 'default'}
-                              size="sm"
-                              className="gap-1"
-                              disabled={u.user_id === user?.id}
-                            >
-                              {u.is_active !== false ? (
-                                <>
-                                  <UserX className="w-3 h-3" />
-                                  Desativar
-                                </>
-                              ) : (
-                                <>
-                                  <UserCheck className="w-3 h-3" />
-                                  Ativar
-                                </>
-                              )}
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>
-                                {u.is_active !== false ? 'Desativar usuário?' : 'Ativar usuário?'}
-                              </AlertDialogTitle>
-                              <AlertDialogDescription>
-                                {u.is_active !== false 
-                                  ? `O usuário "${u.full_name}" não poderá mais fazer login no sistema.`
-                                  : `O usuário "${u.full_name}" poderá fazer login novamente.`
-                                }
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => toggleUserStatus.mutate({ 
-                                  userId: u.user_id, 
-                                  isActive: u.is_active === false,
-                                  userEmail: u.full_name 
-                                })}
-                              >
-                                Confirmar
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </TableCell>
+          {isLoadingUsers ? (
+            <p className="text-muted-foreground">Carregando...</p>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Login (Email)</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Permissão</TableHead>
+                    <TableHead>Guarita</TableHead>
+                    <TableHead>Cadastro</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                </TableHeader>
+                <TableBody>
+                  {filteredUsers.map((u) => (
+                    <TableRow key={u.id} className={u.is_active === false ? 'opacity-50' : ''}>
+                      <TableCell className="font-medium">{u.full_name}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm">{u.email || '—'}</TableCell>
+                      <TableCell>
+                        <Badge variant={u.is_active !== false ? 'default' : 'secondary'}>
+                          {u.is_active !== false ? 'Ativo' : 'Inativo'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          {u.roles.map((role: AppRole) => (
+                            <Badge key={role} className={roleColors[role]}>
+                              {roleLabels[role] || role.toUpperCase()}
+                            </Badge>
+                          ))}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm">{u.gate_name || '—'}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {format(new Date(u.created_at), 'dd/MM/yyyy', { locale: ptBR })}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1"
+                            onClick={() => openEditModal(u)}
+                            disabled={u.user_id === user?.id}
+                          >
+                            <Pencil className="w-3 h-3" />
+                            Editar
+                          </Button>
+                          <Button
+                            variant={u.is_active !== false ? 'destructive' : 'default'}
+                            size="sm"
+                            className="gap-1"
+                            disabled={u.user_id === user?.id}
+                            onClick={() => setConfirmUser(u)}
+                          >
+                            {u.is_active !== false ? (
+                              <>
+                                <UserX className="w-3 h-3" />
+                                Desativar
+                              </>
+                            ) : (
+                              <>
+                                <UserCheck className="w-3 h-3" />
+                                Ativar
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Edit User Modal */}
+      <Dialog open={!!editingUser} onOpenChange={(open) => { if (!open) setEditingUser(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Usuário</DialogTitle>
+            <DialogDescription>
+              {editingUser?.email || editingUser?.full_name}
+            </DialogDescription>
+          </DialogHeader>
+          {editingUser && (
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label>Nome Completo</Label>
+                <Input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="Nome do usuário"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Permissão</Label>
+                <Select value={editRole} onValueChange={(v) => setEditRole(v as AppRole)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Admin (acesso total)</SelectItem>
+                    <SelectItem value="operador_acesso">Operador de Acesso (cadastros)</SelectItem>
+                    <SelectItem value="security">Segurança (scanner)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Guarita</Label>
+                <Select value={editGateId || 'none'} onValueChange={(v) => setEditGateId(v === 'none' ? null : v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sem guarita" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sem guarita</SelectItem>
+                    {activeGates?.map(g => (
+                      <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingUser(null)}>Cancelar</Button>
+            <Button onClick={handleSaveEdit} disabled={isSavingEdit}>
+              {isSavingEdit ? 'Salvando...' : 'Salvar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Activate/Deactivate */}
+      <AlertDialog open={!!confirmUser} onOpenChange={(open) => { if (!open) setConfirmUser(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmUser?.is_active !== false ? 'Desativar usuário?' : 'Ativar usuário?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmUser?.is_active !== false 
+                ? `O usuário "${confirmUser?.full_name}" não poderá mais fazer login no sistema.`
+                : `O usuário "${confirmUser?.full_name}" poderá fazer login novamente.`
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => confirmUser && handleToggleStatus(confirmUser)}>
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };
 

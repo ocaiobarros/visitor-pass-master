@@ -436,6 +436,12 @@ const QRScanner = () => {
     if (!searchCode) return;
     if (processingRef.current) return;
 
+    if (!hasGate) {
+      setScanError('Usuário sem guarita vinculada. Solicite ao administrador que vincule sua conta a uma guarita antes de operar o scanner.');
+      playError();
+      return;
+    }
+
     const process = async () => {
       if (processingRef.current) return;
       processingRef.current = true;

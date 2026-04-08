@@ -308,6 +308,11 @@ const ScanKiosk = () => {
   useEffect(() => {
     if (!searchCode || isProcessing) return;
 
+    if (!hasGate) {
+      setScanResult({ type: 'error', message: 'Usuário sem guarita vinculada. Solicite ao administrador que vincule sua conta a uma guarita.' });
+      return;
+    }
+
     const processScan = async () => {
       setIsProcessing(true);
 

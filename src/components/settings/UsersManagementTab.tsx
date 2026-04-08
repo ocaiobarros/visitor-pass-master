@@ -354,6 +354,45 @@ const UsersManagementTab = () => {
     },
   });
 
+  // Update user full name
+  const updateName = useMutation({
+    mutationFn: async ({ userId, fullName, userEmail }: { userId: string; fullName: string; userEmail: string }) => {
+      if (apiConfig.adminApiUrl) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        if (!token) throw new Error('Sessão expirada.');
+
+        const response = await fetch(`${apiConfig.adminApiUrl}/admin/update-profile`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ user_id: userId, full_name: fullName }),
+        });
+        
+        // Fallback to direct update if admin-api doesn't support this endpoint
+        if (response.status === 404) {
+          const { error } = await supabase.from('profiles').update({ full_name: fullName }).eq('user_id', userId);
+          if (error) throw error;
+        } else if (!response.ok) {
+          const result = await response.json().catch(() => null);
+          throw new Error(result?.error || 'Erro ao atualizar nome');
+        }
+      } else {
+        const { error } = await supabase.from('profiles').update({ full_name: fullName }).eq('user_id', userId);
+        if (error) throw error;
+      }
+
+      await logAuditAction('USER_UPDATE', { target_user: userEmail, new_name: fullName });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      setEditingUserId(null);
+      toast({ title: 'Nome atualizado!' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+    },
+  });
+
   // Request password reset
   const handlePasswordReset = async (email: string) => {
     try {

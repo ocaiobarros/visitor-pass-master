@@ -294,6 +294,34 @@ const UsersManagementTab = () => {
         changes.push('guarita');
       }
 
+      // Reset password if provided
+      if (editPassword.trim().length > 0) {
+        if (editPassword.trim().length < 6) {
+          toast({ title: 'Senha muito curta', description: 'Mínimo 6 caracteres.', variant: 'destructive' });
+          setIsSavingEdit(false);
+          return;
+        }
+
+        if (apiConfig.adminApiUrl) {
+          const response = await fetch(`${apiConfig.adminApiUrl}/admin/reset-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ user_id: editingUser.user_id, new_password: editPassword.trim(), must_change_password: editMustChangePassword }),
+          });
+          if (!response.ok) {
+            const result = await response.json().catch(() => null);
+            throw new Error(result?.error || 'Erro ao alterar senha');
+          }
+        } else {
+          const response = await supabase.functions.invoke('admin-reset-password', {
+            body: { user_id: editingUser.user_id, new_password: editPassword.trim(), must_change_password: editMustChangePassword },
+          });
+          if (response.error) throw new Error(response.error.message || 'Erro ao alterar senha');
+          if (response.data?.error) throw new Error(response.data.error);
+        }
+        changes.push('senha');
+      }
+
       if (changes.length > 0) {
         toast({ title: 'Usuário atualizado!', description: `Alterações: ${changes.join(', ')}.` });
       } else {

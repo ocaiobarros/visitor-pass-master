@@ -83,7 +83,8 @@ const QRScanner = () => {
   
   const { toast } = useToast();
   const { user: authUser } = useAuth();
-  const userGateCode = authUser?.gateCode || 'SEM_GUARITA';
+  const userGateCode = authUser?.gateCode;
+  const hasGate = !!userGateCode;
   const { playSuccess, playError, playBlocked } = useScanFeedback();
   const updateVisitorStatus = useUpdateVisitorStatus();
 

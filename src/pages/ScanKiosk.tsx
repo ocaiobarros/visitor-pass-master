@@ -96,7 +96,8 @@ const ScanKiosk = () => {
   
   const navigate = useNavigate();
   const { user: authUser } = useAuth();
-  const userGateCode = authUser?.gateCode || 'SEM_GUARITA';
+  const userGateCode = authUser?.gateCode;
+  const hasGate = !!userGateCode;
   const { playSuccess, playError, playBlocked } = useScanFeedback();
   const updateVisitorStatus = useUpdateVisitorStatus();
   const createAccessLog = useCreateAccessLog();

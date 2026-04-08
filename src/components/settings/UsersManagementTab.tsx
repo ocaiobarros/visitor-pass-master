@@ -115,7 +115,8 @@ const UsersManagementTab = () => {
 
   // Filter users
   const filteredUsers = usersData?.filter(u => {
-    const matchesSearch = u.full_name.toLowerCase().includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = u.full_name.toLowerCase().includes(term) || (u.email || '').toLowerCase().includes(term);
     const matchesStatus = statusFilter === 'all' 
       || (statusFilter === 'active' && u.is_active !== false)
       || (statusFilter === 'inactive' && u.is_active === false);
@@ -521,7 +522,7 @@ const UsersManagementTab = () => {
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por nome..."
+              placeholder="Buscar por nome ou email..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -556,6 +557,7 @@ const UsersManagementTab = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nome</TableHead>
+                  <TableHead>Login (Email)</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Permissão</TableHead>
                   <TableHead>Alterar</TableHead>
@@ -567,7 +569,54 @@ const UsersManagementTab = () => {
               <TableBody>
                 {filteredUsers.map((u) => (
                   <TableRow key={u.id} className={u.is_active === false ? 'opacity-50' : ''}>
-                    <TableCell className="font-medium">{u.full_name}</TableCell>
+                    <TableCell className="font-medium">
+                      {editingUserId === u.user_id ? (
+                        <div className="flex items-center gap-1">
+                          <Input
+                            value={editingName}
+                            onChange={(e) => setEditingName(e.target.value)}
+                            className="h-8 w-40"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && editingName.trim()) {
+                                updateName.mutate({ userId: u.user_id, fullName: editingName.trim(), userEmail: u.email || u.full_name });
+                              }
+                              if (e.key === 'Escape') setEditingUserId(null);
+                            }}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => {
+                              if (editingName.trim()) {
+                                updateName.mutate({ userId: u.user_id, fullName: editingName.trim(), userEmail: u.email || u.full_name });
+                              }
+                            }}
+                          >
+                            <Check className="h-3 w-3" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingUserId(null)}>
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 group">
+                          <span>{u.full_name}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => { setEditingUserId(u.user_id); setEditingName(u.full_name); }}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {u.email || '—'}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={u.is_active !== false ? 'default' : 'secondary'}>
                         {u.is_active !== false ? 'Ativo' : 'Inativo'}

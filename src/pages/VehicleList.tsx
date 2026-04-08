@@ -36,6 +36,7 @@ const VehicleList = () => {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedVehicle, setSelectedVehicle] = useState<{ id: string; plate: string } | null>(null);
+  const [editingVehicle, setEditingVehicle] = useState<EmployeeCredential | null>(null);
 
   const vehicles = credentials.filter(c => c.type === 'vehicle');
   const employees = credentials.filter(c => c.type === 'personal');
@@ -157,6 +158,17 @@ const VehicleList = () => {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
+                            {isAdminOrRh && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1"
+                                onClick={() => setEditingVehicle(vehicle)}
+                              >
+                                <Pencil className="w-4 h-4" />
+                                Editar
+                              </Button>
+                            )}
                             {isAdminOrRh && vehicle.status === 'allowed' && (
                               <Button
                                 variant="outline"

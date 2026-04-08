@@ -309,7 +309,7 @@ const ScanKiosk = () => {
     if (!searchCode || isProcessing) return;
 
     if (!hasGate) {
-      setScanResult({ type: 'error', message: 'Usuário sem guarita vinculada. Solicite ao administrador que vincule sua conta a uma guarita.' });
+      setScanResult({ type: 'error', code: 'SEM_GUARITA' });
       return;
     }
 

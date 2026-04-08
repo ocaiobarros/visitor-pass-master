@@ -609,6 +609,36 @@ const UsersManagementTab = () => {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Password Reset Section */}
+              <div className="border-t pt-4 space-y-3">
+                <Label className="flex items-center gap-2 text-sm font-medium">
+                  <KeyRound className="w-4 h-4" />
+                  Alterar Senha
+                </Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="password"
+                    placeholder="Deixe vazio para não alterar"
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                {editPassword.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="must-change-password"
+                      checked={editMustChangePassword}
+                      onCheckedChange={(checked) => setEditMustChangePassword(!!checked)}
+                    />
+                    <Label htmlFor="must-change-password" className="text-sm font-normal cursor-pointer">
+                      Exigir troca de senha no próximo login
+                    </Label>
+                  </div>
+                )}
+              </div>
             </div>
           )}
           <DialogFooter>

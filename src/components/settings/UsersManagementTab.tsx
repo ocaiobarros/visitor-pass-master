@@ -678,7 +678,7 @@ const UsersManagementTab = () => {
                           variant="outline"
                           size="sm"
                           className="gap-1"
-                          onClick={() => handlePasswordReset(u.full_name)}
+                          onClick={() => handlePasswordReset(u.email || u.full_name)}
                           disabled={u.user_id === user?.id}
                         >
                           <RotateCcw className="w-3 h-3" />

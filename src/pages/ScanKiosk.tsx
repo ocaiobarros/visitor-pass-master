@@ -996,8 +996,13 @@ const ScanKiosk = () => {
       reason = 'CADASTRO BLOQUEADO';
       subReason = scanResult.data.fullName;
     } else if (scanResult.type === 'error') {
-      reason = 'QR NÃO CADASTRADO';
-      subReason = scanResult.code;
+      if (scanResult.code === 'SEM_GUARITA') {
+        reason = 'SEM GUARITA VINCULADA';
+        subReason = 'Solicite ao administrador que vincule sua conta a uma guarita';
+      } else {
+        reason = 'QR NÃO CADASTRADO';
+        subReason = scanResult.code;
+      }
     }
 
     return (

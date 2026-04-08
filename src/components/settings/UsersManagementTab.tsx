@@ -41,7 +41,10 @@ import {
   RotateCcw, 
   UserX, 
   UserCheck,
-  Filter
+  Filter,
+  Pencil,
+  Check,
+  X
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -51,6 +54,7 @@ interface UserProfile {
   id: string;
   user_id: string;
   full_name: string;
+  email: string | null;
   created_at: string;
   is_active: boolean;
   roles: AppRole[];
@@ -74,6 +78,8 @@ const UsersManagementTab = () => {
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
 
   // Fetch all users with their profiles and roles
   const { data: usersData, isLoading: isLoadingUsers } = useQuery({
@@ -81,7 +87,7 @@ const UsersManagementTab = () => {
     queryFn: async () => {
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, user_id, full_name, created_at, is_active, gate_id, gate:gates!profiles_gate_id_fkey(id, name)')
+        .select('id, user_id, full_name, email, created_at, is_active, gate_id, gate:gates!profiles_gate_id_fkey(id, name)')
         .order('created_at', { ascending: false });
 
       if (profilesError) throw profilesError;
@@ -96,6 +102,7 @@ const UsersManagementTab = () => {
         const gate = (profile as any).gate;
         return {
           ...profile,
+          email: (profile as any).email || null,
           gate_id: profile.gate_id ?? gate?.id ?? null,
           gate_name: gate?.name || null,
           roles: (roles || [])

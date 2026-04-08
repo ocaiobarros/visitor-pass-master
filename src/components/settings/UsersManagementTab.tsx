@@ -41,7 +41,10 @@ import {
   RotateCcw, 
   UserX, 
   UserCheck,
-  Filter
+  Filter,
+  Pencil,
+  Check,
+  X
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -51,6 +54,7 @@ interface UserProfile {
   id: string;
   user_id: string;
   full_name: string;
+  email: string | null;
   created_at: string;
   is_active: boolean;
   roles: AppRole[];
@@ -74,6 +78,8 @@ const UsersManagementTab = () => {
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
 
   // Fetch all users with their profiles and roles
   const { data: usersData, isLoading: isLoadingUsers } = useQuery({
@@ -81,7 +87,7 @@ const UsersManagementTab = () => {
     queryFn: async () => {
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, user_id, full_name, created_at, is_active, gate_id, gate:gates!profiles_gate_id_fkey(id, name)')
+        .select('id, user_id, full_name, email, created_at, is_active, gate_id, gate:gates!profiles_gate_id_fkey(id, name)')
         .order('created_at', { ascending: false });
 
       if (profilesError) throw profilesError;
@@ -96,6 +102,7 @@ const UsersManagementTab = () => {
         const gate = (profile as any).gate;
         return {
           ...profile,
+          email: (profile as any).email || null,
           gate_id: profile.gate_id ?? gate?.id ?? null,
           gate_name: gate?.name || null,
           roles: (roles || [])
@@ -108,7 +115,8 @@ const UsersManagementTab = () => {
 
   // Filter users
   const filteredUsers = usersData?.filter(u => {
-    const matchesSearch = u.full_name.toLowerCase().includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = u.full_name.toLowerCase().includes(term) || (u.email || '').toLowerCase().includes(term);
     const matchesStatus = statusFilter === 'all' 
       || (statusFilter === 'active' && u.is_active !== false)
       || (statusFilter === 'inactive' && u.is_active === false);
@@ -347,6 +355,45 @@ const UsersManagementTab = () => {
     },
   });
 
+  // Update user full name
+  const updateName = useMutation({
+    mutationFn: async ({ userId, fullName, userEmail }: { userId: string; fullName: string; userEmail: string }) => {
+      if (apiConfig.adminApiUrl) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        if (!token) throw new Error('Sessão expirada.');
+
+        const response = await fetch(`${apiConfig.adminApiUrl}/admin/update-profile`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ user_id: userId, full_name: fullName }),
+        });
+        
+        // Fallback to direct update if admin-api doesn't support this endpoint
+        if (response.status === 404) {
+          const { error } = await supabase.from('profiles').update({ full_name: fullName }).eq('user_id', userId);
+          if (error) throw error;
+        } else if (!response.ok) {
+          const result = await response.json().catch(() => null);
+          throw new Error(result?.error || 'Erro ao atualizar nome');
+        }
+      } else {
+        const { error } = await supabase.from('profiles').update({ full_name: fullName }).eq('user_id', userId);
+        if (error) throw error;
+      }
+
+      await logAuditAction('USER_UPDATE', { target_user: userEmail, new_name: fullName });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      setEditingUserId(null);
+      toast({ title: 'Nome atualizado!' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+    },
+  });
+
   // Request password reset
   const handlePasswordReset = async (email: string) => {
     try {
@@ -475,7 +522,7 @@ const UsersManagementTab = () => {
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por nome..."
+              placeholder="Buscar por nome ou email..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -510,6 +557,7 @@ const UsersManagementTab = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nome</TableHead>
+                  <TableHead>Login (Email)</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Permissão</TableHead>
                   <TableHead>Alterar</TableHead>
@@ -521,7 +569,54 @@ const UsersManagementTab = () => {
               <TableBody>
                 {filteredUsers.map((u) => (
                   <TableRow key={u.id} className={u.is_active === false ? 'opacity-50' : ''}>
-                    <TableCell className="font-medium">{u.full_name}</TableCell>
+                    <TableCell className="font-medium">
+                      {editingUserId === u.user_id ? (
+                        <div className="flex items-center gap-1">
+                          <Input
+                            value={editingName}
+                            onChange={(e) => setEditingName(e.target.value)}
+                            className="h-8 w-40"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && editingName.trim()) {
+                                updateName.mutate({ userId: u.user_id, fullName: editingName.trim(), userEmail: u.email || u.full_name });
+                              }
+                              if (e.key === 'Escape') setEditingUserId(null);
+                            }}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => {
+                              if (editingName.trim()) {
+                                updateName.mutate({ userId: u.user_id, fullName: editingName.trim(), userEmail: u.email || u.full_name });
+                              }
+                            }}
+                          >
+                            <Check className="h-3 w-3" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingUserId(null)}>
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 group">
+                          <span>{u.full_name}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => { setEditingUserId(u.user_id); setEditingName(u.full_name); }}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {u.email || '—'}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={u.is_active !== false ? 'default' : 'secondary'}>
                         {u.is_active !== false ? 'Ativo' : 'Inativo'}
@@ -583,7 +678,7 @@ const UsersManagementTab = () => {
                           variant="outline"
                           size="sm"
                           className="gap-1"
-                          onClick={() => handlePasswordReset(u.full_name)}
+                          onClick={() => handlePasswordReset(u.email || u.full_name)}
                           disabled={u.user_id === user?.id}
                         >
                           <RotateCcw className="w-3 h-3" />

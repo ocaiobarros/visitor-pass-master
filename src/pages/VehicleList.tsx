@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import AuthorizedDriversPanel from '@/components/vehicle/AuthorizedDriversPanel';
+import EditVehicleModal from '@/components/vehicle/EditVehicleModal';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useEmployeeCredentials, useUpdateCredentialStatus } from '@/hooks/useEmployeeCredentials';
 import { Button } from '@/components/ui/button';
@@ -9,11 +10,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
-import { Car, Plus, Search, Eye, Ban, CheckCircle, User, Users } from 'lucide-react';
+import { Car, Plus, Search, Eye, Ban, CheckCircle, User, Users, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { EmployeeCredential } from '@/types/visitor';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,6 +36,7 @@ const VehicleList = () => {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedVehicle, setSelectedVehicle] = useState<{ id: string; plate: string } | null>(null);
+  const [editingVehicle, setEditingVehicle] = useState<EmployeeCredential | null>(null);
 
   const vehicles = credentials.filter(c => c.type === 'vehicle');
   const employees = credentials.filter(c => c.type === 'personal');
@@ -155,6 +158,17 @@ const VehicleList = () => {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
+                            {isAdminOrRh && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1"
+                                onClick={() => setEditingVehicle(vehicle)}
+                              >
+                                <Pencil className="w-4 h-4" />
+                                Editar
+                              </Button>
+                            )}
                             {isAdminOrRh && vehicle.status === 'allowed' && (
                               <Button
                                 variant="outline"
@@ -245,6 +259,11 @@ const VehicleList = () => {
           </div>
         </SheetContent>
       </Sheet>
+      <EditVehicleModal
+        vehicle={editingVehicle}
+        open={!!editingVehicle}
+        onOpenChange={(open) => !open && setEditingVehicle(null)}
+      />
     </DashboardLayout>
   );
 };

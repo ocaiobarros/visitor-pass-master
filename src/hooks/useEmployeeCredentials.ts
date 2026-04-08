@@ -167,6 +167,8 @@ export const useUpdateCredential = () => {
       if (data.departmentId !== undefined) updatePayload.department_id = data.departmentId;
       if (data.jobTitle !== undefined) updatePayload.job_title = data.jobTitle;
       if (data.photoUrl !== undefined) updatePayload.photo_url = data.photoUrl;
+      if (data.vehiclePlate !== undefined) updatePayload.vehicle_plate = data.vehiclePlate;
+      if (data.vehicleMakeModel !== undefined) updatePayload.vehicle_make_model = data.vehicleMakeModel;
 
       const { data: result, error } = await supabase
         .from('employee_credentials')
